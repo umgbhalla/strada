@@ -27,9 +27,7 @@ importers:
         specifier: ^2.0.5
         version: 2.0.5(@types/node@22.1.0)
 
-  new-package-template: {}
-
-  otel-tinybird:
+  otel-collector:
     dependencies:
       spiceflow:
         specifier: ^1.18.0

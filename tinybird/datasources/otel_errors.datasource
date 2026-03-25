@@ -2,7 +2,7 @@ TOKEN OTEL_TINYBIRD_TOKEN APPEND
 
 DESCRIPTION >
     Extracted exception events from OpenTelemetry logs and traces.
-    The otel-tinybird worker detects exceptions in incoming data and writes
+    The otel-collector worker detects exceptions in incoming data and writes
     denormalized error rows here for Sentry-like issue grouping.
 
 SCHEMA >

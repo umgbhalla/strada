@@ -1,5 +1,5 @@
 {
-  "name": "otel-tinybird",
+  "name": "otel-collector",
   "version": "0.0.1",
   "type": "module",
   "private": true,

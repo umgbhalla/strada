@@ -4,7 +4,7 @@ Open-source OpenTelemetry observability stack on top of Tinybird. Goal is to rei
 
 ## Architecture
 
-- **otel-tinybird**: Cloudflare Worker (Spiceflow) that receives OTLP HTTP/JSON and forwards to Tinybird Events API as NDJSON
+- **otel-collector**: Cloudflare Worker (Spiceflow) that receives OTLP HTTP/JSON and forwards to Tinybird Events API as NDJSON
 - **tinybird/**: Tinybird project with datasource definitions and materialized views, deployed with `tb deploy`
 - **Multi-tenancy**: hostname-based tenant extraction. Each tenant gets `{tenant}-ingest.stradametrics.com`. Self-hosted users use a plain `ingest.{domain}` with empty tenant_id
 - **Query layer**: Tinybird Query API (`/v0/sql`) with JWT row-level filtering, NOT the ClickHouse HTTP interface (which doesn't support JWTs or row filtering). No pipe endpoints — all queries are raw SQL
@@ -23,9 +23,9 @@ ingest.mycompany.com                → tenant_id = ""  (self-hosted)
 localhost:3000                      → tenant_id = ""  (development)
 ```
 
-The regex is `^(.+)-ingest\.` — if hostname has a `{prefix}-ingest.` pattern, the prefix is the tenant_id. Otherwise empty string. This is in `otel-tinybird/src/get-tenant-id.ts`.
+The regex is `^(.+)-ingest\.` — if hostname has a `{prefix}-ingest.` pattern, the prefix is the tenant_id. Otherwise empty string. This is in `otel-collector/src/get-tenant-id.ts`.
 
-The `otel-tinybird` worker injects `tenant_id` into every NDJSON row before sending to Tinybird. Users never set tenant_id — the worker does it based on which subdomain they're hitting.
+The `otel-collector` worker injects `tenant_id` into every NDJSON row before sending to Tinybird. Users never set tenant_id — the worker does it based on which subdomain they're hitting.
 
 ### Tenant isolation on reads
 
@@ -89,7 +89,7 @@ Within a tenant, `ServiceName` (from the OTel `service.name` resource attribute)
 
 ## Tables
 
-All table definitions live in `tinybird/datasources/`. Every table has `TenantId` as the first column and first in the sorting key. The `otel-tinybird` worker receives OTLP HTTP/JSON on 3 endpoints (`/v1/traces`, `/v1/logs`, `/v1/metrics`) and writes to these tables via the Tinybird Events API.
+All table definitions live in `tinybird/datasources/`. Every table has `TenantId` as the first column and first in the sorting key. The `otel-collector` worker receives OTLP HTTP/JSON on 3 endpoints (`/v1/traces`, `/v1/logs`, `/v1/metrics`) and writes to these tables via the Tinybird Events API.
 
 OTel defines 3 signal types — traces, logs, metrics — each with a different protobuf schema and different column shapes. Metrics further split into 4 sub-types because their value representations are incompatible (a gauge is one Float64, a histogram is arrays of bucket counts and bounds). Separate tables mean no nulls, better compression, and sorting keys optimized per signal.
 

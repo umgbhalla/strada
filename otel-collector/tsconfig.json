@@ -2,8 +2,8 @@
   "compilerOptions": {
     "allowImportingTsExtensions": true,
     "rewriteRelativeImportExtensions": true,
-    "rootDir": "src",
-    "outDir": "dist",
+    "rootDir": "../otel-collector/src",
+    "outDir": "../otel-collector/dist",
     "module": "nodenext",
     "moduleResolution": "nodenext",
     "target": "ESNext",
@@ -17,5 +17,5 @@
     "useUnknownInCatchVariables": false,
     "types": ["@cloudflare/workers-types"]
   },
-  "include": ["src"]
+  "include": ["../otel-collector/src"]
 }
