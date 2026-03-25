@@ -1,0 +1,23 @@
+{
+  "name": "clickhouse-adapter",
+  "version": "0.0.1",
+  "type": "module",
+  "private": true,
+  "description": "Implements the Tinybird Events API and Query API against a generic ClickHouse server. Lets the otel-collector work with self-hosted ClickHouse without any changes.",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "spiceflow": "^1.18.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250313.0",
+    "typescript": "^5.8.2",
+    "vitest": "^3.1.1",
+    "wrangler": "^4.5.1"
+  }
+}

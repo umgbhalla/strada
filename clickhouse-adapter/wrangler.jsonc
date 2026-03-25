@@ -1,0 +1,13 @@
+{
+  "name": "strada-clickhouse-adapter",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-01-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    "CLICKHOUSE_URL": "http://localhost:8123",
+    "CLICKHOUSE_DATABASE": "default"
+  }
+  // Secrets (set via `wrangler secret put`):
+  //   No secrets needed — ClickHouse credentials come from the Bearer token.
+  //   The token format is base64("user:password").
+}
