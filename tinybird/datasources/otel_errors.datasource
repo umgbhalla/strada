@@ -1,0 +1,43 @@
+TOKEN OTEL_TINYBIRD_TOKEN APPEND
+
+DESCRIPTION >
+    Extracted exception events from OpenTelemetry logs and traces.
+    The otel-tinybird worker detects exceptions in incoming data and writes
+    denormalized error rows here for Sentry-like issue grouping.
+
+SCHEMA >
+    `TenantId` LowCardinality(String) `json:$.tenant_id` CODEC(ZSTD(1)),
+    `Timestamp` DateTime64(9) `json:$.timestamp` CODEC(Delta(8), ZSTD(1)),
+    `TraceId` String `json:$.trace_id` CODEC(ZSTD(1)),
+    `SpanId` String `json:$.span_id` CODEC(ZSTD(1)),
+    `ServiceName` LowCardinality(String) `json:$.service_name` CODEC(ZSTD(1)),
+    `ExceptionType` LowCardinality(String) `json:$.exception_type` CODEC(ZSTD(1)),
+    `ExceptionMessage` String `json:$.exception_message` CODEC(ZSTD(1)),
+    `ExceptionStacktrace` String `json:$.exception_stacktrace` CODEC(ZSTD(1)),
+    `ExceptionFrames` String `json:$.exception_frames` CODEC(ZSTD(1)),
+    `Fingerprint` Array(String) `json:$.fingerprint[:]` CODEC(ZSTD(1)),
+    `FingerprintHash` String `json:$.fingerprint_hash` CODEC(ZSTD(1)),
+    `MechanismType` LowCardinality(String) `json:$.mechanism_type` CODEC(ZSTD(1)),
+    `MechanismHandled` Bool `json:$.mechanism_handled` CODEC(ZSTD(1)),
+    `DebugId` String `json:$.debug_id` CODEC(ZSTD(1)),
+    `Level` LowCardinality(String) `json:$.level` CODEC(ZSTD(1)),
+    `Release` LowCardinality(String) `json:$.release` CODEC(ZSTD(1)),
+    `Environment` LowCardinality(String) `json:$.environment` CODEC(ZSTD(1)),
+    `Tags` Map(LowCardinality(String), String) `json:$.tags` CODEC(ZSTD(1)),
+    `ResourceAttributes` Map(LowCardinality(String), String) `json:$.resource_attributes` CODEC(ZSTD(1)),
+    `ScopeAttributes` Map(LowCardinality(String), String) `json:$.scope_attributes` CODEC(ZSTD(1)),
+    `SourceSignal` LowCardinality(String) `json:$.source_signal` CODEC(ZSTD(1))
+
+ENGINE "MergeTree"
+ENGINE_PARTITION_KEY "toDate(Timestamp)"
+ENGINE_SORTING_KEY "TenantId, ServiceName, FingerprintHash, toDateTime(Timestamp)"
+ENGINE_SETTINGS index_granularity=8192
+
+INDEXES >
+    idx_trace_id TraceId TYPE bloom_filter(0.001) GRANULARITY 1,
+    idx_fingerprint_hash FingerprintHash TYPE bloom_filter(0.001) GRANULARITY 1,
+    idx_exception_type ExceptionType TYPE bloom_filter(0.01) GRANULARITY 1,
+    idx_tag_key mapKeys(Tags) TYPE bloom_filter(0.01) GRANULARITY 1,
+    idx_tag_value mapValues(Tags) TYPE bloom_filter(0.01) GRANULARITY 1,
+    idx_res_attr_key mapKeys(ResourceAttributes) TYPE bloom_filter(0.01) GRANULARITY 1,
+    idx_res_attr_value mapValues(ResourceAttributes) TYPE bloom_filter(0.01) GRANULARITY 1
