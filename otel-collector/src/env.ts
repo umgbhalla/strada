@@ -20,16 +20,6 @@ interface Env {
   CLICKHOUSE_USER: string
   /** ClickHouse password */
   CLICKHOUSE_PASSWORD: string
-
-  // ── Table names (optional, sensible defaults) ──
-
-  TRACES_DATASOURCE: string
-  LOGS_DATASOURCE: string
-  GAUGE_DATASOURCE: string
-  SUM_DATASOURCE: string
-  HISTOGRAM_DATASOURCE: string
-  EXPONENTIAL_HISTOGRAM_DATASOURCE: string
-  ERRORS_DATASOURCE: string
 }
 
 export const env: Env = {
@@ -40,12 +30,15 @@ export const env: Env = {
   CLICKHOUSE_DATABASE: process.env.CLICKHOUSE_DATABASE || 'default',
   CLICKHOUSE_USER: process.env.CLICKHOUSE_USER || 'default',
   CLICKHOUSE_PASSWORD: process.env.CLICKHOUSE_PASSWORD || '',
-
-  TRACES_DATASOURCE: process.env.TRACES_DATASOURCE || 'otel_traces',
-  LOGS_DATASOURCE: process.env.LOGS_DATASOURCE || 'otel_logs',
-  GAUGE_DATASOURCE: process.env.GAUGE_DATASOURCE || 'otel_metrics_gauge',
-  SUM_DATASOURCE: process.env.SUM_DATASOURCE || 'otel_metrics_sum',
-  HISTOGRAM_DATASOURCE: process.env.HISTOGRAM_DATASOURCE || 'otel_metrics_histogram',
-  EXPONENTIAL_HISTOGRAM_DATASOURCE: process.env.EXPONENTIAL_HISTOGRAM_DATASOURCE || 'otel_metrics_exponential_histogram',
-  ERRORS_DATASOURCE: process.env.ERRORS_DATASOURCE || 'otel_errors',
 }
+
+/** Standard OTel table names. */
+export const datasources = {
+  traces: 'otel_traces',
+  logs: 'otel_logs',
+  errors: 'otel_errors',
+  gauge: 'otel_metrics_gauge',
+  sum: 'otel_metrics_sum',
+  histogram: 'otel_metrics_histogram',
+  exponentialHistogram: 'otel_metrics_exponential_histogram',
+} as const

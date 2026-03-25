@@ -20,14 +20,5 @@
     // "CLICKHOUSE_DATABASE": "default",
     // "CLICKHOUSE_USER": "default",
     // CLICKHOUSE_PASSWORD — set via `wrangler secret put CLICKHOUSE_PASSWORD`
-
-    // ── Table names (optional, defaults are standard OTel names) ──
-    "TRACES_DATASOURCE": "otel_traces",
-    "LOGS_DATASOURCE": "otel_logs",
-    "GAUGE_DATASOURCE": "otel_metrics_gauge",
-    "SUM_DATASOURCE": "otel_metrics_sum",
-    "HISTOGRAM_DATASOURCE": "otel_metrics_histogram",
-    "EXPONENTIAL_HISTOGRAM_DATASOURCE": "otel_metrics_exponential_histogram",
-    "ERRORS_DATASOURCE": "otel_errors"
   }
 }

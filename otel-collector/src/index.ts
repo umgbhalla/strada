@@ -11,7 +11,7 @@
 
 import { Spiceflow } from 'spiceflow'
 import { cors } from 'spiceflow/cors'
-import { env } from './env.ts'
+import { datasources } from './env.ts'
 import { getTenantId } from './get-tenant-id.ts'
 import { transformTraces } from './transform-traces.ts'
 import { transformLogs } from './transform-logs.ts'
@@ -36,17 +36,12 @@ const app = new Spiceflow()
 
     const ndjson = transformTraces(body, tenantId)
     if (ndjson) {
-      waitUntil(
-        backend.send(env.TRACES_DATASOURCE, 'traces', ndjson),
-      )
+      waitUntil(backend.send(datasources.traces, 'traces', ndjson))
     }
 
-    // Extract exceptions from span events and write to otel_errors
     const errorsNdjson = extractErrorsFromTraces(body, tenantId)
     if (errorsNdjson) {
-      waitUntil(
-        backend.send(env.ERRORS_DATASOURCE, 'errors', errorsNdjson),
-      )
+      waitUntil(backend.send(datasources.errors, 'errors', errorsNdjson))
     }
 
     return {}
@@ -58,17 +53,12 @@ const app = new Spiceflow()
 
     const ndjson = transformLogs(body, tenantId)
     if (ndjson) {
-      waitUntil(
-        backend.send(env.LOGS_DATASOURCE, 'logs', ndjson),
-      )
+      waitUntil(backend.send(datasources.logs, 'logs', ndjson))
     }
 
-    // Extract exceptions from log attributes and write to otel_errors
     const errorsNdjson = extractErrorsFromLogs(body, tenantId)
     if (errorsNdjson) {
-      waitUntil(
-        backend.send(env.ERRORS_DATASOURCE, 'errors', errorsNdjson),
-      )
+      waitUntil(backend.send(datasources.errors, 'errors', errorsNdjson))
     }
 
     return {}
@@ -78,10 +68,10 @@ const app = new Spiceflow()
     const body = (await request.json()) as ExportMetricsServiceRequest
     const backend = createBackend()
     const payloads = transformMetrics(body, tenantId, {
-      gauge: env.GAUGE_DATASOURCE,
-      sum: env.SUM_DATASOURCE,
-      histogram: env.HISTOGRAM_DATASOURCE,
-      exponentialHistogram: env.EXPONENTIAL_HISTOGRAM_DATASOURCE,
+      gauge: datasources.gauge,
+      sum: datasources.sum,
+      histogram: datasources.histogram,
+      exponentialHistogram: datasources.exponentialHistogram,
     })
 
     const toSend = payloads.filter((p) => p.ndjson.length > 0)
