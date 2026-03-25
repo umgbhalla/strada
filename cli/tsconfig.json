@@ -7,14 +7,21 @@
     "module": "nodenext",
     "moduleResolution": "nodenext",
     "target": "ESNext",
-    "lib": ["ESNext"],
+    "lib": [
+      "ESNext"
+    ],
     "declaration": true,
     "declarationMap": true,
     "noEmit": false,
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "skipLibCheck": true,
-    "useUnknownInCatchVariables": false
+    "useUnknownInCatchVariables": false,
+    "types": [
+      "node"
+    ]
   },
-  "include": ["src"]
+  "include": [
+    "src"
+  ]
 }
