@@ -111,6 +111,37 @@ Same pattern for metrics (`exporter-metrics-otlp-*`) and logs (`exporter-logs-ot
 | POST | `/v1/logs` | Receive log records |
 | POST | `/v1/metrics` | Receive metrics (gauge, sum, histogram, exponential histogram) |
 
+## Local development
+
+Run the collector as a plain localhost HTTP server (without `wrangler dev`):
+
+```bash
+pnpm dev:localhost
+```
+
+By default it listens on `127.0.0.1:4318`. Override with `PORT`:
+
+```bash
+PORT=8081 pnpm dev:localhost
+```
+
+## Integration tests
+
+The integration test boots:
+- a fake ClickHouse HTTP backend that writes all `INSERT ... FORMAT JSONEachLine` requests to a JSON file
+- the collector on a random local port
+- official OpenTelemetry JS SDK exporters (trace/log/metric) against the collector
+
+Run only integration tests:
+
+```bash
+pnpm test:integration
+```
+
+The test uses random ports by default (`0`) so concurrent runs do not conflict. You can pin ports with:
+- `OTEL_COLLECTOR_TEST_PORT`
+- `OTEL_COLLECTOR_FAKE_BACKEND_PORT`
+
 ## Multi-tenancy
 
 Tenant identity comes from the hostname. No configuration needed in the SDK — just point it at the right subdomain:

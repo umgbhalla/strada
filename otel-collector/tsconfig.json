@@ -15,7 +15,7 @@
     "noUncheckedIndexedAccess": true,
     "skipLibCheck": true,
     "useUnknownInCatchVariables": false,
-    "types": ["@cloudflare/workers-types"]
+    "types": ["@cloudflare/workers-types", "node", "vitest/globals"]
   },
   "include": ["../otel-collector/src"]
 }

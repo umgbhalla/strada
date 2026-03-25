@@ -7,8 +7,10 @@
   "main": "src/index.ts",
   "scripts": {
     "dev": "wrangler dev",
+    "dev:localhost": "tsx scripts/dev-localhost.ts",
     "deploy": "wrangler deploy",
     "test": "vitest run",
+    "test:integration": "vitest run src/collector-integration.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -16,6 +18,19 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250313.0",
+    "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/api-logs": "^0.214.0",
+    "@opentelemetry/exporter-logs-otlp-http": "^0.214.0",
+    "@opentelemetry/exporter-metrics-otlp-http": "^0.214.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.214.0",
+    "@opentelemetry/resources": "^2.6.1",
+    "@opentelemetry/sdk-logs": "^0.214.0",
+    "@opentelemetry/sdk-metrics": "^2.6.1",
+    "@opentelemetry/sdk-trace-base": "^2.6.1",
+    "@opentelemetry/sdk-trace-node": "^2.6.1",
+    "@opentelemetry/semantic-conventions": "^1.40.0",
+    "@types/node": "^22.1.0",
+    "tsx": "^4.17.0",
     "typescript": "^5.8.2",
     "vitest": "^3.1.1",
     "wrangler": "^4.5.1"
