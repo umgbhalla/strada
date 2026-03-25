@@ -294,3 +294,141 @@ ORDER BY t.Timestamp DESC
 LIMIT 50
 FORMAT JSON
 ```
+
+## Errors
+
+The `otel_errors` table stores extracted exception data from both logs and traces.
+Errors are extracted by the worker when it detects `exception.type` or `exception.message`
+attributes on log records or span events named `exception`.
+
+### List issues (errors grouped by fingerprint)
+
+```sql
+SELECT
+    FingerprintHash,
+    anyLast(ExceptionType) AS last_type,
+    anyLast(ExceptionMessage) AS last_message,
+    anyLast(Level) AS last_level,
+    count() AS event_count,
+    min(Timestamp) AS first_seen,
+    max(Timestamp) AS last_seen,
+    countIf(MechanismHandled = false) AS unhandled_count
+FROM otel_errors
+WHERE Timestamp >= now() - INTERVAL 24 HOUR
+GROUP BY FingerprintHash
+ORDER BY last_seen DESC
+LIMIT 50
+FORMAT JSON
+```
+
+### List issues filtered by service
+
+```sql
+SELECT
+    FingerprintHash,
+    anyLast(ExceptionType) AS last_type,
+    anyLast(ExceptionMessage) AS last_message,
+    count() AS event_count,
+    min(Timestamp) AS first_seen,
+    max(Timestamp) AS last_seen,
+    countIf(MechanismHandled = false) AS unhandled_count
+FROM otel_errors
+WHERE ServiceName = 'api-gateway'
+  AND Timestamp >= now() - INTERVAL 7 DAY
+GROUP BY FingerprintHash
+ORDER BY event_count DESC
+LIMIT 50
+FORMAT JSON
+```
+
+### Recent error events for a specific issue
+
+```sql
+SELECT
+    Timestamp,
+    ExceptionType,
+    ExceptionMessage,
+    ExceptionStacktrace,
+    MechanismType,
+    MechanismHandled,
+    Level,
+    Release,
+    Environment,
+    TraceId,
+    SpanId,
+    Tags
+FROM otel_errors
+WHERE FingerprintHash = '<fingerprint_hash>'
+ORDER BY Timestamp DESC
+LIMIT 20
+FORMAT JSON
+```
+
+### Unhandled errors only
+
+```sql
+SELECT
+    FingerprintHash,
+    anyLast(ExceptionType) AS last_type,
+    anyLast(ExceptionMessage) AS last_message,
+    count() AS event_count,
+    max(Timestamp) AS last_seen
+FROM otel_errors
+WHERE MechanismHandled = false
+  AND Timestamp >= now() - INTERVAL 24 HOUR
+GROUP BY FingerprintHash
+ORDER BY last_seen DESC
+LIMIT 50
+FORMAT JSON
+```
+
+### Error rate by release
+
+```sql
+SELECT
+    Release,
+    count() AS error_count,
+    uniq(FingerprintHash) AS unique_issues,
+    countIf(MechanismHandled = false) AS unhandled_count,
+    min(Timestamp) AS first_error,
+    max(Timestamp) AS last_error
+FROM otel_errors
+WHERE Timestamp >= now() - INTERVAL 7 DAY
+  AND Release != ''
+GROUP BY Release
+ORDER BY last_error DESC
+FORMAT JSON
+```
+
+### Error volume over time (timeseries)
+
+```sql
+SELECT
+    toStartOfMinute(Timestamp) AS minute,
+    count() AS error_count,
+    uniq(FingerprintHash) AS unique_issues
+FROM otel_errors
+WHERE Timestamp >= now() - INTERVAL 1 HOUR
+GROUP BY minute
+ORDER BY minute ASC
+FORMAT JSON
+```
+
+### Find error with its trace context
+
+```sql
+SELECT
+    e.Timestamp,
+    e.ExceptionType,
+    e.ExceptionMessage,
+    e.FingerprintHash,
+    t.SpanName,
+    t.SpanKind,
+    t.Duration / 1000000 AS span_duration_ms,
+    t.ServiceName
+FROM otel_errors e
+LEFT JOIN otel_traces t ON e.TraceId = t.TraceId AND e.SpanId = t.SpanId
+WHERE e.TraceId = '<trace_id>'
+ORDER BY e.Timestamp ASC
+FORMAT JSON
+```

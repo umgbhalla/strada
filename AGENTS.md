@@ -68,6 +68,11 @@ For reads, the backend generates a short-lived JWT per user session:
       "type": "DATASOURCES:READ",
       "resource": "otel_metrics_exponential_histogram",
       "filter": "TenantId = 'acme'"
+    },
+    {
+      "type": "DATASOURCES:READ",
+      "resource": "otel_errors",
+      "filter": "TenantId = 'acme'"
     }
   ],
   "limits": { "rps": 10 }
@@ -179,6 +184,110 @@ All tables use:
 - `ZSTD(1)` compression on all columns, `Delta(8)` on timestamps
 - `LowCardinality(String)` on low-cardinality fields (ServiceName, SpanKind, SeverityText, etc.)
 - `Map(LowCardinality(String), String)` for flexible key-value attributes
+
+### Errors — `otel_errors`
+
+**Ingested from:** extracted by the worker from both `/v1/logs` and `/v1/traces`
+
+The worker scans incoming data for exceptions:
+- **From logs:** log records with `exception.type` or `exception.message` in `LogAttributes`
+- **From traces:** span events where `name === 'exception'` (the OTel convention for recording exceptions on spans)
+
+When an exception is detected, the worker extracts it into a denormalized error row and writes it to `otel_errors`. The original log/trace row is still written to its respective table — errors are an additional extraction, not a replacement.
+
+**Sorting key:** `TenantId, ServiceName, FingerprintHash, toDateTime(Timestamp)`
+
+**Key columns:** `ExceptionType`, `ExceptionMessage`, `ExceptionStacktrace` (raw string), `ExceptionFrames` (JSON string of structured frames), `Fingerprint` (Array(String)), `FingerprintHash` (hex hash for GROUP BY), `MechanismType`, `MechanismHandled`, `DebugId`, `Level`, `Release`, `Environment`, `Tags` (Map), `TraceId`, `SpanId` (for correlation back to traces/logs), `SourceSignal` (`"log"` or `"trace"`).
+
+**No materialized view.** Issue grouping (GROUP BY FingerprintHash) is done at query time. ClickHouse handles this efficiently because FingerprintHash is in the sorting key, so rows for the same issue are physically co-located. Add a MV later only if query latency becomes a problem at scale.
+
+**Answers:** "what are the top errors?", "is this error handled or unhandled?", "how many times did this error happen?", "which release introduced this bug?", "show me the stacktrace for this error group"
+
+## Error tracking — custom OTel attributes
+
+Strada extends OTel's standard `exception.*` attributes with additional error-tracking attributes. These are NOT part of the OTel semantic conventions — they are custom attributes that Strada SDKs set on OTel log records (or span event attributes) alongside the standard ones. Any OTel SDK can set them as regular string attributes.
+
+We use the `exception.*` namespace (not a vendor prefix like `strada.*`) because these concepts are universal to error tracking, not Strada-specific. If OTel ever standardizes fingerprinting or mechanism metadata, the names would be similar.
+
+### Standard OTel attributes (already defined by OTel spec)
+
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| `exception.type` | string | Fully-qualified exception class name. e.g. `"TypeError"`, `"java.net.ConnectException"` |
+| `exception.message` | string | The exception message string |
+| `exception.stacktrace` | string | Raw stacktrace as a string in the language's natural format |
+
+### Standard OTel resource attributes (set on the SDK's Resource, not per-event)
+
+| Attribute | Type | Maps to |
+|-----------|------|---------|
+| `service.version` | string | Release / app version. Stored as `Release` column |
+| `deployment.environment.name` | string | Environment (`"production"`, `"staging"`). Stored as `Environment` column |
+
+### Custom error-tracking attributes (set by Strada SDKs)
+
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| `exception.fingerprint` | string (JSON array) | Custom fingerprint override for grouping. e.g. `'["db-timeout","users-service"]'`. When absent, the worker computes a default fingerprint from exception type + top in-app frame function + stripped message |
+| `exception.mechanism.type` | string | How the exception was captured: `"generic"` (user-called captureException), `"onerror"` (window.onerror), `"unhandledrejection"` (promise rejection), `"uncaughtException"` (Node.js process), etc. |
+| `exception.mechanism.handled` | string | `"true"` if user code caught it (try/catch + captureException), `"false"` if caught by a global handler. OTel attributes are strings, so this is `"true"`/`"false"` not boolean |
+| `exception.structured_frames` | string (JSON array) | Parsed stack frames. Each frame: `{"filename": "app.js", "function": "processOrder", "lineno": 42, "colno": 15, "abs_path": "/src/app.js", "in_app": true, "debug_id": "85314830-..."}`. When absent, the worker falls back to the raw `exception.stacktrace` string |
+| `exception.debug_id` | string | UUID linking the source file to its source map (TC39 debug-id proposal). Used for server-side stack trace desymbolication |
+
+### Default fingerprint computation (server-side, in the worker)
+
+When `exception.fingerprint` is not set by the SDK, the worker computes a default:
+
+1. If `exception.structured_frames` has frames with `in_app: true` → hash `[exception.type, top_in_app_frame.function]`
+2. If no structured frames → hash `[exception.type, stripped_message]` where stripped_message has numbers, hex strings, and UUIDs replaced with `<N>`, `<hex>`, `<uuid>` to group messages that differ only in dynamic values
+3. If neither type nor message → hash `["unknown"]`
+
+The hash is a SHA-256 hex string truncated to 32 characters, stored as `FingerprintHash`.
+
+### How errors flow through the system
+
+```
+SDK: captureException(err)
+  |
+  v
+OTel Logger.emit({
+  severityNumber: 17,  // ERROR
+  attributes: {
+    "exception.type": "TypeError",
+    "exception.message": "Cannot read property 'foo' of null",
+    "exception.stacktrace": "TypeError: Cannot read...\n  at ...",
+    "exception.mechanism.type": "onerror",
+    "exception.mechanism.handled": "false",
+    "exception.structured_frames": "[{...}]",
+  }
+})
+  |
+  v  OTLP HTTP/JSON POST /v1/logs
+  |
+  v
+Worker:
+  1. transformLogs() → writes to otel_logs (unchanged)
+  2. extractErrorsFromLogs() → detects exception.type in attributes
+     → parses custom attributes
+     → computes fingerprint
+     → writes to otel_errors
+```
+
+For traces, the same extraction happens when span events named `exception` are found:
+
+```
+SDK: span.recordException(err)
+  |
+  v  OTLP HTTP/JSON POST /v1/traces
+  |
+  v
+Worker:
+  1. transformTraces() → writes to otel_traces (unchanged)
+  2. extractErrorsFromTraces() → scans events_name for "exception"
+     → extracts exception.* from event attributes
+     → computes fingerprint
+     → writes to otel_errors
+```
 
 ## Reference schema
 
