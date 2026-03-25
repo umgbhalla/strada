@@ -5,12 +5,13 @@ DESCRIPTION >
 NODE otel_traces_trace_id_ts_mv_node
 SQL >
     SELECT
+        TenantId,
         TraceId,
         min(Timestamp) AS Start,
         max(Timestamp) AS End
     FROM otel_traces
     WHERE TraceId != ''
-    GROUP BY TraceId
+    GROUP BY TenantId, TraceId
 
 TYPE MATERIALIZED
 DATASOURCE otel_traces_trace_id_ts
