@@ -2,6 +2,8 @@
 
 Cloudflare Worker (Spiceflow) that receives OTLP HTTP/JSON from OTel SDKs and forwards to Tinybird or ClickHouse as NDJSON.
 
+converted to ts from https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/exporter/tinybirdexporter 
+
 ## Backend selection
 
 Two storage backends, selected by environment variables at deploy time:
