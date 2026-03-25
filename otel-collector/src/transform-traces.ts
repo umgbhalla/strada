@@ -1,8 +1,8 @@
-// Transform OTLP traces to Tinybird NDJSON.
+// Transform OTLP traces to NDJSON rows matching the OTel ClickHouse schema.
 // Matches the logic in the Go exporter's internal/traces.go:74-128.
 
 import type { ExportTraceServiceRequest } from './otlp-types.ts'
-import type { TinybirdTrace } from './tinybird-types.ts'
+import type { OtelTraceRow } from './otel-row-types.ts'
 import {
   convertAttributes,
   getServiceName,
@@ -38,7 +38,7 @@ export function transformTraces(body: ExportTraceServiceRequest, tenantId: strin
         const startNano = BigInt(span.startTimeUnixNano)
         const endNano = BigInt(span.endTimeUnixNano)
 
-        const row: TinybirdTrace = {
+        const row: OtelTraceRow = {
           tenant_id: tenantId,
           resource_schema_url: rs.schemaUrl ?? '',
           resource_attributes: resourceAttrs,

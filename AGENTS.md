@@ -2,12 +2,48 @@
 
 Open-source OpenTelemetry observability stack on top of Tinybird. Goal is to reimplement the core value of Sentry (error tracking, tracing, logs, metrics) but based on the OpenTelemetry standard instead of Sentry's proprietary bloated SDK. Users send OTEL data via standard SDKs, we store it in Tinybird, they query it with SQL.
 
+we use the standard OTEL schema for clickhouse: https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/exporter/clickhouseexporter/internal/sqltemplates/logs_json_table.sql
+
+see other files in sqltemplates as well for other kinds of tables
+
 ## Architecture
 
-- **otel-collector**: Cloudflare Worker (Spiceflow) that receives OTLP HTTP/JSON and forwards to Tinybird Events API as NDJSON
-- **tinybird/**: Tinybird project with datasource definitions and materialized views, deployed with `tb deploy`
+- **otel-collector**: Cloudflare Worker (Spiceflow) that receives OTLP HTTP/JSON and forwards to either Tinybird Events API or ClickHouse HTTP interface as NDJSON. Backend is selected by environment variables: set `TINYBIRD_ENDPOINT` + `TINYBIRD_TOKEN` for Tinybird, or `CLICKHOUSE_URL` for direct ClickHouse. No separate adapter needed for self-hosted ClickHouse.
+- **tinybird/**: Tinybird project with datasource definitions and materialized views, deployed with `tb deploy`. Only used when the Tinybird backend is configured.
 - **Multi-tenancy**: hostname-based tenant extraction. Each tenant gets `{tenant}-ingest.stradametrics.com`. Self-hosted users use a plain `ingest.{domain}` with empty tenant_id
 - **Query layer**: Tinybird Query API (`/v0/sql`) with JWT row-level filtering, NOT the ClickHouse HTTP interface (which doesn't support JWTs or row filtering). No pipe endpoints — all queries are raw SQL
+
+### Backend selection
+
+The otel-collector supports two storage backends, configured via env vars:
+
+**Tinybird** (hosted):
+```
+TINYBIRD_ENDPOINT=https://api.us-east.aws.tinybird.co
+TINYBIRD_TOKEN=p.ey...
+```
+
+**ClickHouse** (self-hosted):
+```
+CLICKHOUSE_URL=http://my-clickhouse:8123
+CLICKHOUSE_DATABASE=default
+CLICKHOUSE_USER=default
+CLICKHOUSE_PASSWORD=secret
+```
+
+When using ClickHouse backend, the collector remaps NDJSON keys from snake_case to PascalCase (the OTel ClickHouse standard) before INSERT. The field mapping logic lives in `otel-collector/src/field-mapping.ts`.
+
+The ClickHouse schema (`clickhouse.sql`) has **no `TenantId` column** — self-hosted users run single-tenant. Multi-tenancy is only used in the hosted Tinybird deployment. The field mapping strips `tenant_id` from NDJSON before INSERT.
+
+### Environment variables
+
+The collector reads config from `process.env` (not `import { env } from 'cloudflare:workers'`). This makes the codebase portable — runs on Cloudflare Workers (with `nodejs_compat_v2`), Node.js, or Bun without changes.
+
+### Column naming convention
+
+Column names follow the **standard OTel ClickHouse exporter schema** (PascalCase): `TraceId`, `SpanId`, `ServiceName`, `ResourceAttributes`, etc. This is NOT a Tinybird-specific convention — it comes from the official OTel collector-contrib ClickHouse exporter at https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/exporter/clickhouseexporter/internal/sqltemplates.
+
+The only Strada addition is `TenantId` as the first column in every Tinybird table for multi-tenancy. The self-hosted ClickHouse schema (`clickhouse.sql`) does not have this column.
 
 ## Multi-tenancy
 
@@ -80,6 +116,8 @@ For reads, the backend generates a short-lived JWT per user session:
 ```
 
 The `filter` is enforced server-side by Tinybird on every query to `/v0/sql`. Users can write arbitrary SQL and the filter is always appended — no way to bypass it. The JWT is signed with the workspace admin token and can't be tampered with.
+
+**All SQL queries must ignore `TenantId` completely.** `TenantId` exists only for auth — Tinybird's JWT filter handles it automatically on every query. Never add `WHERE TenantId = '...'` in application SQL, UI queries, or example queries. If a query uses `SELECT *`, the column will appear in results but it carries no semantic meaning for the application — it's purely an infrastructure concern for row-level isolation.
 
 The ClickHouse HTTP interface (`clickhouse.*.tinybird.co`) does NOT support JWTs or row-level filtering. All user-facing queries must go through Tinybird's Query API (`/v0/sql`).
 
@@ -297,6 +335,8 @@ Run tests with `vitest run` (not `vitest` which starts watch mode and never exit
 pnpm vitest run                           # all tests
 pnpm vitest run src/extract-errors.test.ts # single file
 ```
+
+Run from the `otel-collector/` directory.
 
 ## Reference schema
 

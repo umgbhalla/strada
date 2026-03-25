@@ -1,6 +1,8 @@
-// OTLP-to-Tinybird proxy on Cloudflare Workers.
-// Receives OTLP HTTP/JSON traces, logs, and metrics from any OTEL SDK
-// and forwards them to the Tinybird Events API as NDJSON.
+// OTel collector — receives OTLP HTTP/JSON and forwards to Tinybird or ClickHouse.
+//
+// Supports two backends, selected by environment variables:
+//   - Tinybird: set TINYBIRD_ENDPOINT + TINYBIRD_TOKEN
+//   - ClickHouse: set CLICKHOUSE_URL (+ CLICKHOUSE_DATABASE, CLICKHOUSE_USER, CLICKHOUSE_PASSWORD)
 //
 // Multi-tenancy: tenant_id is extracted from the hostname.
 // Each tenant gets a subdomain: {tenant}-ingest.stradametrics.com
@@ -9,30 +11,14 @@
 
 import { Spiceflow } from 'spiceflow'
 import { cors } from 'spiceflow/cors'
-import { env } from 'cloudflare:workers'
+import { env } from './env.ts'
 import { getTenantId } from './get-tenant-id.ts'
 import { transformTraces } from './transform-traces.ts'
 import { transformLogs } from './transform-logs.ts'
 import { transformMetrics } from './transform-metrics.ts'
-import { sendToTinybird } from './tinybird-client.ts'
+import { createBackend } from './backend.ts'
 import { extractErrorsFromTraces, extractErrorsFromLogs } from './extract-errors.ts'
 import type { ExportTraceServiceRequest, ExportLogsServiceRequest, ExportMetricsServiceRequest } from './otlp-types.ts'
-
-interface Env {
-  TINYBIRD_ENDPOINT: string
-  TINYBIRD_TOKEN: string
-  TRACES_DATASOURCE: string
-  LOGS_DATASOURCE: string
-  GAUGE_DATASOURCE: string
-  SUM_DATASOURCE: string
-  HISTOGRAM_DATASOURCE: string
-  EXPONENTIAL_HISTOGRAM_DATASOURCE: string
-  ERRORS_DATASOURCE: string
-}
-
-function getEnv(): Env {
-  return env as unknown as Env
-}
 
 const app = new Spiceflow()
   .use(
@@ -46,17 +32,12 @@ const app = new Spiceflow()
   .post('/v1/traces', async ({ request, waitUntil }) => {
     const tenantId = getTenantId(request)
     const body = (await request.json()) as ExportTraceServiceRequest
-    const e = getEnv()
+    const backend = createBackend()
 
     const ndjson = transformTraces(body, tenantId)
     if (ndjson) {
       waitUntil(
-        sendToTinybird(
-          e.TINYBIRD_ENDPOINT,
-          e.TINYBIRD_TOKEN,
-          e.TRACES_DATASOURCE ?? 'otel_traces',
-          ndjson,
-        ),
+        backend.send(env.TRACES_DATASOURCE, 'traces', ndjson),
       )
     }
 
@@ -64,12 +45,7 @@ const app = new Spiceflow()
     const errorsNdjson = extractErrorsFromTraces(body, tenantId)
     if (errorsNdjson) {
       waitUntil(
-        sendToTinybird(
-          e.TINYBIRD_ENDPOINT,
-          e.TINYBIRD_TOKEN,
-          e.ERRORS_DATASOURCE ?? 'otel_errors',
-          errorsNdjson,
-        ),
+        backend.send(env.ERRORS_DATASOURCE, 'errors', errorsNdjson),
       )
     }
 
@@ -78,17 +54,12 @@ const app = new Spiceflow()
   .post('/v1/logs', async ({ request, waitUntil }) => {
     const tenantId = getTenantId(request)
     const body = (await request.json()) as ExportLogsServiceRequest
-    const e = getEnv()
+    const backend = createBackend()
 
     const ndjson = transformLogs(body, tenantId)
     if (ndjson) {
       waitUntil(
-        sendToTinybird(
-          e.TINYBIRD_ENDPOINT,
-          e.TINYBIRD_TOKEN,
-          e.LOGS_DATASOURCE ?? 'otel_logs',
-          ndjson,
-        ),
+        backend.send(env.LOGS_DATASOURCE, 'logs', ndjson),
       )
     }
 
@@ -96,12 +67,7 @@ const app = new Spiceflow()
     const errorsNdjson = extractErrorsFromLogs(body, tenantId)
     if (errorsNdjson) {
       waitUntil(
-        sendToTinybird(
-          e.TINYBIRD_ENDPOINT,
-          e.TINYBIRD_TOKEN,
-          e.ERRORS_DATASOURCE ?? 'otel_errors',
-          errorsNdjson,
-        ),
+        backend.send(env.ERRORS_DATASOURCE, 'errors', errorsNdjson),
       )
     }
 
@@ -110,27 +76,19 @@ const app = new Spiceflow()
   .post('/v1/metrics', async ({ request, waitUntil }) => {
     const tenantId = getTenantId(request)
     const body = (await request.json()) as ExportMetricsServiceRequest
-    const e = getEnv()
+    const backend = createBackend()
     const payloads = transformMetrics(body, tenantId, {
-      gauge: e.GAUGE_DATASOURCE ?? 'gauge',
-      sum: e.SUM_DATASOURCE ?? 'sum',
-      histogram: e.HISTOGRAM_DATASOURCE ?? 'histogram',
-      exponentialHistogram:
-        e.EXPONENTIAL_HISTOGRAM_DATASOURCE ?? 'exponential_histogram',
+      gauge: env.GAUGE_DATASOURCE,
+      sum: env.SUM_DATASOURCE,
+      histogram: env.HISTOGRAM_DATASOURCE,
+      exponentialHistogram: env.EXPONENTIAL_HISTOGRAM_DATASOURCE,
     })
 
     const toSend = payloads.filter((p) => p.ndjson.length > 0)
     if (toSend.length > 0) {
       waitUntil(
         Promise.all(
-          toSend.map((p) =>
-            sendToTinybird(
-              e.TINYBIRD_ENDPOINT,
-              e.TINYBIRD_TOKEN,
-              p.datasource,
-              p.ndjson,
-            ),
-          ),
+          toSend.map((p) => backend.send(p.datasource, p.signal, p.ndjson)),
         ),
       )
     }

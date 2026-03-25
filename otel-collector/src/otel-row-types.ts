@@ -1,8 +1,16 @@
-// Tinybird output types matching the Go OTEL collector exporter structs.
-// See: opentelemetry-collector-contrib/exporter/tinybirdexporter/internal/
+// OTel row types matching the standard OpenTelemetry ClickHouse exporter schema.
+// Column names follow the OTel ClickHouse convention (PascalCase) defined in:
+// https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/exporter/clickhouseexporter/internal/sqltemplates
+//
+// These types use snake_case field names because the otel-collector outputs JSON
+// in snake_case. For Tinybird, the `json:$.snake_case` mapping in .datasource files
+// converts to PascalCase columns on ingest. For ClickHouse, the field-mapping module
+// remaps keys before INSERT.
+//
+// tenant_id is a Strada addition for multi-tenancy (not part of the OTel standard).
 
-// Matches internal/traces.go:14-44, with tenant_id added for multi-tenancy.
-export interface TinybirdTrace {
+// Matches the OTel ClickHouse traces table schema, with tenant_id added.
+export interface OtelTraceRow {
   tenant_id: string
   resource_schema_url: string
   resource_attributes: Record<string, string>
@@ -33,8 +41,8 @@ export interface TinybirdTrace {
   links_attributes: Record<string, string>[]
 }
 
-// Matches internal/logs.go:14-30, with tenant_id added for multi-tenancy.
-export interface TinybirdLog {
+// Matches the OTel ClickHouse logs table schema, with tenant_id added.
+export interface OtelLogRow {
   tenant_id: string
   resource_schema_url: string
   resource_attributes: Record<string, string>
@@ -56,7 +64,8 @@ export interface TinybirdLog {
 
 // Denormalized error row extracted from logs (exception.* attributes) or
 // traces (span events named "exception"). Written to the otel_errors table.
-export interface TinybirdError {
+// This is a Strada-specific table (not part of the OTel ClickHouse exporter).
+export interface OtelErrorRow {
   tenant_id: string
   timestamp: string // RFC3339Nano
   trace_id: string
@@ -80,8 +89,8 @@ export interface TinybirdError {
   source_signal: string // "log" or "trace"
 }
 
-// Matches internal/metrics.go base struct, with tenant_id added for multi-tenancy.
-interface TinybirdBaseMetric {
+// Matches the OTel ClickHouse metrics base schema, with tenant_id added.
+interface OtelBaseMetricRow {
   tenant_id: string
   resource_schema_url: string
   resource_attributes: Record<string, string>
@@ -105,20 +114,20 @@ interface TinybirdBaseMetric {
   exemplars_trace_id: string[]
 }
 
-// Matches internal/metrics.go sumMetricSignal
-export interface TinybirdSum extends TinybirdBaseMetric {
+// Matches the OTel ClickHouse sum metrics table schema.
+export interface OtelSumRow extends OtelBaseMetricRow {
   value: number
   aggregation_temporality: number
   is_monotonic: boolean
 }
 
-// Matches internal/metrics.go gaugeMetricSignal
-export interface TinybirdGauge extends TinybirdBaseMetric {
+// Matches the OTel ClickHouse gauge metrics table schema.
+export interface OtelGaugeRow extends OtelBaseMetricRow {
   value: number
 }
 
-// Matches internal/metrics.go histogramMetricSignal
-export interface TinybirdHistogram extends TinybirdBaseMetric {
+// Matches the OTel ClickHouse histogram metrics table schema.
+export interface OtelHistogramRow extends OtelBaseMetricRow {
   count: number
   sum: number
   bucket_counts: number[]
@@ -128,8 +137,8 @@ export interface TinybirdHistogram extends TinybirdBaseMetric {
   aggregation_temporality: number
 }
 
-// Matches internal/metrics.go exponentialHistogramMetricSignal
-export interface TinybirdExponentialHistogram extends TinybirdBaseMetric {
+// Matches the OTel ClickHouse exponential histogram metrics table schema.
+export interface OtelExponentialHistogramRow extends OtelBaseMetricRow {
   count: number
   sum: number
   scale: number

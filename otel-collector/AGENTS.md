@@ -1,6 +1,15 @@
 # otel-collector
 
-Cloudflare Worker (Spiceflow) that receives OTLP HTTP/JSON from OTel SDKs and forwards to Tinybird Events API as NDJSON.
+Cloudflare Worker (Spiceflow) that receives OTLP HTTP/JSON from OTel SDKs and forwards to Tinybird or ClickHouse as NDJSON.
+
+## Backend selection
+
+Two storage backends, selected by environment variables at deploy time:
+
+- **Tinybird**: set `TINYBIRD_ENDPOINT` + `TINYBIRD_TOKEN`. Sends snake_case NDJSON to Tinybird Events API. Tinybird's `json:$.field` mappings handle conversion to PascalCase columns.
+- **ClickHouse**: set `CLICKHOUSE_URL` (+ `CLICKHOUSE_DATABASE`, `CLICKHOUSE_USER`, `CLICKHOUSE_PASSWORD`). Remaps NDJSON keys to PascalCase via `field-mapping.ts`, then sends via `INSERT INTO table FORMAT JSONEachLine`.
+
+The backend factory is in `backend.ts`. Only one backend should be configured per deployment.
 
 ## JSON only
 
@@ -20,17 +29,32 @@ Tenant ID is extracted from the request hostname. See the root `AGENTS.md` for t
 
 ## Auth
 
-No auth. The hostname IS the tenant identity (like Sentry's DSN). Security is enforced on reads via Tinybird JWT, not on writes. If spam becomes a problem, add Cloudflare rate limiting per IP.
+No auth on writes. The hostname IS the tenant identity (like Sentry's DSN). Security is enforced on reads via Tinybird JWT (or ClickHouse auth for self-hosted), not on writes. If spam becomes a problem, add Cloudflare rate limiting per IP.
 
 ## Transform pipeline
 
-Each signal has a transform module that converts OTLP JSON into Tinybird NDJSON:
+Each signal has a transform module that converts OTLP JSON into NDJSON:
 - `transform-traces.ts` — flattens `resourceSpans[].scopeSpans[].spans[]` into rows
 - `transform-logs.ts` — flattens `resourceLogs[].scopeLogs[].logRecords[]` into rows
 - `transform-metrics.ts` — flattens `resourceMetrics[].scopeMetrics[].metrics[]` into rows, splitting by metric type (gauge/sum/histogram/exponential histogram)
 - `transform-attributes.ts` — shared utilities (attribute conversion, nanosecond timestamps, exemplars)
 
-All transforms inject `tenant_id` into every row.
+All transforms inject `tenant_id` into every row and output snake_case JSON keys. Row types are defined in `otel-row-types.ts`.
+
+## Field mapping (ClickHouse backend only)
+
+When using the ClickHouse backend, `field-mapping.ts` remaps snake_case JSON keys to PascalCase ClickHouse column names before INSERT. Most mappings are simple snake→Pascal, but some are non-trivial:
+
+| JSON key | ClickHouse column | Table(s) |
+|----------|-------------------|----------|
+| `start_time` | `Timestamp` | traces |
+| `flags` | `TraceFlags` | logs |
+| `flags` | `Flags` | metrics |
+| `metric_attributes` | `Attributes` | all metrics |
+| `start_timestamp` | `StartTimeUnix` | all metrics |
+| `timestamp` | `TimeUnix` | all metrics |
+
+When the schema changes, update both the Tinybird `.datasource` files AND `field-mapping.ts`.
 
 ## Error extraction
 

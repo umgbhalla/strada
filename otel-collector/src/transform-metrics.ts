@@ -1,14 +1,14 @@
-// Transform OTLP metrics to Tinybird NDJSON.
+// Transform OTLP metrics to NDJSON rows matching the OTel ClickHouse schema.
 // Matches the logic in the Go exporter's internal/metrics.go:147-283.
-// Metrics are split into 4 datasources: gauge, sum, histogram, exponential_histogram.
+// Metrics are split into 4 tables: gauge, sum, histogram, exponential_histogram.
 
 import type { ExportMetricsServiceRequest } from './otlp-types.ts'
 import type {
-  TinybirdGauge,
-  TinybirdSum,
-  TinybirdHistogram,
-  TinybirdExponentialHistogram,
-} from './tinybird-types.ts'
+  OtelGaugeRow,
+  OtelSumRow,
+  OtelHistogramRow,
+  OtelExponentialHistogramRow,
+} from './otel-row-types.ts'
 import {
   convertAttributes,
   convertExemplars,
@@ -16,9 +16,11 @@ import {
   getNumberValue,
   nanosToRFC3339,
 } from './transform-attributes.ts'
+import type { SignalKind } from './field-mapping.ts'
 
 export interface MetricsPayload {
   datasource: string
+  signal: SignalKind
   ndjson: string
 }
 
@@ -67,7 +69,7 @@ export function transformMetrics(
         if (metric.gauge) {
           for (const dp of metric.gauge.dataPoints) {
             const exemplars = convertExemplars(dp.exemplars)
-            const row: TinybirdGauge = {
+            const row: OtelGaugeRow = {
               ...base,
               ...exemplars,
               start_timestamp: nanosToRFC3339(dp.startTimeUnixNano ?? '0'),
@@ -83,7 +85,7 @@ export function transformMetrics(
         if (metric.sum) {
           for (const dp of metric.sum.dataPoints) {
             const exemplars = convertExemplars(dp.exemplars)
-            const row: TinybirdSum = {
+            const row: OtelSumRow = {
               ...base,
               ...exemplars,
               start_timestamp: nanosToRFC3339(dp.startTimeUnixNano ?? '0'),
@@ -101,7 +103,7 @@ export function transformMetrics(
         if (metric.histogram) {
           for (const dp of metric.histogram.dataPoints) {
             const exemplars = convertExemplars(dp.exemplars)
-            const row: TinybirdHistogram = {
+            const row: OtelHistogramRow = {
               ...base,
               ...exemplars,
               start_timestamp: nanosToRFC3339(dp.startTimeUnixNano ?? '0'),
@@ -124,7 +126,7 @@ export function transformMetrics(
         if (metric.exponentialHistogram) {
           for (const dp of metric.exponentialHistogram.dataPoints) {
             const exemplars = convertExemplars(dp.exemplars)
-            const row: TinybirdExponentialHistogram = {
+            const row: OtelExponentialHistogramRow = {
               ...base,
               ...exemplars,
               start_timestamp: nanosToRFC3339(dp.startTimeUnixNano ?? '0'),
@@ -155,14 +157,16 @@ export function transformMetrics(
     rows.length > 0 ? rows.join('\n') + '\n' : ''
 
   return [
-    { datasource: datasourceNames.gauge, ndjson: toNdjson(gaugeRows) },
-    { datasource: datasourceNames.sum, ndjson: toNdjson(sumRows) },
+    { datasource: datasourceNames.gauge, signal: 'metrics_gauge' as const, ndjson: toNdjson(gaugeRows) },
+    { datasource: datasourceNames.sum, signal: 'metrics_sum' as const, ndjson: toNdjson(sumRows) },
     {
       datasource: datasourceNames.histogram,
+      signal: 'metrics_histogram' as const,
       ndjson: toNdjson(histogramRows),
     },
     {
       datasource: datasourceNames.exponentialHistogram,
+      signal: 'metrics_exponential_histogram' as const,
       ndjson: toNdjson(expHistogramRows),
     },
   ]

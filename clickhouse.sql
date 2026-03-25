@@ -1,11 +1,10 @@
--- ClickHouse DDL for Strada's OTel schema.
+-- ClickHouse DDL for self-hosted Strada OTel schema.
 --
--- SOURCE OF TRUTH: The Tinybird datasource files in tinybird/datasources/ are
--- the canonical schema definitions. This file is a convenience translation for
--- users running Strada against a generic ClickHouse server (not Tinybird).
+-- This schema follows the standard OTel ClickHouse exporter column naming
+-- (PascalCase) from opentelemetry-collector-contrib/exporter/clickhouseexporter.
 --
--- If you modify the schema, edit the .datasource files first, then update this
--- file to match. Never edit this file without updating the datasource files.
+-- No TenantId column — self-hosted users run single-tenant. Multi-tenancy
+-- is only used in the hosted Tinybird deployment (see tinybird/datasources/).
 --
 -- Database: create your own or use `default`. The worker's CLICKHOUSE_DATABASE
 -- env var controls which database it writes to.
@@ -16,12 +15,12 @@
 
 CREATE TABLE IF NOT EXISTS otel_traces
 (
-    `TenantId`            LowCardinality(String) CODEC(ZSTD(1)),
     `Timestamp`           DateTime64(9)          CODEC(Delta(8), ZSTD(1)),
     `TraceId`             String                 CODEC(ZSTD(1)),
     `SpanId`              String                 CODEC(ZSTD(1)),
     `ParentSpanId`        String                 CODEC(ZSTD(1)),
     `TraceState`          String                 CODEC(ZSTD(1)),
+    `TraceFlags`          UInt8                  CODEC(ZSTD(1)),
     `SpanName`            LowCardinality(String) CODEC(ZSTD(1)),
     `SpanKind`            LowCardinality(String) CODEC(ZSTD(1)),
     `ServiceName`         LowCardinality(String) CODEC(ZSTD(1)),
@@ -52,7 +51,7 @@ CREATE TABLE IF NOT EXISTS otel_traces
 )
 ENGINE = MergeTree
 PARTITION BY toDate(Timestamp)
-ORDER BY (TenantId, ServiceName, SpanName, toDateTime(Timestamp))
+ORDER BY (ServiceName, SpanName, toDateTime(Timestamp))
 SETTINGS index_granularity = 8192;
 
 -- ============================================================================
@@ -61,25 +60,23 @@ SETTINGS index_granularity = 8192;
 
 CREATE TABLE IF NOT EXISTS otel_traces_trace_id_ts
 (
-    `TenantId` LowCardinality(String),
     `TraceId`  String,
     `Start`    DateTime64(9) CODEC(Delta(8), ZSTD(1)),
     `End`      DateTime64(9) CODEC(Delta(8), ZSTD(1))
 )
 ENGINE = MergeTree
-ORDER BY (TenantId, TraceId, toUnixTimestamp(Start));
+ORDER BY (TraceId, toUnixTimestamp(Start));
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS otel_traces_trace_id_ts_mv
 TO otel_traces_trace_id_ts
 AS
 SELECT
-    TenantId,
     TraceId,
     min(Timestamp) AS Start,
     max(Timestamp) AS End
 FROM otel_traces
 WHERE TraceId != ''
-GROUP BY TenantId, TraceId;
+GROUP BY TraceId;
 
 -- ============================================================================
 -- LOGS
@@ -87,7 +84,6 @@ GROUP BY TenantId, TraceId;
 
 CREATE TABLE IF NOT EXISTS otel_logs
 (
-    `TenantId`            LowCardinality(String) CODEC(ZSTD(1)),
     `Timestamp`           DateTime64(9)          CODEC(Delta(8), ZSTD(1)),
     `TimestampTime`       DateTime DEFAULT toDateTime(Timestamp),
     `TraceId`             String                 CODEC(ZSTD(1)),
@@ -117,7 +113,7 @@ CREATE TABLE IF NOT EXISTS otel_logs
 )
 ENGINE = MergeTree
 PARTITION BY toDate(TimestampTime)
-ORDER BY (TenantId, ServiceName, TimestampTime, Timestamp)
+ORDER BY (ServiceName, TimestampTime, Timestamp)
 SETTINGS index_granularity = 8192;
 
 -- ============================================================================
@@ -126,7 +122,6 @@ SETTINGS index_granularity = 8192;
 
 CREATE TABLE IF NOT EXISTS otel_errors
 (
-    `TenantId`              LowCardinality(String) CODEC(ZSTD(1)),
     `Timestamp`             DateTime64(9)          CODEC(Delta(8), ZSTD(1)),
     `TraceId`               String                 CODEC(ZSTD(1)),
     `SpanId`                String                 CODEC(ZSTD(1)),
@@ -158,7 +153,7 @@ CREATE TABLE IF NOT EXISTS otel_errors
 )
 ENGINE = MergeTree
 PARTITION BY toDate(Timestamp)
-ORDER BY (TenantId, ServiceName, FingerprintHash, toDateTime(Timestamp))
+ORDER BY (ServiceName, FingerprintHash, toDateTime(Timestamp))
 SETTINGS index_granularity = 8192;
 
 -- ============================================================================
@@ -167,7 +162,6 @@ SETTINGS index_granularity = 8192;
 
 CREATE TABLE IF NOT EXISTS otel_metrics_gauge
 (
-    `TenantId`                    LowCardinality(String) CODEC(ZSTD(1)),
     `ResourceAttributes`          Map(LowCardinality(String), String) CODEC(ZSTD(1)),
     `ResourceSchemaUrl`           String                 CODEC(ZSTD(1)),
     `ScopeName`                   String                 CODEC(ZSTD(1)),
@@ -199,7 +193,7 @@ CREATE TABLE IF NOT EXISTS otel_metrics_gauge
 )
 ENGINE = MergeTree
 PARTITION BY toDate(TimeUnix)
-ORDER BY (TenantId, ServiceName, MetricName, Attributes, toUnixTimestamp64Nano(TimeUnix))
+ORDER BY (ServiceName, MetricName, Attributes, toUnixTimestamp64Nano(TimeUnix))
 SETTINGS index_granularity = 8192;
 
 -- ============================================================================
@@ -208,7 +202,6 @@ SETTINGS index_granularity = 8192;
 
 CREATE TABLE IF NOT EXISTS otel_metrics_sum
 (
-    `TenantId`                    LowCardinality(String) CODEC(ZSTD(1)),
     `ResourceAttributes`          Map(LowCardinality(String), String) CODEC(ZSTD(1)),
     `ResourceSchemaUrl`           String                 CODEC(ZSTD(1)),
     `ScopeName`                   String                 CODEC(ZSTD(1)),
@@ -242,7 +235,7 @@ CREATE TABLE IF NOT EXISTS otel_metrics_sum
 )
 ENGINE = MergeTree
 PARTITION BY toDate(TimeUnix)
-ORDER BY (TenantId, ServiceName, MetricName, Attributes, toUnixTimestamp64Nano(TimeUnix))
+ORDER BY (ServiceName, MetricName, Attributes, toUnixTimestamp64Nano(TimeUnix))
 SETTINGS index_granularity = 8192;
 
 -- ============================================================================
@@ -251,7 +244,6 @@ SETTINGS index_granularity = 8192;
 
 CREATE TABLE IF NOT EXISTS otel_metrics_histogram
 (
-    `TenantId`                    LowCardinality(String) CODEC(ZSTD(1)),
     `ResourceAttributes`          Map(LowCardinality(String), String) CODEC(ZSTD(1)),
     `ResourceSchemaUrl`           String                 CODEC(ZSTD(1)),
     `ScopeName`                   String                 CODEC(ZSTD(1)),
@@ -289,7 +281,7 @@ CREATE TABLE IF NOT EXISTS otel_metrics_histogram
 )
 ENGINE = MergeTree
 PARTITION BY toDate(TimeUnix)
-ORDER BY (TenantId, ServiceName, MetricName, Attributes, toUnixTimestamp64Nano(TimeUnix))
+ORDER BY (ServiceName, MetricName, Attributes, toUnixTimestamp64Nano(TimeUnix))
 SETTINGS index_granularity = 8192;
 
 -- ============================================================================
@@ -298,7 +290,6 @@ SETTINGS index_granularity = 8192;
 
 CREATE TABLE IF NOT EXISTS otel_metrics_exponential_histogram
 (
-    `TenantId`                    LowCardinality(String) CODEC(ZSTD(1)),
     `ResourceAttributes`          Map(LowCardinality(String), String) CODEC(ZSTD(1)),
     `ResourceSchemaUrl`           String                 CODEC(ZSTD(1)),
     `ScopeName`                   String                 CODEC(ZSTD(1)),
@@ -340,5 +331,5 @@ CREATE TABLE IF NOT EXISTS otel_metrics_exponential_histogram
 )
 ENGINE = MergeTree
 PARTITION BY toDate(TimeUnix)
-ORDER BY (TenantId, ServiceName, MetricName, Attributes, toUnixTimestamp64Nano(TimeUnix))
+ORDER BY (ServiceName, MetricName, Attributes, toUnixTimestamp64Nano(TimeUnix))
 SETTINGS index_granularity = 8192;

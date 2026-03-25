@@ -3,7 +3,7 @@
   "version": "0.0.1",
   "type": "module",
   "private": true,
-  "description": "OTLP-to-Tinybird proxy on Cloudflare Workers. Receives OpenTelemetry traces, logs, and metrics via OTLP HTTP/JSON and forwards them to Tinybird Events API as NDJSON.",
+  "description": "OTel collector on Cloudflare Workers. Receives OTLP HTTP/JSON traces, logs, and metrics and forwards to Tinybird or ClickHouse as NDJSON.",
   "main": "src/index.ts",
   "scripts": {
     "dev": "wrangler dev",

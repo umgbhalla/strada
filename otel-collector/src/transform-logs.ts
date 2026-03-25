@@ -1,8 +1,8 @@
-// Transform OTLP logs to Tinybird NDJSON.
+// Transform OTLP logs to NDJSON rows matching the OTel ClickHouse schema.
 // Matches the logic in the Go exporter's internal/logs.go:32-81.
 
 import type { ExportLogsServiceRequest } from './otlp-types.ts'
-import type { TinybirdLog } from './tinybird-types.ts'
+import type { OtelLogRow } from './otel-row-types.ts'
 import {
   convertAttributes,
   getServiceName,
@@ -28,7 +28,7 @@ export function transformLogs(body: ExportLogsServiceRequest, tenantId: string):
             ? log.timeUnixNano
             : (log.observedTimeUnixNano ?? '0')
 
-        const row: TinybirdLog = {
+        const row: OtelLogRow = {
           tenant_id: tenantId,
           resource_schema_url: rl.schemaUrl ?? '',
           resource_attributes: resourceAttrs,

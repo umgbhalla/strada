@@ -16,7 +16,7 @@ import type {
   ExportTraceServiceRequest,
   KeyValue,
 } from './otlp-types.ts'
-import type { TinybirdError } from './tinybird-types.ts'
+import type { OtelErrorRow } from './otel-row-types.ts'
 import {
   convertAttributes,
   getServiceName,
@@ -271,7 +271,7 @@ interface BuildErrorRowParams {
   severityText?: string
 }
 
-function buildErrorRow(params: BuildErrorRowParams): TinybirdError {
+function buildErrorRow(params: BuildErrorRowParams): OtelErrorRow {
   const {
     tenantId,
     timestamp,
