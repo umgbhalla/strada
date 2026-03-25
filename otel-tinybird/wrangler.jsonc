@@ -3,18 +3,23 @@
   "main": "src/index.ts",
   "compatibility_date": "2025-01-01",
   "compatibility_flags": ["nodejs_compat"],
+  // Route pattern: each tenant gets {tenant}-ingest.stradametrics.com
+  // The worker extracts tenant_id from the hostname and injects it into every row.
+  "routes": [
+    { "pattern": "*-ingest.stradametrics.com/*", "zone_name": "stradametrics.com" }
+  ],
   "vars": {
     "TINYBIRD_ENDPOINT": "https://api.us-east.aws.tinybird.co",
     "ALLOWED_ORIGINS": "*",
-    "TRACES_DATASOURCE": "traces",
-    "LOGS_DATASOURCE": "logs",
-    "GAUGE_DATASOURCE": "gauge",
-    "SUM_DATASOURCE": "sum",
-    "HISTOGRAM_DATASOURCE": "histogram",
-    "EXPONENTIAL_HISTOGRAM_DATASOURCE": "exponential_histogram"
+    "TRACES_DATASOURCE": "otel_traces",
+    "LOGS_DATASOURCE": "otel_logs",
+    "GAUGE_DATASOURCE": "otel_metrics_gauge",
+    "SUM_DATASOURCE": "otel_metrics_sum",
+    "HISTOGRAM_DATASOURCE": "otel_metrics_histogram",
+    "EXPONENTIAL_HISTOGRAM_DATASOURCE": "otel_metrics_exponential_histogram"
   }
   // Secrets (set via `wrangler secret put`):
-  //   TINYBIRD_TOKEN     — Tinybird API token
+  //   TINYBIRD_TOKEN     — Tinybird API token with APPEND on all datasources
   //   SERVER_API_KEY     — sk_live_... for server-side SDKs
   //   BROWSER_API_KEY    — pk_live_... for browser SDKs
 }
