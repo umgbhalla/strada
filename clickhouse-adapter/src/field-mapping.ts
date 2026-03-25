@@ -59,6 +59,7 @@ export const LOGS_MAPPING: Record<string, string> = {
   scope_version: 'ScopeVersion',
   scope_attributes: 'ScopeAttributes',
   log_attributes: 'LogAttributes',
+  event_name: 'EventName',
 }
 
 export const ERRORS_MAPPING: Record<string, string> = {
@@ -95,6 +96,7 @@ const BASE_METRICS_MAPPING: Record<string, string> = {
   scope_name: 'ScopeName',
   scope_version: 'ScopeVersion',
   scope_attributes: 'ScopeAttributes',
+  scope_dropped_attr_count: 'ScopeDroppedAttrCount',
   scope_schema_url: 'ScopeSchemaUrl',
   service_name: 'ServiceName',
   metric_name: 'MetricName',

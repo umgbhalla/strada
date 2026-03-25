@@ -14,13 +14,14 @@ SCHEMA >
     `SeverityNumber` UInt8 `json:$.severity_number` CODEC(ZSTD(1)),
     `ServiceName` LowCardinality(String) `json:$.service_name` CODEC(ZSTD(1)),
     `Body` String `json:$.body` CODEC(ZSTD(1)),
-    `ResourceSchemaUrl` String `json:$.resource_schema_url` CODEC(ZSTD(1)),
+    `ResourceSchemaUrl` LowCardinality(String) `json:$.resource_schema_url` CODEC(ZSTD(1)),
     `ResourceAttributes` Map(LowCardinality(String), String) `json:$.resource_attributes` CODEC(ZSTD(1)),
-    `ScopeSchemaUrl` String `json:$.scope_schema_url` CODEC(ZSTD(1)),
+    `ScopeSchemaUrl` LowCardinality(String) `json:$.scope_schema_url` CODEC(ZSTD(1)),
     `ScopeName` String `json:$.scope_name` CODEC(ZSTD(1)),
-    `ScopeVersion` String `json:$.scope_version` CODEC(ZSTD(1)),
+    `ScopeVersion` LowCardinality(String) `json:$.scope_version` CODEC(ZSTD(1)),
     `ScopeAttributes` Map(LowCardinality(String), String) `json:$.scope_attributes` CODEC(ZSTD(1)),
-    `LogAttributes` Map(LowCardinality(String), String) `json:$.log_attributes` CODEC(ZSTD(1))
+    `LogAttributes` Map(LowCardinality(String), String) `json:$.log_attributes` CODEC(ZSTD(1)),
+    `EventName` String `json:$.event_name` CODEC(ZSTD(1))
 
 ENGINE "MergeTree"
 ENGINE_PARTITION_KEY "toDate(TimestampTime)"

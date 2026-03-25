@@ -51,6 +51,7 @@ export interface TinybirdLog {
   severity_number: number
   log_attributes: Record<string, string>
   body: string
+  event_name: string
 }
 
 // Denormalized error row extracted from logs (exception.* attributes) or
@@ -96,6 +97,7 @@ interface TinybirdBaseMetric {
   scope_version: string
   scope_schema_url: string
   scope_attributes: Record<string, string>
+  scope_dropped_attr_count: number
   exemplars_filtered_attributes: Record<string, string>[]
   exemplars_timestamp: string[]
   exemplars_value: number[]

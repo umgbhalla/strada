@@ -30,6 +30,7 @@ export interface InstrumentationScope {
   name?: string
   version?: string
   attributes?: KeyValue[]
+  droppedAttributesCount?: number
 }
 
 // ─── Traces ───
@@ -119,6 +120,7 @@ export interface LogRecord {
   traceId?: string
   spanId?: string
   flags?: number
+  eventName?: string
 }
 
 // ─── Metrics ───

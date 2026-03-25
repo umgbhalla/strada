@@ -45,6 +45,7 @@ export function transformLogs(body: ExportLogsServiceRequest, tenantId: string):
           severity_number: log.severityNumber ?? 0,
           log_attributes: convertAttributes(log.attributes),
           body: anyValueToString(log.body),
+          event_name: log.eventName ?? '',
         }
         rows.push(JSON.stringify(row))
       }

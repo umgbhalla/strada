@@ -58,6 +58,7 @@ describe('transformLogs', () => {
     expect(row).toMatchInlineSnapshot(`
       {
         "body": "User logged in",
+        "event_name": "",
         "flags": 1,
         "log_attributes": {
           "user.id": "12345",

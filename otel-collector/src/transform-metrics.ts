@@ -61,6 +61,7 @@ export function transformMetrics(
           scope_version: scopeVersion,
           scope_schema_url: scopeSchemaUrl,
           scope_attributes: scopeAttrs,
+          scope_dropped_attr_count: sm.scope?.droppedAttributesCount ?? 0,
         }
 
         if (metric.gauge) {
