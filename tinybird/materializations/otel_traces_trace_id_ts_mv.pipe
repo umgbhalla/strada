@@ -1,0 +1,16 @@
+DESCRIPTION >
+    Materialized view that aggregates trace start and end times by TraceId.
+    Fires at ingest time on every write to otel_traces.
+
+NODE otel_traces_trace_id_ts_mv_node
+SQL >
+    SELECT
+        TraceId,
+        min(Timestamp) AS Start,
+        max(Timestamp) AS End
+    FROM otel_traces
+    WHERE TraceId != ''
+    GROUP BY TraceId
+
+TYPE MATERIALIZED
+DATASOURCE otel_traces_trace_id_ts
