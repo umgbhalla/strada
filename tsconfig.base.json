@@ -1,29 +1,53 @@
 {
-    "compilerOptions": {
-        "target": "ES2022",
-        "module": "commonjs",
-        "allowJs": false,
-        "composite": true,
-        "outDir": "${configDir}/dist",
-        "rootDir": "${configDir}/src",
-        "moduleResolution": "Bundler",
-        "lib": [
-            "es2022",
-            "es2017",
-            "es7",
-            "es6"
-            // "dom"
-        ],
-        "declaration": true,
-        "declarationMap": true,
-        "strict": true,
-        "downlevelIteration": true,
-        "esModuleInterop": true,
-        "noImplicitAny": false,
-        "useUnknownInCatchVariables": false,
-        "sourceMap": true,
-        "jsx": "react-jsx",
-        "skipLibCheck": true
-    },
-    "exclude": ["**/node_modules", "**/.*/"]
+  "compilerOptions": {
+    // Environment setup & latest features
+    "lib": ["ESNext"],
+    "target": "ESNext",
+    "module": "Preserve",
+    "allowJs": false,
+
+    // Set rootDir to the package root
+    // Use import maps for `src/` and such.
+    "rootDir": "${configDir}/",
+
+    // Bundler mode
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true,
+
+    // Outputs - cacheability
+    // (Everything uses a bundler, but emitting is still useful for `tsc -b` cache!)
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "outDir": "${configDir}/.cache/types",
+    "tsBuildInfoFile": "${configDir}/.cache/.tsbuildinfo",
+
+    // Some stricter flags (disabled by default)
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "noPropertyAccessFromIndexSignature": false,
+
+    // Stricter Typechecking Options
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+
+    // Style Options
+    // "noImplicitReturns": true,
+    "noImplicitOverride": true,
+    "noImplicitAny": true,
+    // "noUnusedLocals": true,
+    // "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    // "noPropertyAccessFromIndexSignature": true,
+
+    // Recommended Options
+    "strict": true,
+    "jsx": "react-jsx",
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "noUncheckedSideEffectImports": true,
+    "moduleDetection": "force",
+    "skipLibCheck": true
+  },
+  "exclude": ["**/node_modules", "**/.*/"]
 }

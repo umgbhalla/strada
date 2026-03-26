@@ -1,21 +1,29 @@
 {
-    "name": "root",
-    "private": true,
-    "scripts": {
-        "test": "NODE_ENV=test vitest",
-        "watch": "pnpm -r watch",
-        "build": "pnpm -r build",
-        "release": "pnpm build && changeset"
-    },
-    "devDependencies": {
-        "@changesets/cli": "^2.30.0",
-        "prettier": "^3.8.1",
-        "tsx": "^4.21.0",
-        "typescript": "^6.0.2",
-        "vite": "^8.0.2",
-        "vitest": "^4.1.1"
-    },
-    "repository": "https://github.com/remorses/",
-    "author": "remorses <beats.by.morse@gmail.com>",
-    "license": ""
+  "name": "root",
+  "private": true,
+  "license": "MIT",
+  "author": "remorses <beats.by.morse@gmail.com>",
+  "contributors": [
+    "johnpyp <johnpyp.dev@gmail.com>"
+  ],
+  "repository": "https://github.com/remorses/",
+  "scripts": {
+    "test": "NODE_ENV=test vitest",
+    "watch": "pnpm -r watch",
+    "build": "pnpm -r build",
+    "release": "pnpm build && changeset",
+    "fix": "oxfmt --write && oxlint --fix && tsc -b"
+  },
+  "dependencies": {
+    "oxlint-tsgolint": "^0.17.4"
+  },
+  "devDependencies": {
+    "@changesets/cli": "^2.30.0",
+    "oxfmt": "^0.42.0",
+    "oxlint": "^1.57.0",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.2",
+    "vite": "^8.0.2",
+    "vitest": "^4.1.1"
+  }
 }

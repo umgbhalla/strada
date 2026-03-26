@@ -36,6 +36,7 @@ No auth on writes. The hostname IS the tenant identity (like Sentry's DSN). Secu
 ## Transform pipeline
 
 Each signal has a transform module that converts OTLP JSON into NDJSON:
+
 - `transform-traces.ts` — flattens `resourceSpans[].scopeSpans[].spans[]` into rows
 - `transform-logs.ts` — flattens `resourceLogs[].scopeLogs[].logRecords[]` into rows
 - `transform-metrics.ts` — flattens `resourceMetrics[].scopeMetrics[].metrics[]` into rows, splitting by metric type (gauge/sum/histogram/exponential histogram)
@@ -47,20 +48,21 @@ All transforms inject `tenant_id` into every row and output snake_case JSON keys
 
 When using the ClickHouse backend, `field-mapping.ts` remaps snake_case JSON keys to PascalCase ClickHouse column names before INSERT. Most mappings are simple snake→Pascal, but some are non-trivial:
 
-| JSON key | ClickHouse column | Table(s) |
-|----------|-------------------|----------|
-| `start_time` | `Timestamp` | traces |
-| `flags` | `TraceFlags` | logs |
-| `flags` | `Flags` | metrics |
-| `metric_attributes` | `Attributes` | all metrics |
-| `start_timestamp` | `StartTimeUnix` | all metrics |
-| `timestamp` | `TimeUnix` | all metrics |
+| JSON key            | ClickHouse column | Table(s)    |
+| ------------------- | ----------------- | ----------- |
+| `start_time`        | `Timestamp`       | traces      |
+| `flags`             | `TraceFlags`      | logs        |
+| `flags`             | `Flags`           | metrics     |
+| `metric_attributes` | `Attributes`      | all metrics |
+| `start_timestamp`   | `StartTimeUnix`   | all metrics |
+| `timestamp`         | `TimeUnix`        | all metrics |
 
 When the schema changes, update both the Tinybird `.datasource` files AND `field-mapping.ts`.
 
 ## Error extraction
 
 `extract-errors.ts` scans incoming logs and traces for exceptions:
+
 - From logs: log records with `exception.type` or `exception.message` in `LogAttributes`
 - From traces: span events named `exception`
 

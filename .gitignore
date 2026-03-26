@@ -6,4 +6,6 @@ esm
 .ultra.cache.json
 coverage
 opensrc
+.cache
+*.local.*
 .env

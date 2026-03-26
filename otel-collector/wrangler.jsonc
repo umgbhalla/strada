@@ -2,16 +2,14 @@
   "name": "strada-otel-ingester",
   "main": "src/index.ts",
   "compatibility_date": "2026-03-25",
-  "compatibility_flags": [
-    "nodejs_compat_v2"
-  ],
+  "compatibility_flags": ["nodejs_compat"],
   // Route pattern: each tenant gets {tenant}-ingest.stradametrics.com
   // The worker extracts tenant_id from the hostname and injects it into every row.
   "routes": [
     {
       "pattern": "*-ingest.stradametrics.com/*",
-      "zone_name": "stradametrics.com"
-    }
+      "zone_name": "stradametrics.com",
+    },
   ],
   // Backend selection: set TINYBIRD_* vars for Tinybird, or CLICKHOUSE_* for ClickHouse.
   // Only one backend should be configured per deployment.
@@ -24,5 +22,5 @@
     // "CLICKHOUSE_DATABASE": "default",
     // "CLICKHOUSE_USER": "default",
     // CLICKHOUSE_PASSWORD — set via `wrangler secret put CLICKHOUSE_PASSWORD`
-  }
+  },
 }

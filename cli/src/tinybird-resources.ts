@@ -9,49 +9,48 @@
 // When published to npm, the tinybird/ folder won't exist — this module
 // is only usable from a repo checkout (which is the expected selfhost flow).
 
-import fs from 'node:fs'
-import path from 'node:path'
-import url from 'node:url'
+import fs from "node:fs";
+import path from "node:path";
+import url from "node:url";
 
-const __dirname = path.dirname(url.fileURLToPath(import.meta.url))
+const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
 
 interface ResourceFile {
-  name: string
-  content: string
+  name: string;
+  content: string;
 }
 
 export interface TinybirdResources {
-  datasources: ResourceFile[]
-  pipes: ResourceFile[]
+  datasources: ResourceFile[];
+  pipes: ResourceFile[];
 }
 
 function findTinybirdDir(): string {
   // Walk up from current file to find the tinybird/ directory.
   // Handles both src/ (dev) and dist/ (built) locations.
-  let dir = __dirname
+  let dir = __dirname;
   for (let i = 0; i < 5; i++) {
-    const candidate = path.join(dir, 'tinybird')
+    const candidate = path.join(dir, "tinybird");
     if (fs.existsSync(candidate) && fs.statSync(candidate).isDirectory()) {
-      return candidate
+      return candidate;
     }
-    dir = path.dirname(dir)
+    dir = path.dirname(dir);
   }
   throw new Error(
-    'Could not find tinybird/ directory. ' +
-      'Make sure you are running from the strada repository checkout.',
-  )
+    "Could not find tinybird/ directory. " + "Make sure you are running from the strada repository checkout.",
+  );
 }
 
 function readDirFiles(dirPath: string, ext: string): ResourceFile[] {
-  if (!fs.existsSync(dirPath)) return []
+  if (!fs.existsSync(dirPath)) return [];
 
   return fs
     .readdirSync(dirPath)
     .filter((f) => f.endsWith(ext))
     .map((f) => ({
-      name: f.replace(ext, ''),
-      content: fs.readFileSync(path.join(dirPath, f), 'utf-8'),
-    }))
+      name: f.replace(ext, ""),
+      content: fs.readFileSync(path.join(dirPath, f), "utf-8"),
+    }));
 }
 
 /**
@@ -59,22 +58,14 @@ function readDirFiles(dirPath: string, ext: string): ResourceFile[] {
  * Returns datasource and pipe file contents ready for deployToMain().
  */
 export function loadTinybirdResources(): TinybirdResources {
-  const tinybirdDir = findTinybirdDir()
+  const tinybirdDir = findTinybirdDir();
 
-  const datasources = readDirFiles(
-    path.join(tinybirdDir, 'datasources'),
-    '.datasource',
-  )
-  const pipes = readDirFiles(
-    path.join(tinybirdDir, 'materializations'),
-    '.pipe',
-  )
+  const datasources = readDirFiles(path.join(tinybirdDir, "datasources"), ".datasource");
+  const pipes = readDirFiles(path.join(tinybirdDir, "materializations"), ".pipe");
 
   if (datasources.length === 0) {
-    throw new Error(
-      `No .datasource files found in ${path.join(tinybirdDir, 'datasources')}`,
-    )
+    throw new Error(`No .datasource files found in ${path.join(tinybirdDir, "datasources")}`);
   }
 
-  return { datasources, pipes }
+  return { datasources, pipes };
 }

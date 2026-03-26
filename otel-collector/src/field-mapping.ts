@@ -12,22 +12,22 @@
 // ─── Signal types ───
 
 export type SignalKind =
-  | 'traces'
-  | 'logs'
-  | 'errors'
-  | 'metrics_gauge'
-  | 'metrics_sum'
-  | 'metrics_histogram'
-  | 'metrics_exponential_histogram'
+  | "traces"
+  | "logs"
+  | "errors"
+  | "metrics_gauge"
+  | "metrics_sum"
+  | "metrics_histogram"
+  | "metrics_exponential_histogram";
 
 // ─── Case conversion ───
 
 /** Convert snake_case to PascalCase: "trace_id" → "TraceId", "body" → "Body" */
 export function snakeToPascal(s: string): string {
   return s
-    .split('_')
+    .split("_")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join('')
+    .join("");
 }
 
 // ─── Exceptions per signal ───
@@ -36,48 +36,48 @@ export function snakeToPascal(s: string): string {
 // Use `null` to drop a field (not in the target schema).
 
 const TRACES_EXCEPTIONS: Record<string, string | null> = {
-  start_time: 'Timestamp', // OTel stores span start as Timestamp, not StartTime
+  start_time: "Timestamp", // OTel stores span start as Timestamp, not StartTime
   end_time: null, // Not in OTel ClickHouse schema (derivable from Timestamp + Duration)
-}
+};
 
 const LOGS_EXCEPTIONS: Record<string, string | null> = {
-  flags: 'TraceFlags', // OTel logs call it TraceFlags, not Flags
-}
+  flags: "TraceFlags", // OTel logs call it TraceFlags, not Flags
+};
 
 const ERRORS_EXCEPTIONS: Record<string, string | null> = {
   // No exceptions beyond the shared ones
-}
+};
 
 const METRICS_EXCEPTIONS: Record<string, string | null> = {
-  metric_attributes: 'Attributes', // OTel metrics use Attributes, not MetricAttributes
-  start_timestamp: 'StartTimeUnix', // OTel metrics use StartTimeUnix, not StartTimestamp
-  timestamp: 'TimeUnix', // OTel metrics use TimeUnix, not Timestamp
-}
+  metric_attributes: "Attributes", // OTel metrics use Attributes, not MetricAttributes
+  start_timestamp: "StartTimeUnix", // OTel metrics use StartTimeUnix, not StartTimestamp
+  timestamp: "TimeUnix", // OTel metrics use TimeUnix, not Timestamp
+};
 
 // ─── Shared drops ───
 // Fields stripped from all signals before INSERT.
-const ALWAYS_DROP = new Set(['tenant_id'])
+const ALWAYS_DROP = new Set(["tenant_id"]);
 
 // ─── Signal → exceptions lookup ───
 
 function getExceptions(signal: SignalKind): Record<string, string | null> {
   switch (signal) {
-    case 'traces':
-      return TRACES_EXCEPTIONS
-    case 'logs':
-      return LOGS_EXCEPTIONS
-    case 'errors':
-      return ERRORS_EXCEPTIONS
+    case "traces":
+      return TRACES_EXCEPTIONS;
+    case "logs":
+      return LOGS_EXCEPTIONS;
+    case "errors":
+      return ERRORS_EXCEPTIONS;
     default:
       // All metric types share the same exceptions
-      return METRICS_EXCEPTIONS
+      return METRICS_EXCEPTIONS;
   }
 }
 
 // ─── Public API ───
 
 export function getMappingForSignal(signal: SignalKind) {
-  return getExceptions(signal)
+  return getExceptions(signal);
 }
 
 /**
@@ -85,49 +85,46 @@ export function getMappingForSignal(signal: SignalKind) {
  * Uses automatic case conversion with per-signal exceptions.
  * Drops tenant_id and any field mapped to null.
  */
-export function remapRow(
-  row: Record<string, unknown>,
-  signal: SignalKind,
-): Record<string, unknown> {
-  const exceptions = getExceptions(signal)
-  const result: Record<string, unknown> = {}
+export function remapRow(row: Record<string, unknown>, signal: SignalKind): Record<string, unknown> {
+  const exceptions = getExceptions(signal);
+  const result: Record<string, unknown> = {};
 
   for (const [key, value] of Object.entries(row)) {
-    if (ALWAYS_DROP.has(key)) continue
+    if (ALWAYS_DROP.has(key)) continue;
 
     if (key in exceptions) {
-      const mapped = exceptions[key]
+      const mapped = exceptions[key];
       if (mapped !== null) {
-        result[mapped] = value
+        result[mapped] = value;
       }
       // null means drop
-      continue
+      continue;
     }
 
-    result[snakeToPascal(key)] = value
+    result[snakeToPascal(key)] = value;
   }
 
-  return result
+  return result;
 }
 
 /**
  * Remap an entire NDJSON string (one JSON object per line) for a given signal.
  */
 export function remapNdjson(ndjson: string, signal: SignalKind): string {
-  const lines = ndjson.split('\n')
-  const result: string[] = []
+  const lines = ndjson.split("\n");
+  const result: string[] = [];
 
   for (const line of lines) {
-    const trimmed = line.trim()
-    if (!trimmed) continue
+    const trimmed = line.trim();
+    if (!trimmed) continue;
 
     try {
-      const row = JSON.parse(trimmed) as Record<string, unknown>
-      result.push(JSON.stringify(remapRow(row, signal)))
+      const row = JSON.parse(trimmed) as Record<string, unknown>;
+      result.push(JSON.stringify(remapRow(row, signal)));
     } catch {
-      result.push(trimmed)
+      result.push(trimmed);
     }
   }
 
-  return result.join('\n') + '\n'
+  return result.join("\n") + "\n";
 }

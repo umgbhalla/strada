@@ -11,58 +11,41 @@
 // When no custom fingerprint is provided, the worker computes a default from
 // exception type + top in-app frame function + stripped message pattern.
 
-import type {
-  ExportLogsServiceRequest,
-  ExportTraceServiceRequest,
-  KeyValue,
-} from './otlp-types.ts'
-import type { OtelErrorRow } from './otel-row-types.ts'
-import {
-  convertAttributes,
-  getServiceName,
-  nanosToRFC3339,
-  anyValueToString,
-} from './transform-attributes.ts'
+import type { ExportLogsServiceRequest, ExportTraceServiceRequest, KeyValue } from "./otlp-types.ts";
+import type { OtelErrorRow } from "./otel-row-types.ts";
+import { convertAttributes, getServiceName, nanosToRFC3339, anyValueToString } from "./transform-attributes.ts";
 
 // ─── Public API ───
 
-export function extractErrorsFromLogs(
-  body: ExportLogsServiceRequest,
-  tenantId: string,
-): string {
-  const rows: string[] = []
+export function extractErrorsFromLogs(body: ExportLogsServiceRequest, tenantId: string): string {
+  const rows: string[] = [];
 
   for (const rl of body.resourceLogs ?? []) {
-    const resourceAttrs = convertAttributes(rl.resource?.attributes)
-    const serviceName = getServiceName(rl.resource?.attributes)
-    const release = getResourceAttr(rl.resource?.attributes, 'service.version')
-    const environment = getResourceAttr(
-      rl.resource?.attributes,
-      'deployment.environment.name',
-    )
+    const resourceAttrs = convertAttributes(rl.resource?.attributes);
+    const serviceName = getServiceName(rl.resource?.attributes);
+    const release = getResourceAttr(rl.resource?.attributes, "service.version");
+    const environment = getResourceAttr(rl.resource?.attributes, "deployment.environment.name");
 
     for (const sl of rl.scopeLogs ?? []) {
-      const scopeAttrs = convertAttributes(sl.scope?.attributes)
+      const scopeAttrs = convertAttributes(sl.scope?.attributes);
 
       for (const log of sl.logRecords ?? []) {
-        const attrs = convertAttributes(log.attributes)
+        const attrs = convertAttributes(log.attributes);
 
-        const exceptionType = attrs['exception.type'] ?? ''
-        const exceptionMessage = attrs['exception.message'] ?? ''
+        const exceptionType = attrs["exception.type"] ?? "";
+        const exceptionMessage = attrs["exception.message"] ?? "";
 
         // Skip if no exception data
-        if (!exceptionType && !exceptionMessage) continue
+        if (!exceptionType && !exceptionMessage) continue;
 
         const timestamp =
-          log.timeUnixNano && log.timeUnixNano !== '0'
-            ? log.timeUnixNano
-            : (log.observedTimeUnixNano ?? '0')
+          log.timeUnixNano && log.timeUnixNano !== "0" ? log.timeUnixNano : (log.observedTimeUnixNano ?? "0");
 
         const row = buildErrorRow({
           tenantId,
           timestamp: nanosToRFC3339(timestamp),
-          traceId: log.traceId ?? '',
-          spanId: log.spanId ?? '',
+          traceId: log.traceId ?? "",
+          spanId: log.spanId ?? "",
           serviceName,
           exceptionType,
           exceptionMessage,
@@ -71,46 +54,40 @@ export function extractErrorsFromLogs(
           scopeAttrs,
           release,
           environment,
-          sourceSignal: 'log',
+          sourceSignal: "log",
           severityText: log.severityText,
-        })
+        });
 
-        rows.push(JSON.stringify(row))
+        rows.push(JSON.stringify(row));
       }
     }
   }
 
-  return rows.length > 0 ? rows.join('\n') + '\n' : ''
+  return rows.length > 0 ? rows.join("\n") + "\n" : "";
 }
 
-export function extractErrorsFromTraces(
-  body: ExportTraceServiceRequest,
-  tenantId: string,
-): string {
-  const rows: string[] = []
+export function extractErrorsFromTraces(body: ExportTraceServiceRequest, tenantId: string): string {
+  const rows: string[] = [];
 
   for (const rs of body.resourceSpans ?? []) {
-    const resourceAttrs = convertAttributes(rs.resource?.attributes)
-    const serviceName = getServiceName(rs.resource?.attributes)
-    const release = getResourceAttr(rs.resource?.attributes, 'service.version')
-    const environment = getResourceAttr(
-      rs.resource?.attributes,
-      'deployment.environment.name',
-    )
+    const resourceAttrs = convertAttributes(rs.resource?.attributes);
+    const serviceName = getServiceName(rs.resource?.attributes);
+    const release = getResourceAttr(rs.resource?.attributes, "service.version");
+    const environment = getResourceAttr(rs.resource?.attributes, "deployment.environment.name");
 
     for (const ss of rs.scopeSpans ?? []) {
-      const scopeAttrs = convertAttributes(ss.scope?.attributes)
+      const scopeAttrs = convertAttributes(ss.scope?.attributes);
 
       for (const span of ss.spans ?? []) {
         for (const event of span.events ?? []) {
           // OTel convention: exception events have name "exception"
-          if (event.name !== 'exception') continue
+          if (event.name !== "exception") continue;
 
-          const attrs = convertAttributes(event.attributes)
-          const exceptionType = attrs['exception.type'] ?? ''
-          const exceptionMessage = attrs['exception.message'] ?? ''
+          const attrs = convertAttributes(event.attributes);
+          const exceptionType = attrs["exception.type"] ?? "";
+          const exceptionMessage = attrs["exception.message"] ?? "";
 
-          if (!exceptionType && !exceptionMessage) continue
+          if (!exceptionType && !exceptionMessage) continue;
 
           const row = buildErrorRow({
             tenantId,
@@ -125,16 +102,16 @@ export function extractErrorsFromTraces(
             scopeAttrs,
             release,
             environment,
-            sourceSignal: 'trace',
-          })
+            sourceSignal: "trace",
+          });
 
-          rows.push(JSON.stringify(row))
+          rows.push(JSON.stringify(row));
         }
       }
     }
   }
 
-  return rows.length > 0 ? rows.join('\n') + '\n' : ''
+  return rows.length > 0 ? rows.join("\n") + "\n" : "";
 }
 
 // ─── Fingerprint computation ───
@@ -151,27 +128,24 @@ export function stripDynamicValues(message: string): string {
   return (
     message
       // UUIDs first (before hex, since UUIDs contain hex)
-      .replace(
-        /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi,
-        '<uuid>',
-      )
+      .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, "<uuid>")
       // Hex prefixed strings (0x...)
-      .replace(/\b0x[0-9a-f]+\b/gi, '<hex>')
+      .replace(/\b0x[0-9a-f]+\b/gi, "<hex>")
       // Numbers — before bare hex so "192.168.1.42" becomes "<N>.<N>.<N>.<N>"
-      .replace(/\b\d+\b/g, '<N>')
+      .replace(/\b\d+\b/g, "<N>")
       // Remaining bare hex strings (8+ chars, only after numbers are replaced)
-      .replace(/\b[0-9a-f]{8,}\b/gi, '<hex>')
-  )
+      .replace(/\b[0-9a-f]{8,}\b/gi, "<hex>")
+  );
 }
 
 interface StructuredFrame {
-  filename?: string
-  function?: string
-  lineno?: number
-  colno?: number
-  abs_path?: string
-  in_app?: boolean
-  debug_id?: string
+  filename?: string;
+  function?: string;
+  lineno?: number;
+  colno?: number;
+  abs_path?: string;
+  in_app?: boolean;
+  debug_id?: string;
 }
 
 /**
@@ -190,12 +164,12 @@ export function computeDefaultFingerprint(
   // Try structured frames first
   if (structuredFramesJson) {
     try {
-      const frames: StructuredFrame[] = JSON.parse(structuredFramesJson)
-      const inAppFrames = frames.filter((f) => f.in_app === true)
+      const frames: StructuredFrame[] = JSON.parse(structuredFramesJson);
+      const inAppFrames = frames.filter((f) => f.in_app === true);
       if (inAppFrames.length > 0) {
-        const topFrame = inAppFrames[inAppFrames.length - 1]!
-        const fn = topFrame.function || topFrame.filename || '<anonymous>'
-        return exceptionType ? [exceptionType, fn] : [fn]
+        const topFrame = inAppFrames[inAppFrames.length - 1]!;
+        const fn = topFrame.function || topFrame.filename || "<anonymous>";
+        return exceptionType ? [exceptionType, fn] : [fn];
       }
     } catch {
       // Invalid JSON, fall through
@@ -204,16 +178,16 @@ export function computeDefaultFingerprint(
 
   // Fall back to type + stripped message
   if (exceptionType && exceptionMessage) {
-    return [exceptionType, stripDynamicValues(exceptionMessage)]
+    return [exceptionType, stripDynamicValues(exceptionMessage)];
   }
   if (exceptionType) {
-    return [exceptionType]
+    return [exceptionType];
   }
   if (exceptionMessage) {
-    return [stripDynamicValues(exceptionMessage)]
+    return [stripDynamicValues(exceptionMessage)];
   }
 
-  return ['unknown']
+  return ["unknown"];
 }
 
 /**
@@ -222,53 +196,50 @@ export function computeDefaultFingerprint(
  * and we want this to be synchronous and fast.
  */
 export function hashFingerprint(fingerprint: string[]): string {
-  const input = fingerprint.join('\x00')
+  const input = fingerprint.join("\x00");
   // FNV-1a 128-bit (two 64-bit halves using regular numbers for speed)
-  let h1 = 0x811c9dc5
-  let h2 = 0x811c9dc5
-  let h3 = 0x811c9dc5
-  let h4 = 0x811c9dc5
+  let h1 = 0x811c9dc5;
+  let h2 = 0x811c9dc5;
+  let h3 = 0x811c9dc5;
+  let h4 = 0x811c9dc5;
   for (let i = 0; i < input.length; i++) {
-    const c = input.charCodeAt(i)
-    h1 = Math.imul(h1 ^ c, 0x01000193)
-    h2 = Math.imul(h2 ^ (c + 1), 0x01000193)
-    h3 = Math.imul(h3 ^ (c + 2), 0x01000193)
-    h4 = Math.imul(h4 ^ (c + 3), 0x01000193)
+    const c = input.charCodeAt(i);
+    h1 = Math.imul(h1 ^ c, 0x01000193);
+    h2 = Math.imul(h2 ^ (c + 1), 0x01000193);
+    h3 = Math.imul(h3 ^ (c + 2), 0x01000193);
+    h4 = Math.imul(h4 ^ (c + 3), 0x01000193);
   }
   return (
-    (h1 >>> 0).toString(16).padStart(8, '0') +
-    (h2 >>> 0).toString(16).padStart(8, '0') +
-    (h3 >>> 0).toString(16).padStart(8, '0') +
-    (h4 >>> 0).toString(16).padStart(8, '0')
-  )
+    (h1 >>> 0).toString(16).padStart(8, "0") +
+    (h2 >>> 0).toString(16).padStart(8, "0") +
+    (h3 >>> 0).toString(16).padStart(8, "0") +
+    (h4 >>> 0).toString(16).padStart(8, "0")
+  );
 }
 
 // ─── Internal helpers ───
 
-function getResourceAttr(
-  kvs: KeyValue[] | undefined,
-  key: string,
-): string {
-  if (!kvs) return ''
-  const attr = kvs.find((kv) => kv.key === key)
-  return attr ? anyValueToString(attr.value) : ''
+function getResourceAttr(kvs: KeyValue[] | undefined, key: string): string {
+  if (!kvs) return "";
+  const attr = kvs.find((kv) => kv.key === key);
+  return attr ? anyValueToString(attr.value) : "";
 }
 
 interface BuildErrorRowParams {
-  tenantId: string
-  timestamp: string
-  traceId: string
-  spanId: string
-  serviceName: string
-  exceptionType: string
-  exceptionMessage: string
-  attrs: Record<string, string>
-  resourceAttrs: Record<string, string>
-  scopeAttrs: Record<string, string>
-  release: string
-  environment: string
-  sourceSignal: 'log' | 'trace'
-  severityText?: string
+  tenantId: string;
+  timestamp: string;
+  traceId: string;
+  spanId: string;
+  serviceName: string;
+  exceptionType: string;
+  exceptionMessage: string;
+  attrs: Record<string, string>;
+  resourceAttrs: Record<string, string>;
+  scopeAttrs: Record<string, string>;
+  release: string;
+  environment: string;
+  sourceSignal: "log" | "trace";
+  severityText?: string;
 }
 
 function buildErrorRow(params: BuildErrorRowParams): OtelErrorRow {
@@ -287,43 +258,38 @@ function buildErrorRow(params: BuildErrorRowParams): OtelErrorRow {
     environment,
     sourceSignal,
     severityText,
-  } = params
+  } = params;
 
   // Read custom error-tracking attributes
-  const stacktrace = attrs['exception.stacktrace'] ?? ''
-  const structuredFrames = attrs['exception.structured_frames'] ?? ''
-  const mechanismType = attrs['exception.mechanism.type'] ?? 'generic'
-  const mechanismHandled = attrs['exception.mechanism.handled'] !== 'false'
-  const debugId = attrs['exception.debug_id'] ?? ''
+  const stacktrace = attrs["exception.stacktrace"] ?? "";
+  const structuredFrames = attrs["exception.structured_frames"] ?? "";
+  const mechanismType = attrs["exception.mechanism.type"] ?? "generic";
+  const mechanismHandled = attrs["exception.mechanism.handled"] !== "false";
+  const debugId = attrs["exception.debug_id"] ?? "";
 
   // Fingerprint: use SDK-provided or compute default
-  let fingerprint: string[]
-  const fingerprintAttr = attrs['exception.fingerprint']
+  let fingerprint: string[];
+  const fingerprintAttr = attrs["exception.fingerprint"];
   if (fingerprintAttr) {
     try {
-      fingerprint = JSON.parse(fingerprintAttr)
+      fingerprint = JSON.parse(fingerprintAttr);
     } catch {
-      fingerprint = [fingerprintAttr]
+      fingerprint = [fingerprintAttr];
     }
   } else {
-    fingerprint = computeDefaultFingerprint(
-      exceptionType,
-      exceptionMessage,
-      structuredFrames,
-    )
+    fingerprint = computeDefaultFingerprint(exceptionType, exceptionMessage, structuredFrames);
   }
 
-  const fingerprintHash = hashFingerprint(fingerprint)
+  const fingerprintHash = hashFingerprint(fingerprint);
 
   // Level: use custom attribute or derive from severity
-  const level =
-    attrs['exception.level'] || severityText?.toLowerCase() || 'error'
+  const level = attrs["exception.level"] || severityText?.toLowerCase() || "error";
 
   // Tags: everything in the attrs that isn't an exception.* attribute
-  const tags: Record<string, string> = {}
+  const tags: Record<string, string> = {};
   for (const [k, v] of Object.entries(attrs)) {
-    if (!k.startsWith('exception.')) {
-      tags[k] = v
+    if (!k.startsWith("exception.")) {
+      tags[k] = v;
     }
   }
 
@@ -349,5 +315,5 @@ function buildErrorRow(params: BuildErrorRowParams): OtelErrorRow {
     resource_attributes: resourceAttrs,
     scope_attributes: scopeAttrs,
     source_signal: sourceSignal,
-  }
+  };
 }

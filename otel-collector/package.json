@@ -1,9 +1,9 @@
 {
   "name": "otel-collector",
   "version": "0.0.1",
-  "type": "module",
   "private": true,
   "description": "OTel collector on Cloudflare Workers. Receives OTLP HTTP/JSON traces, logs, and metrics and forwards to Tinybird or ClickHouse as NDJSON.",
+  "type": "module",
   "main": "src/index.ts",
   "scripts": {
     "dev": "wrangler dev",
@@ -16,6 +16,7 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250313.0",
+    "@types/node": "^25.5.0",
     "typescript": "^6.0.2",
     "vitest": "^4.1.1",
     "wrangler": "^4.5.1"

@@ -1,49 +1,49 @@
-import { spawn } from 'node:child_process'
-import { platform } from 'node:os'
-import dedent from 'string-dedent'
-import { Spiceflow } from 'spiceflow'
+import { spawn } from "node:child_process";
+import { platform } from "node:os";
+import dedent from "string-dedent";
+import { Spiceflow } from "spiceflow";
 
-const authServerPort = 49160
-const authHost = 'https://cloud.tinybird.co'
-const authTimeoutSeconds = 180
+const authServerPort = 49160;
+const authHost = "https://cloud.tinybird.co";
+const authTimeoutSeconds = 180;
 
 export interface TinybirdAuthResult {
-  token: string
-  baseUrl: string
-  workspaceName?: string
-  userEmail?: string
+  token: string;
+  baseUrl: string;
+  workspaceName?: string;
+  userEmail?: string;
 }
 
 interface TokenResponse {
-  workspace_token: string
-  user_token: string
-  api_host: string
-  workspace_name?: string
-  user_email?: string
+  workspace_token: string;
+  user_token: string;
+  api_host: string;
+  workspace_name?: string;
+  user_email?: string;
 }
 
 function openBrowser(url: string): void {
-  const os = platform()
-  let command: string
-  let args: string[]
+  const os = platform();
+  let command: string;
+  let args: string[];
 
   switch (os) {
-    case 'darwin':
-      command = 'open'
-      args = [url]
-      break
-    case 'win32':
-      command = 'cmd'
-      args = ['/c', 'start', '', url]
-      break
+    case "darwin":
+      command = "open";
+      args = [url];
+      break;
+    case "win32":
+      command = "cmd";
+      args = ["/c", "start", "", url];
+      break;
     default:
-      command = 'xdg-open'
-      args = [url]
-      break
+      command = "xdg-open";
+      args = [url];
+      break;
   }
 
-  const child = spawn(command, args, { detached: true, stdio: 'ignore' })
-  child.unref()
+  const child = spawn(command, args, { detached: true, stdio: "ignore" });
+  child.unref();
 }
 
 function getCallbackHtml(): string {
@@ -182,83 +182,83 @@ function getCallbackHtml(): string {
         }
       </script>
     </body>
-    </html>`
+    </html>`;
 }
 
 function createAuthCallbackApp(onCode: (code: string) => void) {
   return new Spiceflow()
-    .get('/', () => {
+    .get("/", () => {
       return new Response(getCallbackHtml(), {
-        headers: { 'content-type': 'text/html; charset=utf-8' },
-      })
+        headers: { "content-type": "text/html; charset=utf-8" },
+      });
     })
-    .post('/', ({ request }) => {
-      const code = new URL(request.url).searchParams.get('code')
+    .post("/", ({ request }) => {
+      const code = new URL(request.url).searchParams.get("code");
       if (!code) {
-        return new Response('Missing code', { status: 400 })
+        return new Response("Missing code", { status: 400 });
       }
-      onCode(code)
-      return new Response('', { status: 200 })
-    })
+      onCode(code);
+      return new Response("", { status: 200 });
+    });
 }
 
 async function exchangeCodeForTokens(code: string): Promise<TokenResponse> {
-  const url = new URL('/api/cli-login', authHost)
-  url.searchParams.set('code', code)
+  const url = new URL("/api/cli-login", authHost);
+  url.searchParams.set("code", code);
 
-  const response = await fetch(url.toString())
+  const response = await fetch(url.toString());
   if (!response.ok) {
-    throw new Error(`Token exchange failed: ${response.status} ${response.statusText}`)
+    throw new Error(`Token exchange failed: ${response.status} ${response.statusText}`);
   }
 
-  return (await response.json()) as TokenResponse
+  return (await response.json()) as TokenResponse;
 }
 
 export async function browserLogin(): Promise<TinybirdAuthResult> {
-  let closeServer: (() => void) | null = null
-  let resolveCode!: (code: string) => void
-  let rejectCode!: (error: Error) => void
+  let closeServer: (() => void) | null = null;
+  let resolveCode!: (code: string) => void;
+  let rejectCode!: (error: Error) => void;
 
   const codePromise = new Promise<string>((resolve, reject) => {
-    resolveCode = resolve
-    rejectCode = reject
-  })
+    resolveCode = resolve;
+    rejectCode = reject;
+  });
 
   const app = createAuthCallbackApp((code) => {
-    resolveCode(code)
-  })
+    resolveCode(code);
+  });
 
   const timeout = setTimeout(() => {
-    rejectCode(new Error(`Authentication timed out after ${authTimeoutSeconds}s`))
-  }, authTimeoutSeconds * 1000)
+    rejectCode(new Error(`Authentication timed out after ${authTimeoutSeconds}s`));
+  }, authTimeoutSeconds * 1000);
 
   try {
-    const listeningServer = await app.listen(authServerPort, '127.0.0.1')
+    const listeningServer = await app.listen(authServerPort, "127.0.0.1");
     closeServer = () => {
-      if ('stop' in listeningServer.server) {
-        listeningServer.server.stop()
+      if ("stop" in listeningServer.server) {
+        listeningServer.server.stop();
       } else {
-        listeningServer.server.close()
+        listeningServer.server.close();
       }
-    }
+    };
 
-    const authUrl = new URL('/api/cli-login', authHost)
-    authUrl.searchParams.set('origin', 'ts-sdk')
-    openBrowser(authUrl.toString())
+    const authUrl = new URL("/api/cli-login", authHost);
+    authUrl.searchParams.set("origin", "ts-sdk");
+    openBrowser(authUrl.toString());
 
-    const code = await codePromise
-    const tokens = await exchangeCodeForTokens(code)
+    const code = await codePromise;
+    const tokens = await exchangeCodeForTokens(code);
 
     return {
       token: tokens.workspace_token,
       baseUrl: tokens.api_host,
       workspaceName: tokens.workspace_name,
       userEmail: tokens.user_email,
-    }
+    };
   } finally {
-    clearTimeout(timeout)
+    clearTimeout(timeout);
     if (closeServer) {
-      closeServer()
+      closeServer();
     }
   }
 }
