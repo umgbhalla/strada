@@ -110,10 +110,11 @@ async function deployResources(
   const deployBody = (await deployResp.json()) as DeployResponse;
 
   if (deployBody.result === "failed") {
+    const errors = deployBody.errors ?? deployBody.deployment?.errors;
     return {
       success: false,
-      error: deployBody.error,
-      errors: deployBody.errors ?? deployBody.deployment?.errors,
+      ...(deployBody.error !== undefined ? { error: deployBody.error } : undefined),
+      ...(errors !== undefined ? { errors } : undefined),
     };
   }
 

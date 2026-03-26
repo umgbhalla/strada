@@ -94,7 +94,7 @@ export function remapRow(row: Record<string, unknown>, signal: SignalKind): Reco
 
     if (key in exceptions) {
       const mapped = exceptions[key];
-      if (mapped !== null) {
+      if (mapped != null) {
         result[mapped] = value;
       }
       // null means drop

@@ -252,8 +252,8 @@ export async function browserLogin(): Promise<TinybirdAuthResult> {
     return {
       token: tokens.workspace_token,
       baseUrl: tokens.api_host,
-      workspaceName: tokens.workspace_name,
-      userEmail: tokens.user_email,
+      ...(tokens.workspace_name !== undefined ? { workspaceName: tokens.workspace_name } : undefined),
+      ...(tokens.user_email !== undefined ? { userEmail: tokens.user_email } : undefined),
     };
   } finally {
     clearTimeout(timeout);

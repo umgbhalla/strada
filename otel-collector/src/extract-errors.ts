@@ -55,7 +55,7 @@ export function extractErrorsFromLogs(body: ExportLogsServiceRequest, tenantId: 
           release,
           environment,
           sourceSignal: "log",
-          severityText: log.severityText,
+          ...(log.severityText !== undefined ? { severityText: log.severityText } : undefined),
         });
 
         rows.push(JSON.stringify(row));

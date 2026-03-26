@@ -115,8 +115,8 @@ export function transformMetrics(
               sum: dp.sum ?? 0,
               bucket_counts: (dp.bucketCounts ?? []).map((v) => parseIntString(v)),
               explicit_bounds: dp.explicitBounds ?? [],
-              min: dp.min,
-              max: dp.max,
+              ...(dp.min !== undefined ? { min: dp.min } : undefined),
+              ...(dp.max !== undefined ? { max: dp.max } : undefined),
               aggregation_temporality: metric.histogram!.aggregationTemporality,
             };
             histogramRows.push(JSON.stringify(row));
@@ -143,8 +143,8 @@ export function transformMetrics(
               positive_bucket_counts: (positive.bucketCounts ?? []).map((v) => parseIntString(v)),
               negative_offset: negative.offset ?? 0,
               negative_bucket_counts: (negative.bucketCounts ?? []).map((v) => parseIntString(v)),
-              min: dp.min,
-              max: dp.max,
+              ...(dp.min !== undefined ? { min: dp.min } : undefined),
+              ...(dp.max !== undefined ? { max: dp.max } : undefined),
               aggregation_temporality: metric.exponentialHistogram!.aggregationTemporality,
             };
             expHistogramRows.push(JSON.stringify(row));
