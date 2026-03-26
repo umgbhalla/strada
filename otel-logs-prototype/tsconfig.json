@@ -1,9 +1,17 @@
 {
-  "extends": ["../tsconfig.base.json"],
+  "extends": [
+    "../tsconfig.base.json"
+  ],
   "compilerOptions": {
     "emitDeclarationOnly": true,
     "outDir": ".cache/types",
-    "types": ["./worker-configuration.d.ts", "node"]
+    "types": [
+      "./worker-configuration.d.ts",
+      "node"
+    ]
   },
-  "include": ["src"]
+  "include": [
+    "src",
+    "scripts"
+  ]
 }
