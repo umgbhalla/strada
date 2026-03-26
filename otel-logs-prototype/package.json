@@ -8,11 +8,6 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "generate": "tsx scripts/generate-data.ts",
-    "docker:up": "docker compose up -d",
-    "docker:down": "docker compose down",
-    "docker:reset": "docker compose down -v",
-    "load-sample": "bash scripts/load-sample-data.sh",
     "test": "vitest run",
     "typecheck": "tsc -b"
   },
