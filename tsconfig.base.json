@@ -1,53 +1,33 @@
 {
   "compilerOptions": {
-    // Environment setup & latest features
-    "lib": ["ESNext"],
+    // Module system — Node ESM
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
     "target": "ESNext",
-    "module": "Preserve",
-    "allowJs": false,
+    "lib": ["ESNext"],
 
-    // Set rootDir to the package root
-    // Use import maps for `src/` and such.
-    "rootDir": "${configDir}/",
-
-    // Bundler mode
-    "moduleResolution": "bundler",
+    // Source → Output
+    "rootDir": "${configDir}/src",
+    "outDir": "${configDir}/dist",
     "allowImportingTsExtensions": true,
     "rewriteRelativeImportExtensions": true,
 
-    // Outputs - cacheability
-    // (Everything uses a bundler, but emitting is still useful for `tsc -b` cache!)
+    // Declarations
     "declaration": true,
-    "emitDeclarationOnly": true,
-    "outDir": "${configDir}/.cache/types",
-    "tsBuildInfoFile": "${configDir}/.cache/.tsbuildinfo",
+    "declarationMap": true,
 
-    // Some stricter flags (disabled by default)
-    "noUnusedLocals": false,
-    "noUnusedParameters": false,
-    "noPropertyAccessFromIndexSignature": false,
-
-    // Stricter Typechecking Options
-    "noUncheckedIndexedAccess": true,
-    "exactOptionalPropertyTypes": true,
-
-    // Style Options
-    // "noImplicitReturns": true,
-    "noImplicitOverride": true,
-    "noImplicitAny": true,
-    // "noUnusedLocals": true,
-    // "noUnusedParameters": true,
-    "noFallthroughCasesInSwitch": true,
-    // "noPropertyAccessFromIndexSignature": true,
-
-    // Recommended Options
+    // Strict
     "strict": true,
-    "jsx": "react-jsx",
+    "noUncheckedIndexedAccess": true,
+    "useUnknownInCatchVariables": false,
+    "skipLibCheck": true,
+
+    // Style
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
     "verbatimModuleSyntax": true,
     "isolatedModules": true,
-    "noUncheckedSideEffectImports": true,
-    "moduleDetection": "force",
-    "skipLibCheck": true
+    "moduleDetection": "force"
   },
   "exclude": ["**/node_modules", "**/.*/"]
 }

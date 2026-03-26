@@ -284,8 +284,8 @@ describe.sequential('collector integration with official OTel SDKs', () => {
     let collector: StartedServer | undefined
 
     try {
-      delete process.env.TINYBIRD_ENDPOINT
-      delete process.env.TINYBIRD_TOKEN
+      ;(process.env as Record<string, string | undefined>).TINYBIRD_ENDPOINT = undefined
+      ;(process.env as Record<string, string | undefined>).TINYBIRD_TOKEN = undefined
       process.env.CLICKHOUSE_URL = fakeBackend.baseUrl
       process.env.CLICKHOUSE_DATABASE = 'default'
       process.env.CLICKHOUSE_USER = 'default'
