@@ -44,7 +44,7 @@
   },
   "scripts": {
     "build": "rm -rf dist *.tsbuildinfo && tsc && chmod +x dist/cli.js",
-    "prepublishOnly": "bun run build",
+    "prepublishOnly": "pnpm run build",
     "cli": "tsx src/cli",
     "typecheck": "tsc -b"
   },

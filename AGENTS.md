@@ -1,5 +1,7 @@
 # Strada
 
+This repo uses **pnpm** as its package manager. Always use `pnpm` (not bun/npm/yarn) for install, run, and publish commands.
+
 Open-source OpenTelemetry observability stack on top of Tinybird. Goal is to reimplement the core value of Sentry (error tracking, tracing, logs, metrics) but based on the OpenTelemetry standard instead of Sentry's proprietary bloated SDK. Users send OTEL data via standard SDKs, we store it in Tinybird, they query it with SQL.
 
 we use the standard OTEL schema for clickhouse: https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/exporter/clickhouseexporter/internal/sqltemplates/logs_json_table.sql
@@ -336,8 +338,8 @@ Worker:
 Run tests with `vitest run` (not `vitest` which starts watch mode and never exits):
 
 ```bash
-bun run vitest run                           # all tests
-bun run vitest run src/extract-errors.test.ts # single file
+pnpm vitest run                           # all tests
+pnpm vitest run src/extract-errors.test.ts # single file
 ```
 
 Run from the `otel-collector/` directory.
