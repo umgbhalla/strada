@@ -1,21 +1,7 @@
 {
+  "extends": ["../tsconfig.base.json"],
   "compilerOptions": {
-    "allowImportingTsExtensions": true,
-    "rewriteRelativeImportExtensions": true,
-    "rootDir": "../otel-collector/src",
-    "outDir": "../otel-collector/dist",
-    "module": "nodenext",
-    "moduleResolution": "nodenext",
-    "target": "ESNext",
-    "lib": ["ESNext"],
-    "declaration": true,
-    "declarationMap": true,
-    "noEmit": true,
-    "strict": true,
-    "noUncheckedIndexedAccess": true,
-    "skipLibCheck": true,
-    "useUnknownInCatchVariables": false,
-    "types": ["@cloudflare/workers-types", "node", "vitest/globals"]
+    "types": ["./worker-configuration.d.ts", "node"]
   },
-  "include": ["../otel-collector/src"]
+  "include": ["src"]
 }

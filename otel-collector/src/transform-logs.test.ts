@@ -1,48 +1,44 @@
-import { describe, it, expect } from 'vitest'
-import { transformLogs } from './transform-logs.ts'
-import type { ExportLogsServiceRequest } from './otlp-types.ts'
+import { describe, it, expect } from "vitest";
+import { transformLogs } from "./transform-logs.ts";
+import type { ExportLogsServiceRequest } from "./otlp-types.ts";
 
-describe('transformLogs', () => {
-  it('returns empty string for empty request', () => {
-    expect(transformLogs({}, 'test-tenant')).toBe('')
-    expect(transformLogs({ resourceLogs: [] }, 'test-tenant')).toBe('')
-  })
+describe("transformLogs", () => {
+  it("returns empty string for empty request", () => {
+    expect(transformLogs({}, "test-tenant")).toBe("");
+    expect(transformLogs({ resourceLogs: [] }, "test-tenant")).toBe("");
+  });
 
-  it('transforms a complete log record', () => {
+  it("transforms a complete log record", () => {
     const input: ExportLogsServiceRequest = {
       resourceLogs: [
         {
           resource: {
-            attributes: [
-              { key: 'service.name', value: { stringValue: 'my-api' } },
-            ],
+            attributes: [{ key: "service.name", value: { stringValue: "my-api" } }],
           },
-          schemaUrl: 'https://opentelemetry.io/schemas/1.0.0',
+          schemaUrl: "https://opentelemetry.io/schemas/1.0.0",
           scopeLogs: [
             {
               scope: {
-                name: 'my-logger',
-                version: '2.0.0',
-                attributes: [
-                  { key: 'scope.key', value: { stringValue: 'scope-val' } },
-                ],
+                name: "my-logger",
+                version: "2.0.0",
+                attributes: [{ key: "scope.key", value: { stringValue: "scope-val" } }],
               },
-              schemaUrl: 'https://scope.schema',
+              schemaUrl: "https://scope.schema",
               logRecords: [
                 {
-                  timeUnixNano: '1544712660123456789',
-                  observedTimeUnixNano: '1544712660200000000',
+                  timeUnixNano: "1544712660123456789",
+                  observedTimeUnixNano: "1544712660200000000",
                   severityNumber: 9,
-                  severityText: 'INFO',
-                  body: { stringValue: 'User logged in' },
+                  severityText: "INFO",
+                  body: { stringValue: "User logged in" },
                   attributes: [
                     {
-                      key: 'user.id',
-                      value: { stringValue: '12345' },
+                      key: "user.id",
+                      value: { stringValue: "12345" },
                     },
                   ],
-                  traceId: 'abc123',
-                  spanId: 'def456',
+                  traceId: "abc123",
+                  spanId: "def456",
                   flags: 1,
                 },
               ],
@@ -50,10 +46,10 @@ describe('transformLogs', () => {
           ],
         },
       ],
-    }
+    };
 
-    const ndjson = transformLogs(input, 'acme')
-    const row = JSON.parse(ndjson.trim())
+    const ndjson = transformLogs(input, "acme");
+    const row = JSON.parse(ndjson.trim());
 
     expect(row).toMatchInlineSnapshot(`
       {
@@ -81,10 +77,10 @@ describe('transformLogs', () => {
         "timestamp": "2018-12-13T14:51:00.123456789Z",
         "trace_id": "abc123",
       }
-    `)
-  })
+    `);
+  });
 
-  it('falls back to observedTimeUnixNano when timeUnixNano is missing', () => {
+  it("falls back to observedTimeUnixNano when timeUnixNano is missing", () => {
     const input: ExportLogsServiceRequest = {
       resourceLogs: [
         {
@@ -92,23 +88,23 @@ describe('transformLogs', () => {
             {
               logRecords: [
                 {
-                  observedTimeUnixNano: '1544712660200000000',
-                  body: { stringValue: 'test' },
+                  observedTimeUnixNano: "1544712660200000000",
+                  body: { stringValue: "test" },
                 },
               ],
             },
           ],
         },
       ],
-    }
+    };
 
-    const ndjson = transformLogs(input, 'acme')
-    const row = JSON.parse(ndjson.trim())
-    expect(row.tenant_id).toBe('acme')
-    expect(row.timestamp).toBe('2018-12-13T14:51:00.200000000Z')
-  })
+    const ndjson = transformLogs(input, "acme");
+    const row = JSON.parse(ndjson.trim());
+    expect(row.tenant_id).toBe("acme");
+    expect(row.timestamp).toBe("2018-12-13T14:51:00.200000000Z");
+  });
 
-  it('falls back to observedTimeUnixNano when timeUnixNano is zero', () => {
+  it("falls back to observedTimeUnixNano when timeUnixNano is zero", () => {
     const input: ExportLogsServiceRequest = {
       resourceLogs: [
         {
@@ -116,23 +112,23 @@ describe('transformLogs', () => {
             {
               logRecords: [
                 {
-                  timeUnixNano: '0',
-                  observedTimeUnixNano: '1544712660300000000',
-                  body: { stringValue: 'test' },
+                  timeUnixNano: "0",
+                  observedTimeUnixNano: "1544712660300000000",
+                  body: { stringValue: "test" },
                 },
               ],
             },
           ],
         },
       ],
-    }
+    };
 
-    const ndjson = transformLogs(input, 'acme')
-    const row = JSON.parse(ndjson.trim())
-    expect(row.timestamp).toBe('2018-12-13T14:51:00.300000000Z')
-  })
+    const ndjson = transformLogs(input, "acme");
+    const row = JSON.parse(ndjson.trim());
+    expect(row.timestamp).toBe("2018-12-13T14:51:00.300000000Z");
+  });
 
-  it('handles missing optional fields gracefully', () => {
+  it("handles missing optional fields gracefully", () => {
     const input: ExportLogsServiceRequest = {
       resourceLogs: [
         {
@@ -140,25 +136,25 @@ describe('transformLogs', () => {
             {
               logRecords: [
                 {
-                  timeUnixNano: '1000000000',
+                  timeUnixNano: "1000000000",
                 },
               ],
             },
           ],
         },
       ],
-    }
+    };
 
-    const ndjson = transformLogs(input, 'acme')
-    const row = JSON.parse(ndjson.trim())
+    const ndjson = transformLogs(input, "acme");
+    const row = JSON.parse(ndjson.trim());
 
-    expect(row.tenant_id).toBe('acme')
-    expect(row.service_name).toBe('')
-    expect(row.trace_id).toBe('')
-    expect(row.span_id).toBe('')
-    expect(row.severity_text).toBe('')
-    expect(row.severity_number).toBe(0)
-    expect(row.body).toBe('')
-    expect(row.flags).toBe(0)
-  })
-})
+    expect(row.tenant_id).toBe("acme");
+    expect(row.service_name).toBe("");
+    expect(row.trace_id).toBe("");
+    expect(row.span_id).toBe("");
+    expect(row.severity_text).toBe("");
+    expect(row.severity_number).toBe(0);
+    expect(row.body).toBe("");
+    expect(row.flags).toBe(0);
+  });
+});

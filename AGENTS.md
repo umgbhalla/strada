@@ -18,12 +18,14 @@ see other files in sqltemplates as well for other kinds of tables
 The otel-collector supports two storage backends, configured via env vars:
 
 **Tinybird** (hosted):
+
 ```
 TINYBIRD_ENDPOINT=https://api.us-east.aws.tinybird.co
 TINYBIRD_TOKEN=p.ey...
 ```
 
 **ClickHouse** (self-hosted):
+
 ```
 CLICKHOUSE_URL=http://my-clickhouse:8123
 CLICKHOUSE_DATABASE=default
@@ -216,6 +218,7 @@ Same idea as histogram but buckets are logarithmically spaced and auto-scale. No
 ### Shared table properties
 
 All tables use:
+
 - `MergeTree` engine
 - Daily partitions (`toDate(Timestamp)` or `toDate(TimeUnix)`)
 - Bloom filter indexes on attribute map keys/values
@@ -228,6 +231,7 @@ All tables use:
 **Ingested from:** extracted by the worker from both `/v1/logs` and `/v1/traces`
 
 The worker scans incoming data for exceptions:
+
 - **From logs:** log records with `exception.type` or `exception.message` in `LogAttributes`
 - **From traces:** span events where `name === 'exception'` (the OTel convention for recording exceptions on spans)
 
@@ -249,28 +253,28 @@ We use the `exception.*` namespace (not a vendor prefix like `strada.*`) because
 
 ### Standard OTel attributes (already defined by OTel spec)
 
-| Attribute | Type | Description |
-|-----------|------|-------------|
-| `exception.type` | string | Fully-qualified exception class name. e.g. `"TypeError"`, `"java.net.ConnectException"` |
-| `exception.message` | string | The exception message string |
-| `exception.stacktrace` | string | Raw stacktrace as a string in the language's natural format |
+| Attribute              | Type   | Description                                                                             |
+| ---------------------- | ------ | --------------------------------------------------------------------------------------- |
+| `exception.type`       | string | Fully-qualified exception class name. e.g. `"TypeError"`, `"java.net.ConnectException"` |
+| `exception.message`    | string | The exception message string                                                            |
+| `exception.stacktrace` | string | Raw stacktrace as a string in the language's natural format                             |
 
 ### Standard OTel resource attributes (set on the SDK's Resource, not per-event)
 
-| Attribute | Type | Maps to |
-|-----------|------|---------|
-| `service.version` | string | Release / app version. Stored as `Release` column |
+| Attribute                     | Type   | Maps to                                                                   |
+| ----------------------------- | ------ | ------------------------------------------------------------------------- |
+| `service.version`             | string | Release / app version. Stored as `Release` column                         |
 | `deployment.environment.name` | string | Environment (`"production"`, `"staging"`). Stored as `Environment` column |
 
 ### Custom error-tracking attributes (set by Strada SDKs)
 
-| Attribute | Type | Description |
-|-----------|------|-------------|
-| `exception.fingerprint` | string (JSON array) | Custom fingerprint override for grouping. e.g. `'["db-timeout","users-service"]'`. When absent, the worker computes a default fingerprint from exception type + top in-app frame function + stripped message |
-| `exception.mechanism.type` | string | How the exception was captured: `"generic"` (user-called captureException), `"onerror"` (window.onerror), `"unhandledrejection"` (promise rejection), `"uncaughtException"` (Node.js process), etc. |
-| `exception.mechanism.handled` | string | `"true"` if user code caught it (try/catch + captureException), `"false"` if caught by a global handler. OTel attributes are strings, so this is `"true"`/`"false"` not boolean |
+| Attribute                     | Type                | Description                                                                                                                                                                                                                                                          |
+| ----------------------------- | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `exception.fingerprint`       | string (JSON array) | Custom fingerprint override for grouping. e.g. `'["db-timeout","users-service"]'`. When absent, the worker computes a default fingerprint from exception type + top in-app frame function + stripped message                                                         |
+| `exception.mechanism.type`    | string              | How the exception was captured: `"generic"` (user-called captureException), `"onerror"` (window.onerror), `"unhandledrejection"` (promise rejection), `"uncaughtException"` (Node.js process), etc.                                                                  |
+| `exception.mechanism.handled` | string              | `"true"` if user code caught it (try/catch + captureException), `"false"` if caught by a global handler. OTel attributes are strings, so this is `"true"`/`"false"` not boolean                                                                                      |
 | `exception.structured_frames` | string (JSON array) | Parsed stack frames. Each frame: `{"filename": "app.js", "function": "processOrder", "lineno": 42, "colno": 15, "abs_path": "/src/app.js", "in_app": true, "debug_id": "85314830-..."}`. When absent, the worker falls back to the raw `exception.stacktrace` string |
-| `exception.debug_id` | string | UUID linking the source file to its source map (TC39 debug-id proposal). Used for server-side stack trace desymbolication |
+| `exception.debug_id`          | string              | UUID linking the source file to its source map (TC39 debug-id proposal). Used for server-side stack trace desymbolication                                                                                                                                            |
 
 ### Default fingerprint computation (server-side, in the worker)
 
@@ -332,8 +336,8 @@ Worker:
 Run tests with `vitest run` (not `vitest` which starts watch mode and never exits):
 
 ```bash
-pnpm vitest run                           # all tests
-pnpm vitest run src/extract-errors.test.ts # single file
+bun run vitest run                           # all tests
+bun run vitest run src/extract-errors.test.ts # single file
 ```
 
 Run from the `otel-collector/` directory.
@@ -347,6 +351,7 @@ The Tinybird OTel template (https://github.com/tinybirdco/tinybird-otel-template
 We target **Tinybird Forward** (the new CLI-based experience), not Classic. Forward is the actively developed version.
 
 **Classic vs Forward differences that matter to us:**
+
 - Forward dropped `sql_filter` on static tokens. Use JWT `filter` instead
 - Forward JWTs support `DATASOURCES:READ` scope with `filter` field (Classic JWTs only had `PIPES:READ`)
 - Forward uses `tb deploy` instead of `tb push`

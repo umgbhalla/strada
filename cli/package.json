@@ -2,8 +2,29 @@
   "name": "strada",
   "version": "0.0.1",
   "description": "CLI for Strada — open-source OpenTelemetry observability on Tinybird",
-  "type": "module",
+  "keywords": [
+    "cli",
+    "observability",
+    "opentelemetry",
+    "otel",
+    "strada",
+    "tinybird"
+  ],
+  "homepage": "https://github.com/remorses/strada",
+  "bugs": "https://github.com/remorses/strada/issues",
+  "license": "MIT",
+  "author": "remorses <beats.by.morse@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/remorses/strada",
+    "directory": "cli"
+  },
   "bin": "dist/cli.js",
+  "files": [
+    "src",
+    "dist"
+  ],
+  "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -21,43 +42,22 @@
       "default": "./src/*.ts"
     }
   },
-  "files": [
-    "src",
-    "dist"
-  ],
   "scripts": {
     "build": "rm -rf dist *.tsbuildinfo && tsc && chmod +x dist/cli.js",
-    "prepublishOnly": "pnpm build",
+    "prepublishOnly": "bun run build",
     "cli": "tsx src/cli",
-    "typecheck": "tsc"
+    "typecheck": "tsc -b"
   },
   "dependencies": {
     "@clack/prompts": "^1.0.0",
     "@tinybirdco/sdk": "^0.0.64",
-    "goke": "^6.3.0",
+    "goke": "^6.3.1",
     "picocolors": "^1.1.1",
     "spiceflow": "^1.18.0",
     "string-dedent": "^3.0.2"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
-    "typescript": "^5.7.0"
-  },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/remorses/strada",
-    "directory": "cli"
-  },
-  "homepage": "https://github.com/remorses/strada",
-  "bugs": "https://github.com/remorses/strada/issues",
-  "keywords": [
-    "strada",
-    "opentelemetry",
-    "otel",
-    "observability",
-    "tinybird",
-    "cli"
-  ],
-  "license": "MIT",
-  "author": "remorses <beats.by.morse@gmail.com>"
+    "@types/node": "^25.5.0",
+    "typescript": "^6.0.2"
+  }
 }

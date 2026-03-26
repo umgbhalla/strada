@@ -9,87 +9,83 @@
 // The worker parses the hostname to get the tenant_id and injects it
 // into every NDJSON row. No KV or DB lookup needed.
 
-import { Spiceflow } from 'spiceflow'
-import { cors } from 'spiceflow/cors'
-import { datasources } from './env.ts'
-import { getTenantId } from './get-tenant-id.ts'
-import { transformTraces } from './transform-traces.ts'
-import { transformLogs } from './transform-logs.ts'
-import { transformMetrics } from './transform-metrics.ts'
-import { createBackend } from './backend.ts'
-import { extractErrorsFromTraces, extractErrorsFromLogs } from './extract-errors.ts'
-import type { ExportTraceServiceRequest, ExportLogsServiceRequest, ExportMetricsServiceRequest } from './otlp-types.ts'
+import { Spiceflow } from "spiceflow";
+import { cors } from "spiceflow/cors";
+import { datasources } from "./env.ts";
+import { getTenantId } from "./get-tenant-id.ts";
+import { transformTraces } from "./transform-traces.ts";
+import { transformLogs } from "./transform-logs.ts";
+import { transformMetrics } from "./transform-metrics.ts";
+import { createBackend } from "./backend.ts";
+import { extractErrorsFromTraces, extractErrorsFromLogs } from "./extract-errors.ts";
+import type { ExportTraceServiceRequest, ExportLogsServiceRequest, ExportMetricsServiceRequest } from "./otlp-types.ts";
 
 const app = new Spiceflow()
   .use(
     cors({
-      origin: '*',
-      allowMethods: ['POST'],
-      allowHeaders: ['content-type'],
+      origin: "*",
+      allowMethods: ["POST"],
+      allowHeaders: ["content-type"],
       maxAge: 86400,
     }),
   )
-  .post('/v1/traces', async ({ request, waitUntil }) => {
-    const tenantId = getTenantId(request)
-    const body = (await request.json()) as ExportTraceServiceRequest
-    const backend = createBackend()
+  .post("/v1/traces", async ({ request, waitUntil }) => {
+    const tenantId = getTenantId(request);
+    const body = (await request.json()) as ExportTraceServiceRequest;
+    const backend = createBackend();
 
-    const ndjson = transformTraces(body, tenantId)
+    const ndjson = transformTraces(body, tenantId);
     if (ndjson) {
-      waitUntil(backend.send(datasources.traces, 'traces', ndjson))
+      waitUntil(backend.send(datasources.traces, "traces", ndjson));
     }
 
-    const errorsNdjson = extractErrorsFromTraces(body, tenantId)
+    const errorsNdjson = extractErrorsFromTraces(body, tenantId);
     if (errorsNdjson) {
-      waitUntil(backend.send(datasources.errors, 'errors', errorsNdjson))
+      waitUntil(backend.send(datasources.errors, "errors", errorsNdjson));
     }
 
-    return {}
+    return {};
   })
-  .post('/v1/logs', async ({ request, waitUntil }) => {
-    const tenantId = getTenantId(request)
-    const body = (await request.json()) as ExportLogsServiceRequest
-    const backend = createBackend()
+  .post("/v1/logs", async ({ request, waitUntil }) => {
+    const tenantId = getTenantId(request);
+    const body = (await request.json()) as ExportLogsServiceRequest;
+    const backend = createBackend();
 
-    const ndjson = transformLogs(body, tenantId)
+    const ndjson = transformLogs(body, tenantId);
     if (ndjson) {
-      waitUntil(backend.send(datasources.logs, 'logs', ndjson))
+      waitUntil(backend.send(datasources.logs, "logs", ndjson));
     }
 
-    const errorsNdjson = extractErrorsFromLogs(body, tenantId)
+    const errorsNdjson = extractErrorsFromLogs(body, tenantId);
     if (errorsNdjson) {
-      waitUntil(backend.send(datasources.errors, 'errors', errorsNdjson))
+      waitUntil(backend.send(datasources.errors, "errors", errorsNdjson));
     }
 
-    return {}
+    return {};
   })
-  .post('/v1/metrics', async ({ request, waitUntil }) => {
-    const tenantId = getTenantId(request)
-    const body = (await request.json()) as ExportMetricsServiceRequest
-    const backend = createBackend()
+  .post("/v1/metrics", async ({ request, waitUntil }) => {
+    const tenantId = getTenantId(request);
+    const body = (await request.json()) as ExportMetricsServiceRequest;
+    const backend = createBackend();
     const payloads = transformMetrics(body, tenantId, {
       gauge: datasources.gauge,
       sum: datasources.sum,
       histogram: datasources.histogram,
       exponentialHistogram: datasources.exponentialHistogram,
-    })
+    });
 
-    const toSend = payloads.filter((p) => p.ndjson.length > 0)
+    const toSend = payloads.filter((p) => p.ndjson.length > 0);
     if (toSend.length > 0) {
-      waitUntil(
-        Promise.all(
-          toSend.map((p) => backend.send(p.datasource, p.signal, p.ndjson)),
-        ),
-      )
+      waitUntil(Promise.all(toSend.map((p) => backend.send(p.datasource, p.signal, p.ndjson))));
     }
 
-    return {}
-  })
+    return {};
+  });
 
 export default {
   fetch(request: Request) {
-    return app.handle(request)
+    return app.handle(request);
   },
-}
+};
 
-export { app }
+export { app };

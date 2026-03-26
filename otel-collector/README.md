@@ -7,6 +7,7 @@ OTLP HTTP/JSON collector for [Strada](https://github.com/remorses/strada). Runs 
 This collector only accepts **OTLP HTTP/JSON** format. It does not support protobuf or gRPC encoding.
 
 The OTel JS SDK defaults to `http/protobuf`. You must explicitly switch to JSON by either:
+
 - Using the `-http` exporter packages (which send JSON)
 - Setting the `OTEL_EXPORTER_OTLP_PROTOCOL=http/json` environment variable
 
@@ -29,21 +30,21 @@ npm install @opentelemetry/sdk-node \
 Create `instrumentation.ts` (must be loaded before your app code):
 
 ```typescript
-import { NodeSDK } from '@opentelemetry/sdk-node'
-import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http'
-import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-http'
-import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-http'
-import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node'
-import { PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics'
-import { BatchLogRecordProcessor } from '@opentelemetry/sdk-logs'
-import { Resource } from '@opentelemetry/resources'
+import { NodeSDK } from "@opentelemetry/sdk-node";
+import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
+import { OTLPMetricExporter } from "@opentelemetry/exporter-metrics-otlp-http";
+import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-http";
+import { getNodeAutoInstrumentations } from "@opentelemetry/auto-instrumentations-node";
+import { PeriodicExportingMetricReader } from "@opentelemetry/sdk-metrics";
+import { BatchLogRecordProcessor } from "@opentelemetry/sdk-logs";
+import { Resource } from "@opentelemetry/resources";
 
 // Replace with your Strada ingest URL
-const STRADA_URL = 'https://acme-ingest.stradametrics.com'
+const STRADA_URL = "https://acme-ingest.stradametrics.com";
 
 const resource = new Resource({
-  'service.name': 'my-api',
-})
+  "service.name": "my-api",
+});
 
 const sdk = new NodeSDK({
   resource,
@@ -62,9 +63,9 @@ const sdk = new NodeSDK({
     }),
   ),
   instrumentations: [getNodeAutoInstrumentations()],
-})
+});
 
-sdk.start()
+sdk.start();
 ```
 
 ### 3. Load instrumentation before your app
@@ -95,21 +96,21 @@ With these set, the SDK auto-appends `/v1/traces`, `/v1/logs`, `/v1/metrics` to 
 
 The OTel JS SDK has separate npm packages for each wire format:
 
-| Package | Format | Works with Strada? |
-|---|---|---|
-| `@opentelemetry/exporter-trace-otlp-http` | HTTP/JSON | Yes |
-| `@opentelemetry/exporter-trace-otlp-proto` | HTTP/Protobuf | No |
-| `@opentelemetry/exporter-trace-otlp-grpc` | gRPC | No |
+| Package                                    | Format        | Works with Strada? |
+| ------------------------------------------ | ------------- | ------------------ |
+| `@opentelemetry/exporter-trace-otlp-http`  | HTTP/JSON     | Yes                |
+| `@opentelemetry/exporter-trace-otlp-proto` | HTTP/Protobuf | No                 |
+| `@opentelemetry/exporter-trace-otlp-grpc`  | gRPC          | No                 |
 
 Same pattern for metrics (`exporter-metrics-otlp-*`) and logs (`exporter-logs-otlp-*`). Always use the `-http` variants.
 
 ## Endpoints
 
-| Method | Path | Description |
-|---|---|---|
-| POST | `/v1/traces` | Receive trace spans |
-| POST | `/v1/logs` | Receive log records |
-| POST | `/v1/metrics` | Receive metrics (gauge, sum, histogram, exponential histogram) |
+| Method | Path          | Description                                                    |
+| ------ | ------------- | -------------------------------------------------------------- |
+| POST   | `/v1/traces`  | Receive trace spans                                            |
+| POST   | `/v1/logs`    | Receive log records                                            |
+| POST   | `/v1/metrics` | Receive metrics (gauge, sum, histogram, exponential histogram) |
 
 ## Local development
 
