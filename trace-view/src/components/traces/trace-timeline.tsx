@@ -151,7 +151,7 @@ export function TraceTimeline() {
 
       <TraceTimelineTimeAxis viewport={state.viewport} ticks={timeAxisTicks} traceStartMs={traceStartMs} />
 
-      <div ref={scrollRef} className="flex-1 min-h-0 overflow-auto relative"
+      <div ref={scrollRef} className="flex-1 min-h-0 overflow-auto relative scrollbar-none"
         style={{ cursor: isPanning.current ? "grabbing" : undefined }}
         onScroll={handleScroll} onMouseDown={handleMouseDown}>
         <div className="absolute inset-0 pointer-events-none z-0" style={{ height: totalRows * rowSize }}>

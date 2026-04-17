@@ -92,6 +92,14 @@
   background-color: var(--hover-bg) !important;
 }
 
+/* Hide scrollbars completely while keeping scroll functional */
+.scrollbar-none {
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
 /* Thin, shadcn-style scrollbars */
 * {
   scrollbar-width: thin;
