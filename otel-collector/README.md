@@ -94,6 +94,10 @@ export function captureException(
     tags?: Record<string, string>;
   },
 ) {
+  const fingerprint = Array.isArray((error as Error & { fingerprint?: unknown }).fingerprint)
+    ? (error as Error & { fingerprint: string[] }).fingerprint
+    : undefined;
+
   const attributes: Record<string, string> = {
     "exception.type": error.name,
     "exception.message": error.message,
@@ -101,6 +105,10 @@ export function captureException(
     "exception.mechanism.type": opts?.handled === false ? "onerror" : "generic",
     "exception.mechanism.handled": String(opts?.handled ?? true),
   };
+
+  if (fingerprint) {
+    attributes["exception.fingerprint"] = JSON.stringify(fingerprint);
+  }
 
   // Extra tags get forwarded as-is (appear in the Tags column)
   if (opts?.tags) {
@@ -156,11 +164,24 @@ tsx --import ./instrumentation.ts app.ts
 ```typescript
 import { captureException } from "./instrumentation.ts";
 
+class CheckoutError extends Error {
+  fingerprint = ["checkout-failed", "processOrder"];
+
+  constructor(message: string) {
+    super(message);
+    this.name = "CheckoutError";
+  }
+}
+
 app.post("/orders", async (req, res) => {
   try {
     await processOrder(req.body);
     res.json({ ok: true });
   } catch (err) {
+    if (!(err instanceof CheckoutError)) {
+      err = new CheckoutError("payment provider rejected the charge");
+    }
+
     captureException(err as Error, {
       handled: true,
       tags: { orderId: req.body.id, userId: req.user.id },
@@ -180,7 +201,7 @@ Once `sdk.start()` runs, the OTel SDK works in the background. You don't call it
 
 **Logs** (manual). The SDK does not capture `console.log` automatically. Use `logger.emit()` directly or call `captureException()` to send error logs. Batched by `BatchLogRecordProcessor` and flushed via `POST /v1/logs` every **1 second** (or at **512 records**).
 
-**Errors** (manual). `captureException()` is just a convenience wrapper around `logger.emit()` that sets the right `exception.*` attributes. The Strada ingest worker detects these attributes and extracts a row into `otel_errors` for issue grouping and error tracking. The original log is also written to `otel_logs`.
+**Errors** (manual). `captureException()` is just a convenience wrapper around `logger.emit()` that sets the right `exception.*` attributes. The Strada ingest worker detects these attributes and extracts a row into `otel_errors` for issue grouping and error tracking. The original log is also written to `otel_logs`. Set `error.fingerprint` when you want to override the default grouping logic for a known class of errors.
 
 | Signal  | How it's sent        | Batch interval | Batch size | Endpoint       |
 | ------- | -------------------- | -------------- | ---------- | -------------- |
