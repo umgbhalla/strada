@@ -4,9 +4,11 @@ OTLP HTTP/JSON collector for [Strada](https://strada.sh). Runs as a Cloudflare W
 
 **JSON only.** No protobuf, no gRPC. The OTel JS SDK defaults to `http/protobuf`, so you must use the `-http` exporter packages or set `OTEL_EXPORTER_OTLP_PROTOCOL=http/json`.
 
-## Quick start (Node.js)
+## Quick start examples
 
-### 1. Install
+### Node.js server
+
+#### 1. Install
 
 ```bash
 npm install @opentelemetry/sdk-node \
@@ -18,7 +20,7 @@ npm install @opentelemetry/sdk-node \
   @opentelemetry/sdk-logs
 ```
 
-### 2. Create `instrumentation.ts`
+#### 2. Create `instrumentation.ts`
 
 Copy this file into your project. It must be loaded **before** your app code.
 
@@ -147,7 +149,7 @@ process.on("SIGTERM", shutdown);
 process.on("SIGINT", shutdown);
 ```
 
-### 3. Load instrumentation before your app
+#### 3. Load instrumentation before your app
 
 ```bash
 node --import ./instrumentation.ts app.ts
@@ -159,7 +161,7 @@ Or with `tsx`:
 tsx --import ./instrumentation.ts app.ts
 ```
 
-### 4. Capture errors in your code
+#### 4. Capture errors in your code
 
 ```typescript
 import { captureException } from "./instrumentation.ts";
@@ -189,6 +191,212 @@ app.post("/orders", async (req, res) => {
     res.status(500).json({ error: "Internal error" });
   }
 });
+```
+
+### Web browser
+
+#### 1. Install
+
+```bash
+npm install @opentelemetry/sdk-trace-web \
+  @opentelemetry/sdk-trace-base \
+  @opentelemetry/sdk-logs \
+  @opentelemetry/exporter-trace-otlp-http \
+  @opentelemetry/exporter-logs-otlp-http \
+  @opentelemetry/auto-instrumentations-web
+```
+
+#### 2. Create `instrumentation.ts`
+
+Load this once at app startup, before rendering your app.
+
+```typescript
+import { SeverityNumber, logs } from "@opentelemetry/api-logs";
+import { Resource } from "@opentelemetry/resources";
+import { BatchSpanProcessor } from "@opentelemetry/sdk-trace-base";
+import { WebTracerProvider } from "@opentelemetry/sdk-trace-web";
+import {
+  BatchLogRecordProcessor,
+  LoggerProvider,
+  type LogRecordProcessor,
+  type SdkLogRecord,
+} from "@opentelemetry/sdk-logs";
+import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
+import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-http";
+import { getWebAutoInstrumentations } from "@opentelemetry/auto-instrumentations-web";
+import { registerInstrumentations } from "@opentelemetry/instrumentation";
+
+const STRADA_URL = "https://acme-ingest.strada.sh";
+
+const resource = new Resource({
+  "service.name": "my-web-app",
+  "service.version": "1.0.0",
+  "deployment.environment.name": "production",
+});
+
+function shouldIgnoreBrowserError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  const stack = error instanceof Error ? error.stack ?? "" : "";
+
+  if (message === "Script error." || message === "Script error") return true;
+  if (message.includes("ResizeObserver loop limit exceeded")) return true;
+  if (message.includes("ResizeObserver loop completed with undelivered notifications")) return true;
+
+  return (
+    stack.includes("chrome-extension://") ||
+    stack.includes("moz-extension://") ||
+    stack.includes("safari-extension://")
+  );
+}
+
+class FilteringLogProcessor implements LogRecordProcessor {
+  constructor(private readonly inner: LogRecordProcessor) {}
+
+  onEmit(record: SdkLogRecord, context?: Parameters<LogRecordProcessor["onEmit"]>[1]) {
+    const message = String(record.attributes["exception.message"] ?? "");
+    const stack = String(record.attributes["exception.stacktrace"] ?? "");
+
+    if (message === "Script error." || message === "Script error") return;
+    if (message.includes("ResizeObserver loop limit exceeded")) return;
+    if (message.includes("ResizeObserver loop completed with undelivered notifications")) return;
+    if (stack.includes("chrome-extension://")) return;
+    if (stack.includes("moz-extension://")) return;
+    if (stack.includes("safari-extension://")) return;
+
+    this.inner.onEmit(record, context);
+  }
+
+  forceFlush() {
+    return this.inner.forceFlush();
+  }
+
+  shutdown() {
+    return this.inner.shutdown();
+  }
+}
+
+const tracerProvider = new WebTracerProvider({ resource });
+tracerProvider.addSpanProcessor(
+  new BatchSpanProcessor(
+    new OTLPTraceExporter({ url: `${STRADA_URL}/v1/traces` }),
+  ),
+);
+tracerProvider.register();
+
+const loggerProvider = new LoggerProvider({ resource });
+loggerProvider.addLogRecordProcessor(
+  new FilteringLogProcessor(
+    new BatchLogRecordProcessor(
+      new OTLPLogExporter({ url: `${STRADA_URL}/v1/logs` }),
+    ),
+  ),
+);
+logs.setGlobalLoggerProvider(loggerProvider);
+
+const logger = loggerProvider.getLogger("strada-web");
+
+registerInstrumentations({
+  instrumentations: [getWebAutoInstrumentations()],
+});
+
+export function captureException(
+  error: Error,
+  opts?: {
+    handled?: boolean;
+    tags?: Record<string, string>;
+  },
+) {
+  if (shouldIgnoreBrowserError(error)) return;
+
+  const fingerprint = Array.isArray((error as Error & { fingerprint?: unknown }).fingerprint)
+    ? (error as Error & { fingerprint: string[] }).fingerprint
+    : undefined;
+
+  const attributes: Record<string, string> = {
+    "exception.type": error.name,
+    "exception.message": error.message,
+    "exception.stacktrace": error.stack ?? "",
+    "exception.mechanism.type": opts?.handled === false ? "onerror" : "generic",
+    "exception.mechanism.handled": String(opts?.handled ?? true),
+  };
+
+  if (fingerprint) {
+    attributes["exception.fingerprint"] = JSON.stringify(fingerprint);
+  }
+
+  if (opts?.tags) {
+    for (const [k, v] of Object.entries(opts.tags)) {
+      attributes[k] = v;
+    }
+  }
+
+  logger.emit({
+    severityNumber: SeverityNumber.ERROR,
+    severityText: "ERROR",
+    body: error.message,
+    attributes,
+  });
+}
+
+window.addEventListener("error", (event) => {
+  if (shouldIgnoreBrowserError(event.error ?? event.message)) return;
+  if (event.error instanceof Error) {
+    captureException(event.error, { handled: false });
+  }
+});
+
+window.addEventListener("unhandledrejection", (event) => {
+  const error =
+    event.reason instanceof Error
+      ? event.reason
+      : new Error(String(event.reason));
+
+  if (shouldIgnoreBrowserError(error)) return;
+  captureException(error, { handled: false });
+});
+```
+
+#### 3. Load instrumentation before your app
+
+```typescript
+import "./instrumentation.ts";
+import "./main.tsx";
+```
+
+#### 4. Capture handled errors in your code
+
+```typescript
+import { captureException } from "./instrumentation.ts";
+
+class CheckoutError extends Error {
+  fingerprint = ["checkout-failed", "submit-order"];
+
+  constructor(message: string) {
+    super(message);
+    this.name = "CheckoutError";
+  }
+}
+
+async function submitOrder(payload: unknown) {
+  try {
+    await fetch("/api/orders", {
+      method: "POST",
+      body: JSON.stringify(payload),
+      headers: { "content-type": "application/json" },
+    });
+  } catch (error) {
+    captureException(
+      error instanceof CheckoutError
+        ? error
+        : new CheckoutError("checkout request failed"),
+      {
+        handled: true,
+        tags: { route: "/checkout" },
+      },
+    );
+    throw error;
+  }
+}
 ```
 
 ## What the SDK does under the hood
