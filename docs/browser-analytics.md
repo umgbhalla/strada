@@ -250,24 +250,36 @@ span: documentLoad "/"             [0ms -> 1240ms]
 
 This is already Core Web Vitals territory. You can see slow resource loads and blocking API calls per pageview without writing a line of instrumentation code.
 
-### SPA navigation (manual, framework-specific)
+### SPA navigation (automatic, framework-agnostic)
 
-SPA route changes are NOT auto-instrumented because they don't trigger actual HTTP requests. The Strada SDK provides a router integration:
+SPA route changes are **auto-detected** via the browser's [Navigation API](https://developer.mozilla.org/en-US/docs/Web/API/Navigation_API). The SDK registers a single `navigate` listener on `initStrada()` that fires on every client-side navigation regardless of framework — Next.js App Router, React Router, TanStack Router, Vue Router, SvelteKit, and any other SPA router.
 
-```typescript
-// Next.js (App Router)
-import { StradaNextPlugin } from '@strada/browser/next'
-
-// React Router
-import { StradaRouterPlugin } from '@strada/browser/react-router'
+```
+navigation.addEventListener('navigate', ...) // fires on every SPA route change
 ```
 
-Under the hood these hooks call:
+No framework plugins or manual calls needed. The listener:
+- Ends the current pageview span
+- Starts a new pageview span for the new path
+- Skips cross-origin navigations, reloads, and hash-only changes
+
+Each navigation span carries two extra attributes:
+
+| Span attribute | Values | Description |
+|---|---|---|
+| `navigation.type` | `"push"`, `"replace"`, `"traverse"` | How the navigation was triggered |
+| `navigation.user_initiated` | `true` / `false` | Whether the user clicked a link vs programmatic nav |
+
+**Browser support:** Navigation API is Baseline since January 2026 (Chrome, Edge, Firefox, Safari). For older browsers, the initial pageview span still works; SPA navigations simply won't cycle the span.
+
+If you need to manually trigger a pageview cycle (e.g. for custom routing logic not using the History API), the lower-level API is still available:
 
 ```typescript
+import { startPageSpan, endCurrentPageSpan } from '@strada.sh/sdk/browser'
+
 // on route change
-stradaSDK.endCurrentPageSpan()
-stradaSDK.startPageSpan(newPath)
+endCurrentPageSpan()
+startPageSpan(newPath)
 ```
 
 ---

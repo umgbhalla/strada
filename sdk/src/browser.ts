@@ -233,6 +233,7 @@ let _currentPageviewSpan: ApiSpan | undefined;
 let _errorListener: ((event: ErrorEvent) => void) | undefined;
 let _rejectionListener: ((event: PromiseRejectionEvent) => void) | undefined;
 let _visibilityListener: (() => void) | undefined;
+let _navigateListener: ((event: NavigateEvent) => void) | undefined;
 
 // ---------------------------------------------------------------------------
 // Init
@@ -364,6 +365,32 @@ export function initStrada(options: StradaOptions): void {
     }
   };
   document.addEventListener("visibilitychange", _visibilityListener);
+
+  // SPA navigation detection via the Navigation API.
+  // Fires on every client-side navigation (pushState, replaceState, back/forward)
+  // regardless of framework (Next.js, React Router, Vue Router, etc.).
+  // Baseline across Chrome, Edge, Firefox, Safari since Jan 2026.
+  if (typeof navigation !== "undefined" && "addEventListener" in navigation) {
+    _navigateListener = (event: NavigateEvent) => {
+      // Skip cross-origin navigations, downloads, form submissions
+      if (!event.canIntercept) return;
+      // Skip reloads (same page, no URL change)
+      if (event.navigationType === "reload") return;
+
+      const dest = new URL(event.destination.url);
+      const currentPath = window.location.pathname + window.location.search;
+      const newPath = dest.pathname + dest.search;
+      // Skip if path+query didn't actually change (e.g. hash-only change)
+      if (newPath === currentPath) return;
+
+      endCurrentPageSpan();
+      startPageSpan(dest.pathname, {
+        "navigation.type": event.navigationType, // "push" | "replace" | "traverse"
+        "navigation.user_initiated": event.userInitiated,
+      });
+    };
+    navigation.addEventListener("navigate", _navigateListener);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -372,10 +399,16 @@ export function initStrada(options: StradaOptions): void {
 
 /**
  * Start a new pageview span. Ends the previous one if still active.
- * Called automatically on initStrada() for the initial page, and by
- * SPA router plugins on navigation.
+ * Called automatically on initStrada() for the initial page, and on
+ * SPA navigations detected via the Navigation API.
+ *
+ * @param path - Override pathname (defaults to window.location.pathname)
+ * @param extraAttributes - Additional attributes for the span (e.g. navigation.type)
  */
-export function startPageSpan(path?: string): void {
+export function startPageSpan(
+  path?: string,
+  extraAttributes?: Record<string, string | boolean>,
+): void {
   endCurrentPageSpan();
 
   const tracer = trace.getTracer("strada-web");
@@ -386,6 +419,7 @@ export function startPageSpan(path?: string): void {
       "url.query": window.location.search,
       "url.full": window.location.href,
       ...(document.referrer ? { "http.request.header.referer": document.referrer } : {}),
+      ...extraAttributes,
     },
   });
 }
@@ -522,6 +556,10 @@ export async function shutdown(): Promise<void> {
   if (_visibilityListener) {
     document.removeEventListener("visibilitychange", _visibilityListener);
     _visibilityListener = undefined;
+  }
+  if (_navigateListener && typeof navigation !== "undefined") {
+    navigation.removeEventListener("navigate", _navigateListener);
+    _navigateListener = undefined;
   }
   endCurrentPageSpan();
   await _tracerProvider?.shutdown();
