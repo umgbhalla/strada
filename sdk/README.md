@@ -2,7 +2,7 @@
 
 **OpenTelemetry-first error tracking, tracing, logs, metrics, and browser analytics for Strada.**
 
-Import from `@strada.sh/sdk` in every runtime. The package uses export conditions so browsers get the browser runtime and servers get the Node runtime.
+Import from `@strada.sh/sdk` in every runtime. The package uses export conditions so browsers get the browser runtime, Cloudflare Workers get the Workers runtime, and servers get the Node runtime.
 
 ```ts
 import { initStrada, captureException, trace } from "@strada.sh/sdk"
@@ -322,14 +322,88 @@ Important detail: `session.id` is the stable browser session identifier. It is *
 
 The collector later extracts these into the `otel_errors` table for grouping and issue views.
 
+## Cloudflare Workers
+
+The Workers runtime is a minimal, opt-in only entry. No automatic instrumentation, no automatic spans. The SDK only sends data when you explicitly call `captureException()`, `trace.getTracer()`, or `logs.getLogger()`. If none of these are called, zero HTTP requests are made to the collector.
+
+This keeps the bundle small and avoids the per-request billing overhead of automatic instrumentation. For automatic instrumentation of KV, D1, Durable Objects, fetch, etc., use Cloudflare's built-in tracing instead (see below).
+
+```ts
+import { initStrada, captureException } from "@strada.sh/sdk"
+
+export default {
+  fetch(request, env) {
+    initStrada({ projectId: env.STRADA_PROJECT_ID, service: "api" })
+
+    try {
+      return handleRequest(request)
+    } catch (err) {
+      captureException(err)
+      return new Response("error", { status: 500 })
+    }
+  },
+} satisfies ExportedHandler<Env>
+```
+
+Same API as Node. `initStrada()` is safe to call on every request (no-op after the first call). Config comes from `env` bindings since Workers don't have `process.env`.
+
+Manual spans and logs work the same way:
+
+```ts
+import { initStrada, trace, logs, SeverityNumber } from "@strada.sh/sdk"
+
+export default {
+  fetch(request, env) {
+    initStrada({ projectId: env.STRADA_PROJECT_ID, service: "api" })
+
+    const tracer = trace.getTracer("checkout")
+    return tracer.startActiveSpan("process-order", async (span) => {
+      span.setAttribute("order.id", "ord_123")
+      // ...
+      span.end()
+      return new Response("ok")
+    })
+  },
+} satisfies ExportedHandler<Env>
+```
+
+No `flush()`, no `ctx.waitUntil()`, no special imports. The SDK auto-flushes via `waitUntil` from `cloudflare:workers` whenever telemetry is emitted. If nothing is emitted, zero HTTP requests.
+
+### Cloudflare built-in tracing (automatic instrumentation)
+
+For automatic instrumentation, use Cloudflare's built-in tracing. It instruments at the runtime level (KV, D1, Durable Objects, fetch, handler invocations) without any SDK overhead:
+
+```jsonc
+// wrangler.jsonc
+{
+  "observability": {
+    "traces": { "enabled": true }
+  }
+}
+```
+
+This works alongside the Strada SDK. Use built-in tracing for automatic spans, and the SDK for error capture, custom events, and manual spans.
+
+### Workers requirements
+
+The Workers entry requires the `nodejs_compat` compatibility flag for `AsyncLocalStorage` context propagation:
+
+```jsonc
+// wrangler.jsonc
+{
+  "compatibility_flags": ["nodejs_compat"]
+}
+```
+
 ## Under the hood
 
 ## Root import uses conditions
 
 `@strada.sh/sdk` resolves differently by runtime:
 
-- **browser bundlers** get the browser implementation
-- **Node.js / Bun / Deno** get the server implementation
+- **browser bundlers** get the browser implementation (WebTracerProvider, session management, pageview spans)
+- **Cloudflare Workers** get the Workers implementation (BasicTracerProvider, auto-flush via waitUntil, no automatic spans)
+- **Node.js / Bun / Deno** get the server implementation (NodeTracerProvider, process handlers, resource detection)
 
 That means the same import path can configure different OTel SDKs without user changes.
 
@@ -342,6 +416,8 @@ By default the SDK uses **OTLP HTTP JSON exporters** for every signal:
 - **Node traces** → `OTLPTraceExporter` to `/v1/traces`
 - **Node logs** → `OTLPLogExporter` to `/v1/logs`
 - **Node metrics** → `OTLPMetricExporter` to `/v1/metrics`
+- **Workers traces** → `OTLPTraceExporter` to `/v1/traces` (auto-flushed via waitUntil)
+- **Workers logs** → `OTLPLogExporter` to `/v1/logs` (auto-flushed via waitUntil)
 
 You can tune batching and cadence with `telemetry` in `initStrada()`:
 
@@ -409,6 +485,13 @@ On **Node.js**:
 - `SIGTERM` / `SIGINT` call `shutdown()`
 
 - `telemetry.metrics` is currently only meaningful on runtimes where Strada configures a metric exporter, which today is Node.js
+
+On **Cloudflare Workers**:
+
+- Auto-flush via `waitUntil` from `cloudflare:workers` whenever telemetry is emitted
+- Multiple span ends / log emits in the same microtask share one flush
+- If no telemetry is emitted, zero HTTP requests are made
+- `flush()` is available for manual use but rarely needed
 
 On the **browser**:
 
@@ -510,6 +593,19 @@ The server build sets up:
 - global `uncaughtException` and `unhandledRejection` handlers
 - `flush()` and `shutdown()` helpers for graceful process exit
 
+## Workers runtime
+
+The Workers build is minimal and opt-in only:
+
+- `BasicTracerProvider` for traces with `AsyncLocalStorage` context manager (requires `nodejs_compat`)
+- `LoggerProvider` for logs
+- OTLP HTTP exporters for traces and logs
+- W3C Baggage extraction with `BaggageSpanProcessor` and `BaggageLogProcessor`
+- Auto-flush via `waitUntil` from `cloudflare:workers` (no manual flush needed)
+- `cloud.provider: cloudflare` and `cloud.platform: cloudflare.workers` resource attributes
+- No automatic spans, no metrics provider, no process handlers
+- Zero HTTP requests to the collector unless user code creates telemetry
+
 ## Auto-instrumentation (optional)
 
 The SDK does **not** include auto-instrumentation by default. It only sets up providers, exporters, and error handlers. If you want automatic spans for HTTP requests, database queries, or browser interactions, install the OTel auto-instrumentation packages separately.
@@ -568,9 +664,24 @@ This adds spans for:
 - **document load** — spans for DNS, TCP, TLS, request, response, DOM processing, and load event timing
 - **user interaction** — spans for click events on interactive elements
 
+### Cloudflare Workers auto-instrumentation
+
+Workers use Cloudflare's **built-in tracing** instead of a JS instrumentation package. It instruments at the runtime level (inside workerd), so it has zero bundle size impact and zero per-request overhead:
+
+```jsonc
+// wrangler.jsonc
+{
+  "observability": {
+    "traces": { "enabled": true }
+  }
+}
+```
+
+This auto-instruments KV, D1, Durable Objects, fetch, handler invocations, and more. It supports OTLP export to external backends. Use it alongside the Strada SDK: built-in tracing for automatic spans, the SDK for error capture and custom events.
+
 ### Why it's not built in
 
-Auto-instrumentation packages are large. The node metapackage pulls in ~30 instrumentation libraries, AWS/GCP resource detectors, gRPC bindings, and polyfills, adding **~2MB** to the bundle. The browser package adds **~70kB**. By keeping them opt-in, the SDK stays lightweight for users who only need error tracking, custom events, or manual tracing.
+Auto-instrumentation packages are large. The Node metapackage pulls in ~30 instrumentation libraries, AWS/GCP resource detectors, gRPC bindings, and polyfills, adding **~2MB** to the bundle. The browser package adds **~70kB**. The Workers entry has **no auto-instrumentation at all** since Cloudflare's built-in tracing handles it at the runtime level with zero bundle cost. By keeping auto-instrumentation opt-in, the SDK stays lightweight for users who only need error tracking, custom events, or manual tracing.
 
 ## Error handling semantics
 
@@ -604,8 +715,8 @@ That excludes ordinary logs that do not have `event.name`.
 
 ## Important details
 
-- **Import from `@strada.sh/sdk`**. You usually do not need `/node` or `/browser`
-- **Initialize early**. Especially on Node.js, do it before loading the rest of the app
+- **Import from `@strada.sh/sdk`**. You usually do not need `/node` or `/browser`. Workers resolve automatically via the `workerd` export condition
+- **Initialize early**. On Node.js, do it before loading the rest of the app. On Workers, call it at the top of your handler (safe to call every request)
 - **Custom events are logs**, not spans
 - **Exceptions are logs first**. The collector extracts them into `otel_errors`
 - **Browser sessions use `session.id`**, not a single session-wide trace

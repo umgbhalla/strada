@@ -1,20 +1,27 @@
 /**
  * Cloudflare Workers runtime entry for @strada.sh/sdk.
  *
+ * Minimal, opt-in only. No automatic instrumentation, no automatic spans.
+ * The SDK only sends data to the collector when user code explicitly calls
+ * captureException(), trace.getTracer().startSpan(), or logs.getLogger().emit().
+ * If none of these are called, zero HTTP requests are made.
+ *
+ * For automatic instrumentation of KV, D1, DO, fetch, etc., use Cloudflare's
+ * built-in tracing instead: { "observability": { "traces": { "enabled": true } } }
+ * in wrangler.jsonc. It instruments at the runtime level, better than any
+ * userland SDK can.
+ *
  * Uses BasicTracerProvider from sdk-trace-base (no Node/browser dependencies)
  * with AsyncLocalStorage for context propagation (requires nodejs_compat).
- *
- * Primary API: instrument() wraps an ExportedHandler with tracing.
- * Each request gets a root span, telemetry is flushed via ctx.waitUntil().
- *
- * Also exports initStrada() for manual setup without the instrument() wrapper,
- * and instrumentDO() for wrapping Durable Object classes.
+ * Auto-flushes via `waitUntil` from `cloudflare:workers` so the user never
+ * needs to call flush() or pass ctx around.
  *
  * Env type comes from wrangler types (worker-configuration.d.ts), never define
  * custom Env interfaces. See the cloudflare-workers skill for conventions.
  */
 
 import { AsyncLocalStorage } from "node:async_hooks";
+import { waitUntil } from "cloudflare:workers";
 
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
 import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-http";
@@ -35,8 +42,6 @@ import {
   context as otelContext,
   propagation,
   trace,
-  SpanKind,
-  SpanStatusCode,
   ROOT_CONTEXT,
 } from "@opentelemetry/api";
 import type { Context, ContextManager } from "@opentelemetry/api";
@@ -47,7 +52,6 @@ import {
 } from "@opentelemetry/core";
 
 import {
-  type BatchSpanProcessorBrowserConfig,
   type StradaOptions,
   type CaptureExceptionOptions,
   type StradaTelemetryOptions,
@@ -99,9 +103,6 @@ export {
 // ---------------------------------------------------------------------------
 // Context manager for Workers (requires nodejs_compat)
 // ---------------------------------------------------------------------------
-// Workers support node:async_hooks AsyncLocalStorage via the nodejs_compat
-// compatibility flag. This gives us proper context propagation so nested
-// spans are linked correctly within a request.
 
 class WorkerContextManager implements ContextManager {
   private storage = new AsyncLocalStorage<Context>();
@@ -138,10 +139,76 @@ class WorkerContextManager implements ContextManager {
 }
 
 // ---------------------------------------------------------------------------
+// Auto-flush via waitUntil
+// ---------------------------------------------------------------------------
+// Debounced per-microtask: multiple span ends / log emits in the same tick
+// share one flush. If no telemetry is buffered, forceFlush resolves
+// immediately without making any HTTP requests.
+
+let _flushScheduled = false;
+
+function scheduleFlush(): void {
+  if (_flushScheduled) return;
+  _flushScheduled = true;
+  waitUntil(
+    Promise.resolve().then(async () => {
+      _flushScheduled = false;
+      await Promise.all([
+        _tracerProvider?.forceFlush(),
+        _loggerProvider?.forceFlush(),
+      ]);
+    }),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Auto-flush span processor
+// ---------------------------------------------------------------------------
+// Triggers scheduleFlush() when a span ends so manual spans are exported
+// without the user needing to call flush() or pass ctx.waitUntil().
+
+class AutoFlushSpanProcessor implements SpanProcessor {
+  onStart(): void {}
+
+  onEnd(): void {
+    scheduleFlush();
+  }
+
+  forceFlush(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  shutdown(): Promise<void> {
+    return Promise.resolve();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Auto-flush log processor
+// ---------------------------------------------------------------------------
+// Wraps another LogRecordProcessor and triggers scheduleFlush() after every
+// log emit (captureException, manual logger.emit, etc.).
+
+class AutoFlushLogProcessor implements LogRecordProcessor {
+  constructor(private readonly inner: LogRecordProcessor) {}
+
+  onEmit(...args: Parameters<LogRecordProcessor["onEmit"]>): void {
+    this.inner.onEmit(...args);
+    scheduleFlush();
+  }
+
+  forceFlush(): Promise<void> {
+    return this.inner.forceFlush();
+  }
+
+  shutdown(): Promise<void> {
+    return this.inner.shutdown();
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Baggage-extracting span processor (same as node.ts)
 // ---------------------------------------------------------------------------
-// Reads session.id and user.id from incoming W3C Baggage (propagated by the
-// browser SDK) and sets them as span attributes on every backend span.
 
 class BaggageSpanProcessor implements SpanProcessor {
   onStart(span: Span): void {
@@ -169,8 +236,6 @@ class BaggageSpanProcessor implements SpanProcessor {
 // ---------------------------------------------------------------------------
 // Baggage-extracting log processor (same as node.ts)
 // ---------------------------------------------------------------------------
-// Wraps another LogRecordProcessor and injects session.id and user.id from
-// incoming W3C Baggage into every log record.
 
 class BaggageLogProcessor implements LogRecordProcessor {
   constructor(private readonly inner: LogRecordProcessor) {}
@@ -206,24 +271,24 @@ let _tracerProvider: BasicTracerProvider | undefined;
 let _loggerProvider: LoggerProvider | undefined;
 let _logger: Logger | undefined;
 let _options: StradaOptions | undefined;
-let _coldStart = true;
-
 
 // ---------------------------------------------------------------------------
 // Init
 // ---------------------------------------------------------------------------
 
 /**
- * Initialize Strada for Cloudflare Workers. Called automatically by
- * instrument() on the first request. Can also be called manually.
+ * Initialize Strada for Cloudflare Workers. Call once per request (it's a
+ * no-op after the first call). Config typically comes from env bindings.
  *
  * Sets up:
  * - BasicTracerProvider with AsyncLocalStorage context manager
- * - BaggageSpanProcessor + BatchSpanProcessor (HTTP/JSON)
- * - LoggerProvider with BaggageLogProcessor + BatchLogRecordProcessor
+ * - BaggageSpanProcessor for browser-to-server context propagation
+ * - BatchSpanProcessor + AutoFlushSpanProcessor for automatic export
+ * - LoggerProvider with BaggageLogProcessor + AutoFlushLogProcessor
  * - W3C TraceContext + Baggage propagation
  *
- * Safe to call multiple times; subsequent calls are no-ops.
+ * No automatic spans or instrumentation. The SDK only sends data when
+ * you explicitly call captureException(), trace.getTracer(), or logs.getLogger().
  */
 export function initStrada(options: StradaOptions): void {
   if (_tracerProvider) return;
@@ -243,20 +308,22 @@ export function initStrada(options: StradaOptions): void {
 
   const endpoint = resolveEndpoint(options);
 
-  // Logger provider for logs and error capture
+  // Logger provider: baggage extraction -> batch export -> auto-flush
   const logExporter = new OTLPLogExporter({
     url: `${endpoint}/v1/logs`,
   });
   _loggerProvider = new LoggerProvider({
     resource,
     processors: [
-      new BaggageLogProcessor(new BatchLogRecordProcessor(logExporter)),
+      new AutoFlushLogProcessor(
+        new BaggageLogProcessor(new BatchLogRecordProcessor(logExporter)),
+      ),
     ],
   });
   logs.setGlobalLoggerProvider(_loggerProvider);
   _logger = _loggerProvider.getLogger("strada");
 
-  // Tracer provider with BaggageSpanProcessor for browser context extraction
+  // Tracer provider: baggage extraction + batch export + auto-flush
   _tracerProvider = new BasicTracerProvider({
     resource,
     spanProcessors: [
@@ -264,6 +331,7 @@ export function initStrada(options: StradaOptions): void {
       new BatchSpanProcessor(
         new OTLPTraceExporter({ url: `${endpoint}/v1/traces` }),
       ),
+      new AutoFlushSpanProcessor(),
     ],
   });
 
@@ -281,270 +349,12 @@ export function initStrada(options: StradaOptions): void {
 }
 
 // ---------------------------------------------------------------------------
-// instrument() — wrap an ExportedHandler with tracing
-// ---------------------------------------------------------------------------
-// The input object has a `strada` key for config plus standard handler methods
-// (fetch, scheduled, queue, email, etc.). The return strips `strada` and
-// returns a plain ExportedHandler-compatible object.
-//
-// Usage:
-//   export default instrument({
-//     strada: (env) => ({ projectId: env.STRADA_PROJECT_ID, service: "api" }),
-//     fetch(request, env, ctx) { return new Response("ok") },
-//   }) satisfies ExportedHandler<Env>
-
-// Minimal type for ctx.waitUntil() so we don't need @cloudflare/workers-types
-interface HasWaitUntil {
-  waitUntil(promise: Promise<unknown>): void;
-}
-
-function resolveConfig(
-  config: StradaOptions | ((env: any) => StradaOptions),
-  env: unknown,
-): StradaOptions {
-  return typeof config === "function" ? config(env) : config;
-}
-
-
-
-export function instrument<H extends Record<string, any>>(
-  input: H & { strada: StradaOptions | ((env: any) => StradaOptions) },
-): Omit<H, "strada"> {
-  const stradaConfig = input.strada;
-  const result: Record<string, any> = {};
-
-  for (const key of Object.keys(input)) {
-    if (key === "strada") continue;
-    const value = input[key];
-
-    if (typeof value !== "function") {
-      result[key] = value;
-      continue;
-    }
-
-    if (key === "fetch") {
-      result.fetch = createFetchHandler(value, stradaConfig);
-    } else if (key === "scheduled") {
-      result.scheduled = createScheduledHandler(value, stradaConfig);
-    } else if (key === "queue") {
-      result.queue = createQueueHandler(value, stradaConfig);
-    } else {
-      // email, tail, trace, test, etc.: just init strada and pass through
-      result[key] = createPassthroughHandler(value, stradaConfig);
-    }
-  }
-
-  return result as Omit<H, "strada">;
-}
-
-function createFetchHandler(
-  original: Function,
-  stradaConfig: StradaOptions | ((env: any) => StradaOptions),
-) {
-  return async (request: Request, env: unknown, ctx: HasWaitUntil) => {
-    initStrada(resolveConfig(stradaConfig, env));
-
-    const tracer = trace.getTracer("strada");
-
-    // Extract trace context from incoming request headers (distributed tracing)
-    const parentContext = propagation.extract(
-      otelContext.active(),
-      request.headers,
-      {
-        get(headers, key) {
-          return headers.get(key) ?? undefined;
-        },
-        keys(headers) {
-          return [...headers.keys()];
-        },
-      },
-    );
-
-    const url = new URL(request.url);
-    const method = request.method.toUpperCase();
-
-    // Extract Cloudflare-specific metadata from request.cf
-    // Available on all plans: colo, country, asn, tlsVersion
-    // Available on Business/Enterprise: city, region, continent
-    const cf = (request as any).cf as Record<string, unknown> | undefined;
-    const cfAttrs: Record<string, string | number | boolean> = {};
-    if (cf) {
-      if (cf.colo) cfAttrs["cf.colo"] = String(cf.colo);
-      if (cf.country) cfAttrs["cf.country"] = String(cf.country);
-      if (cf.asn) cfAttrs["cf.asn"] = Number(cf.asn);
-      if (cf.tlsVersion) cfAttrs["cf.tls_version"] = String(cf.tlsVersion);
-      if (cf.city) cfAttrs["cf.city"] = String(cf.city);
-      if (cf.region) cfAttrs["cf.region"] = String(cf.region);
-      if (cf.continent) cfAttrs["cf.continent"] = String(cf.continent);
-      if (cf.httpProtocol) cfAttrs["network.protocol.version"] = String(cf.httpProtocol);
-    }
-
-    return tracer.startActiveSpan(
-      `${method} ${url.pathname}`,
-      {
-        kind: SpanKind.SERVER,
-        attributes: {
-          "http.request.method": method,
-          "url.path": url.pathname,
-          "url.query": url.search,
-          "url.full": url.href,
-          "server.address": url.host,
-          "cold_start": _coldStart,
-          ...cfAttrs,
-        },
-      },
-      parentContext,
-      async (span) => {
-        _coldStart = false;
-        try {
-          const response: Response = await original(request, env, ctx);
-          span.setAttribute("http.response.status_code", response.status);
-          if (response.status >= 500) {
-            span.setStatus({ code: SpanStatusCode.ERROR });
-          }
-          return response;
-        } catch (error) {
-          span.recordException(error as Error);
-          span.setStatus({ code: SpanStatusCode.ERROR });
-          throw error;
-        } finally {
-          span.end();
-          ctx.waitUntil(flush());
-        }
-      },
-    );
-  };
-}
-
-function createScheduledHandler(
-  original: Function,
-  stradaConfig: StradaOptions | ((env: any) => StradaOptions),
-) {
-  return async (controller: any, env: unknown, ctx: HasWaitUntil) => {
-    initStrada(resolveConfig(stradaConfig, env));
-
-    const tracer = trace.getTracer("strada");
-    return tracer.startActiveSpan(
-      "scheduled",
-      {
-        kind: SpanKind.INTERNAL,
-        attributes: {
-          "scheduled.cron": controller.cron,
-          "cold_start": _coldStart,
-        },
-      },
-      async (span) => {
-        _coldStart = false;
-        try {
-          await original(controller, env, ctx);
-        } catch (error) {
-          span.recordException(error as Error);
-          span.setStatus({ code: SpanStatusCode.ERROR });
-          throw error;
-        } finally {
-          span.end();
-          ctx.waitUntil(flush());
-        }
-      },
-    );
-  };
-}
-
-function createQueueHandler(
-  original: Function,
-  stradaConfig: StradaOptions | ((env: any) => StradaOptions),
-) {
-  return async (batch: any, env: unknown, ctx: HasWaitUntil) => {
-    initStrada(resolveConfig(stradaConfig, env));
-
-    const tracer = trace.getTracer("strada");
-    return tracer.startActiveSpan(
-      "queue",
-      {
-        kind: SpanKind.CONSUMER,
-        attributes: {
-          "messaging.batch.message_count": batch.messages?.length,
-          "cold_start": _coldStart,
-        },
-      },
-      async (span) => {
-        _coldStart = false;
-        try {
-          await original(batch, env, ctx);
-        } catch (error) {
-          span.recordException(error as Error);
-          span.setStatus({ code: SpanStatusCode.ERROR });
-          throw error;
-        } finally {
-          span.end();
-          ctx.waitUntil(flush());
-        }
-      },
-    );
-  };
-}
-
-function createPassthroughHandler(
-  original: Function,
-  stradaConfig: StradaOptions | ((env: any) => StradaOptions),
-) {
-  return async (...args: any[]) => {
-    // Convention: env is the second arg, ctx is the third
-    const env = args[1];
-    const ctx = args[2] as HasWaitUntil | undefined;
-
-    initStrada(resolveConfig(stradaConfig, env));
-
-    try {
-      return await original(...args);
-    } finally {
-      if (ctx?.waitUntil) ctx.waitUntil(flush());
-    }
-  };
-}
-
-// ---------------------------------------------------------------------------
-// instrumentDO() — wrap a Durable Object class with tracing
-// ---------------------------------------------------------------------------
-// Initializes Strada on DO construction so trace.getTracer(),
-// captureException(), etc. work inside DO methods. Does not auto-wrap
-// individual methods; use manual spans or captureException() inside
-// your RPC methods.
-//
-// Usage:
-//   class MyStore extends DurableObject<Env> {
-//     async handleRequest(request: Request) { return new Response("ok") }
-//   }
-//
-//   export const InstrumentedStore = instrumentDO({
-//     strada: (env) => ({ projectId: env.STRADA_PROJECT_ID, service: "my-store" }),
-//     DO: MyStore,
-//   })
-
-export function instrumentDO<T extends new (...args: any[]) => any>(input: {
-  strada: StradaOptions | ((env: any) => StradaOptions);
-  DO: T;
-}): T {
-  const { strada: stradaConfig, DO } = input;
-
-  // Create a subclass that initializes Strada in the constructor.
-  // The runtime type is compatible; the cast preserves the original type
-  // so Cloudflare can construct it normally and RPC methods remain visible.
-  return class extends (DO as any) {
-    constructor(ctx: any, env: any) {
-      super(ctx, env);
-      initStrada(resolveConfig(stradaConfig, env));
-    }
-  } as unknown as T;
-}
-
-// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
 /**
  * Capture an exception and send it to Strada as an OTel log record.
- * Same API as the Node and browser entries.
+ * Auto-flushes via waitUntil; no need to call flush() or pass ctx.
  */
 export function captureException(
   error: unknown,
@@ -566,6 +376,7 @@ export function captureException(
       body: prepared.message,
       attributes,
     });
+    // Auto-flush is handled by AutoFlushLogProcessor
   } else {
     console.warn(
       "[@strada.sh/sdk] captureException called before initStrada(). Error was not sent.",
@@ -575,15 +386,9 @@ export function captureException(
 
 /**
  * Flush all buffered telemetry (traces and logs).
- * Called automatically by instrument() via ctx.waitUntil() after each request.
- * Call manually if using initStrada() without instrument().
- *
- * This sends 2 HTTP requests to the collector (one for traces, one for logs).
- * We flush per-request because Workers isolates can be evicted at any time
- * between requests, and module-level state (including the BatchSpanProcessor's
- * internal buffer) is not guaranteed to persist. Batching across requests
- * would risk losing spans if the isolate dies before the timer fires.
- * This is the same approach used by @microlabs/otel-cf-workers.
+ * Usually not needed since the Workers entry auto-flushes via waitUntil
+ * when telemetry is emitted. Call this only if you need to guarantee
+ * delivery at a specific point.
  */
 export async function flush(): Promise<void> {
   await Promise.all([
