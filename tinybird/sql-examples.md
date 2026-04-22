@@ -13,12 +13,12 @@ Content-Type: text/plain
 SELECT ... FORMAT JSON
 ```
 
-The JWT's `filter` field enforces tenant isolation automatically on every query.
-You do NOT need to add `WHERE TenantId = '...'` — Tinybird appends it server-side
-based on the JWT's filter scope. Since `TenantId` is first in every table's sorting key,
-ClickHouse skips all other tenants' data at the granule level.
+The JWT's `filter` field enforces project isolation automatically on every query.
+You do NOT need to add `WHERE ProjectId = '...'`. Tinybird appends it server-side
+based on the JWT's filter scope. Since `ProjectId` is first in every table's sorting key,
+ClickHouse skips all other projects' data at the granule level.
 
-To filter by service (project) within a tenant, add `WHERE ServiceName = '...'` to any query.
+To filter by service within a project, add `WHERE ServiceName = '...'` to any query.
 
 ## Logs
 

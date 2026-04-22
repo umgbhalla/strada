@@ -7,11 +7,11 @@
 // converts to PascalCase columns on ingest. For ClickHouse, the field-mapping module
 // remaps keys before INSERT.
 //
-// tenant_id is a Strada addition for multi-tenancy (not part of the OTel standard).
+// project_id is a Strada addition for project isolation (not part of the OTel standard).
 
-// Matches the OTel ClickHouse traces table schema, with tenant_id added.
+// Matches the OTel ClickHouse traces table schema, with project_id added.
 export interface OtelTraceRow {
-  tenant_id: string;
+  project_id: string;
   resource_schema_url: string;
   resource_attributes: Record<string, string>;
   service_name: string;
@@ -41,9 +41,9 @@ export interface OtelTraceRow {
   links_attributes: Record<string, string>[];
 }
 
-// Matches the OTel ClickHouse logs table schema, with tenant_id added.
+// Matches the OTel ClickHouse logs table schema, with project_id added.
 export interface OtelLogRow {
-  tenant_id: string;
+  project_id: string;
   resource_schema_url: string;
   resource_attributes: Record<string, string>;
   service_name: string;
@@ -66,7 +66,7 @@ export interface OtelLogRow {
 // traces (span events named "exception"). Written to the otel_errors table.
 // This is a Strada-specific table (not part of the OTel ClickHouse exporter).
 export interface OtelErrorRow {
-  tenant_id: string;
+  project_id: string;
   timestamp: string; // RFC3339Nano
   trace_id: string;
   span_id: string;
@@ -89,9 +89,9 @@ export interface OtelErrorRow {
   source_signal: string; // "log" or "trace"
 }
 
-// Matches the OTel ClickHouse metrics base schema, with tenant_id added.
+// Matches the OTel ClickHouse metrics base schema, with project_id added.
 interface OtelBaseMetricRow {
-  tenant_id: string;
+  project_id: string;
   resource_schema_url: string;
   resource_attributes: Record<string, string>;
   service_name: string;

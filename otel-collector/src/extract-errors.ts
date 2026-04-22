@@ -18,7 +18,7 @@ import { convertAttributes, getServiceName, nanosToRFC3339, anyValueToString } f
 
 // ─── Public API ───
 
-export function extractErrorsFromLogs(body: ExportLogsServiceRequest, tenantId: string): string {
+export function extractErrorsFromLogs(body: ExportLogsServiceRequest, projectId: string): string {
   const rows: string[] = [];
 
   for (const rl of body.resourceLogs ?? []) {
@@ -43,7 +43,7 @@ export function extractErrorsFromLogs(body: ExportLogsServiceRequest, tenantId: 
           log.timeUnixNano && log.timeUnixNano !== "0" ? log.timeUnixNano : (log.observedTimeUnixNano ?? "0");
 
         const row = buildErrorRow({
-          tenantId,
+          projectId,
           timestamp: nanosToRFC3339(timestamp),
           traceId: log.traceId ?? "",
           spanId: log.spanId ?? "",
@@ -67,7 +67,7 @@ export function extractErrorsFromLogs(body: ExportLogsServiceRequest, tenantId: 
   return rows.length > 0 ? rows.join("\n") + "\n" : "";
 }
 
-export function extractErrorsFromTraces(body: ExportTraceServiceRequest, tenantId: string): string {
+export function extractErrorsFromTraces(body: ExportTraceServiceRequest, projectId: string): string {
   const rows: string[] = [];
 
   for (const rs of body.resourceSpans ?? []) {
@@ -91,7 +91,7 @@ export function extractErrorsFromTraces(body: ExportTraceServiceRequest, tenantI
           if (!exceptionType && !exceptionMessage) continue;
 
           const row = buildErrorRow({
-            tenantId,
+            projectId,
             timestamp: nanosToRFC3339(event.timeUnixNano),
             traceId: span.traceId,
             spanId: span.spanId,
@@ -227,7 +227,7 @@ function getResourceAttr(kvs: KeyValue[] | undefined, key: string): string {
 }
 
 interface BuildErrorRowParams {
-  tenantId: string;
+  projectId: string;
   timestamp: string;
   traceId: string;
   spanId: string;
@@ -245,7 +245,7 @@ interface BuildErrorRowParams {
 
 function buildErrorRow(params: BuildErrorRowParams): OtelErrorRow {
   const {
-    tenantId,
+    projectId,
     timestamp,
     traceId,
     spanId,
@@ -301,7 +301,7 @@ function buildErrorRow(params: BuildErrorRowParams): OtelErrorRow {
   }
 
   return {
-    tenant_id: tenantId,
+    project_id: projectId,
     timestamp,
     trace_id: traceId,
     span_id: spanId,

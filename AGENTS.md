@@ -2,24 +2,28 @@
 
 This repo uses **pnpm** as its package manager. Always use `pnpm` (not bun/npm/yarn) for install, run, and publish commands.
 
-Open-source OpenTelemetry observability stack on top of Tinybird. Goal is to reimplement the core value of Sentry (error tracking, tracing, logs, metrics) but based on the OpenTelemetry standard instead of Sentry's proprietary bloated SDK. Users send OTEL data via standard SDKs, we store it in Tinybird, they query it with SQL.
+Open-source OpenTelemetry observability platform. Reimplements the core value of Sentry (error tracking, tracing, logs, metrics) based on the OpenTelemetry standard instead of proprietary bloated SDKs. Users send OTel data via standard SDKs, Strada stores it in their ClickHouse database (Tinybird as first-class support), and they query it with SQL.
 
-we use the standard OTEL schema for clickhouse: https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/exporter/clickhouseexporter/internal/sqltemplates/logs_json_table.sql
+Each user gets their own ClickHouse database. There are no shared tenants. Within a database, data is partitioned by **project** (`ProjectId`). A user can have multiple projects (e.g. "frontend", "api", "worker") each sending data to their own ingest endpoint. Projects get scoped tokens for security.
 
-see other files in sqltemplates as well for other kinds of tables
+Strada is a Cloudflare-based infrastructure that wraps the user's database and handles: authentication, team invites, ingestion, a UI for browsing logs/errors/spans, email alerts, token generation, and a CLI to query the data.
+
+We use the standard OTel schema for ClickHouse: https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/exporter/clickhouseexporter/internal/sqltemplates/logs_json_table.sql
+
+See other files in sqltemplates as well for other kinds of tables.
 
 ## Architecture
 
 - **otel-collector**: Cloudflare Worker (Spiceflow) that receives OTLP HTTP/JSON and forwards to either Tinybird Events API or ClickHouse HTTP interface as NDJSON. Backend is selected by environment variables: set `TINYBIRD_ENDPOINT` + `TINYBIRD_TOKEN` for Tinybird, or `CLICKHOUSE_URL` for direct ClickHouse. No separate adapter needed for self-hosted ClickHouse.
 - **tinybird/**: Tinybird project with datasource definitions and materialized views, deployed with `tb deploy`. Only used when the Tinybird backend is configured.
-- **Multi-tenancy**: hostname-based tenant extraction. Each tenant gets `{tenant}-ingest.strada.sh`. Self-hosted users use a plain `ingest.{domain}` with empty tenant_id
-- **Query layer**: Tinybird Query API (`/v0/sql`) with JWT row-level filtering, NOT the ClickHouse HTTP interface (which doesn't support JWTs or row filtering). No pipe endpoints — all queries are raw SQL
+- **Project isolation**: hostname-based project extraction. Each project gets `{project}-ingest.strada.sh`. Self-hosted users use a plain `ingest.{domain}` with empty project_id.
+- **Query layer**: Tinybird Query API (`/v0/sql`) with JWT row-level filtering, NOT the ClickHouse HTTP interface (which doesn't support JWTs or row filtering). No pipe endpoints; all queries are raw SQL.
 
 ### Backend selection
 
 The otel-collector supports two storage backends, configured via env vars:
 
-**Tinybird** (hosted):
+**Tinybird** (first-class, recommended):
 
 ```
 TINYBIRD_ENDPOINT=https://api.us-east.aws.tinybird.co
@@ -37,41 +41,41 @@ CLICKHOUSE_PASSWORD=secret
 
 When using ClickHouse backend, the collector remaps NDJSON keys from snake_case to PascalCase (the OTel ClickHouse standard) before INSERT. The field mapping logic lives in `otel-collector/src/field-mapping.ts`.
 
-The ClickHouse schema (`clickhouse.sql`) has **no `TenantId` column** — self-hosted users run single-tenant. Multi-tenancy is only used in the hosted Tinybird deployment. The field mapping strips `tenant_id` from NDJSON before INSERT.
+The ClickHouse schema (`clickhouse.sql`) has **no `ProjectId` column**. Self-hosted users run a single project per database. Project isolation is only used in the hosted Tinybird deployment. The field mapping strips `project_id` from NDJSON before INSERT.
 
 ### Environment variables
 
-The collector reads config from `process.env` (not `import { env } from 'cloudflare:workers'`). This makes the codebase portable — runs on Cloudflare Workers (with `nodejs_compat_v2`), Node.js, or Bun without changes.
+The collector reads config from `process.env` (not `import { env } from 'cloudflare:workers'`). This makes the codebase portable; runs on Cloudflare Workers (with `nodejs_compat_v2`), Node.js, or Bun without changes.
 
 ### Column naming convention
 
-Column names follow the **standard OTel ClickHouse exporter schema** (PascalCase): `TraceId`, `SpanId`, `ServiceName`, `ResourceAttributes`, etc. This is NOT a Tinybird-specific convention — it comes from the official OTel collector-contrib ClickHouse exporter at https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/exporter/clickhouseexporter/internal/sqltemplates.
+Column names follow the **standard OTel ClickHouse exporter schema** (PascalCase): `TraceId`, `SpanId`, `ServiceName`, `ResourceAttributes`, etc. This is NOT a Tinybird-specific convention. It comes from the official OTel collector-contrib ClickHouse exporter at https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/exporter/clickhouseexporter/internal/sqltemplates.
 
-The only Strada addition is `TenantId` as the first column in every Tinybird table for multi-tenancy. The self-hosted ClickHouse schema (`clickhouse.sql`) does not have this column.
+The only Strada addition is `ProjectId` as the first column in every Tinybird table for project isolation. The self-hosted ClickHouse schema (`clickhouse.sql`) does not have this column.
 
-## Multi-tenancy
+## Project isolation
 
-### How tenant_id is determined
+### How project_id is determined
 
-Tenant identity comes from the **hostname**, not from API keys or headers. No KV, no DB lookup — pure hostname parsing:
+Project identity comes from the **hostname**, not from API keys or headers. No KV, no DB lookup. Pure hostname parsing:
 
 ```
-acme-ingest.strada.sh       → tenant_id = "acme"
-my-company-ingest.strada.sh → tenant_id = "my-company"
-ingest.strada.sh            → tenant_id = ""  (shared/default)
-ingest.mycompany.com                → tenant_id = ""  (self-hosted)
-localhost:3000                      → tenant_id = ""  (development)
+acme-ingest.strada.sh       → project_id = "acme"
+my-app-ingest.strada.sh     → project_id = "my-app"
+ingest.strada.sh            → project_id = ""  (default project)
+ingest.mycompany.com        → project_id = ""  (self-hosted)
+localhost:3000              → project_id = ""  (development)
 ```
 
-The regex is `^(.+)-ingest\.` — if hostname has a `{prefix}-ingest.` pattern, the prefix is the tenant_id. Otherwise empty string. This is in `otel-collector/src/get-tenant-id.ts`.
+The regex is `^(.+)-ingest\.`. If hostname has a `{prefix}-ingest.` pattern, the prefix is the project_id. Otherwise empty string. This is in `otel-collector/src/get-project-id.ts`.
 
-The `otel-collector` worker injects `tenant_id` into every NDJSON row before sending to Tinybird. Users never set tenant_id — the worker does it based on which subdomain they're hitting.
+The `otel-collector` worker injects `project_id` into every NDJSON row before sending to Tinybird. Users never set project_id. The worker does it based on which subdomain they're hitting.
 
-### Tenant isolation on reads
+### Project isolation on reads
 
-`TenantId` is the first column in every table's sorting key. This means ClickHouse skips all other tenants' data at the granule level on every query — effectively free filtering.
+`ProjectId` is the first column in every table's sorting key. This means ClickHouse skips all other projects' data at the granule level on every query. Effectively free filtering.
 
-For reads, the backend generates a short-lived JWT per user session:
+For reads, the backend generates a short-lived JWT scoped to a specific project:
 
 ```json
 {
@@ -82,74 +86,73 @@ For reads, the backend generates a short-lived JWT per user session:
     {
       "type": "DATASOURCES:READ",
       "resource": "otel_traces",
-      "filter": "TenantId = 'acme'"
+      "filter": "ProjectId = 'acme'"
     },
     {
       "type": "DATASOURCES:READ",
       "resource": "otel_logs",
-      "filter": "TenantId = 'acme'"
+      "filter": "ProjectId = 'acme'"
     },
     {
       "type": "DATASOURCES:READ",
       "resource": "otel_metrics_gauge",
-      "filter": "TenantId = 'acme'"
+      "filter": "ProjectId = 'acme'"
     },
     {
       "type": "DATASOURCES:READ",
       "resource": "otel_metrics_sum",
-      "filter": "TenantId = 'acme'"
+      "filter": "ProjectId = 'acme'"
     },
     {
       "type": "DATASOURCES:READ",
       "resource": "otel_metrics_histogram",
-      "filter": "TenantId = 'acme'"
+      "filter": "ProjectId = 'acme'"
     },
     {
       "type": "DATASOURCES:READ",
       "resource": "otel_metrics_exponential_histogram",
-      "filter": "TenantId = 'acme'"
+      "filter": "ProjectId = 'acme'"
     },
     {
       "type": "DATASOURCES:READ",
       "resource": "otel_errors",
-      "filter": "TenantId = 'acme'"
+      "filter": "ProjectId = 'acme'"
     }
   ],
   "limits": { "rps": 10 }
 }
 ```
 
-Use a **unique `name` per customer/user** (for example `user_<user_id>`) so Tinybird tracks rate limits separately for each customer. Keep `limits.rps` aligned with the customer's plan/tier. Example policy:
+Use a **unique `name` per user** (for example `user_<user_id>`) so Tinybird tracks rate limits separately. Keep `limits.rps` aligned with the user's plan/tier. Example policy:
 
 - pro tier: `limits: { "rps": 10 }`
 - enterprise tier: `limits: { "rps": 50 }`
 
-This is how we stop one customer from consuming too many reads or too much query traffic and stealing shared Tinybird capacity from other tenants. Tinybird only supports **per-JWT request-rate limiting**, not per-JWT vCPU or memory quotas, so `limits.rps` is the main tenant-level fairness control.
+This controls query traffic fairness. Tinybird only supports **per-JWT request-rate limiting**, not per-JWT vCPU or memory quotas, so `limits.rps` is the main per-user fairness control.
 
-The `filter` is enforced server-side by Tinybird on every query to `/v0/sql`. Users can write arbitrary SQL and the filter is always appended — no way to bypass it. The JWT is signed with the workspace admin token and can't be tampered with.
+The `filter` is enforced server-side by Tinybird on every query to `/v0/sql`. Users can write arbitrary SQL and the filter is always appended. No way to bypass it. The JWT is signed with the workspace admin token and can't be tampered with.
 
-**All SQL queries must ignore `TenantId` completely.** `TenantId` exists only for auth — Tinybird's JWT filter handles it automatically on every query. Never add `WHERE TenantId = '...'` in application SQL, UI queries, or example queries. If a query uses `SELECT *`, the column will appear in results but it carries no semantic meaning for the application — it's purely an infrastructure concern for row-level isolation.
+**All SQL queries must ignore `ProjectId` completely.** `ProjectId` exists only for auth. Tinybird's JWT filter handles it automatically on every query. Never add `WHERE ProjectId = '...'` in application SQL, UI queries, or example queries. If a query uses `SELECT *`, the column will appear in results but it carries no semantic meaning for the application. It's purely an infrastructure concern for row-level isolation.
 
 The ClickHouse HTTP interface (`clickhouse.*.tinybird.co`) does NOT support JWTs or row-level filtering. All user-facing queries must go through Tinybird's Query API (`/v0/sql`).
 
+### ServiceName within a project
 
-### ServiceName as project
-
-Within a tenant, `ServiceName` (from the OTel `service.name` resource attribute) acts as the "project" grouping. Users filter by service in the UI to view different apps. ServiceName is the second key in all sorting keys, so per-service queries within a tenant are fast too.
+Within a project, `ServiceName` (from the OTel `service.name` resource attribute) identifies different services or apps. Users filter by service in the UI to view different parts of their system. ServiceName is the second key in all sorting keys, so per-service queries within a project are fast.
 
 ## Tables
 
-All table definitions live in `tinybird/datasources/`. Every table has `TenantId` as the first column and first in the sorting key. The `otel-collector` worker receives OTLP HTTP/JSON on 3 endpoints (`/v1/traces`, `/v1/logs`, `/v1/metrics`) and writes to these tables via the Tinybird Events API.
+All table definitions live in `tinybird/datasources/`. Every table has `ProjectId` as the first column and first in the sorting key. The `otel-collector` worker receives OTLP HTTP/JSON on 3 endpoints (`/v1/traces`, `/v1/logs`, `/v1/metrics`) and writes to these tables via the Tinybird Events API.
 
-OTel defines 3 signal types — traces, logs, metrics — each with a different protobuf schema and different column shapes. Metrics further split into 4 sub-types because their value representations are incompatible (a gauge is one Float64, a histogram is arrays of bucket counts and bounds). Separate tables mean no nulls, better compression, and sorting keys optimized per signal.
+OTel defines 3 signal types, traces, logs, metrics, each with a different protobuf schema and different column shapes. Metrics further split into 4 sub-types because their value representations are incompatible (a gauge is one Float64, a histogram is arrays of bucket counts and bounds). Separate tables mean no nulls, better compression, and sorting keys optimized per signal.
 
 ### Traces — `otel_traces`
 
 **Ingested from:** `POST /v1/traces` → `otel_traces`
 
-A **span** is one unit of work (HTTP request, DB query, function call). Spans link via `ParentSpanId` to form a **trace** — a tree showing how a request flowed through services.
+A **span** is one unit of work (HTTP request, DB query, function call). Spans link via `ParentSpanId` to form a **trace**, a tree showing how a request flowed through services.
 
-**Sorting key:** `TenantId, ServiceName, SpanName, toDateTime(Timestamp)`
+**Sorting key:** `ProjectId, ServiceName, SpanName, toDateTime(Timestamp)`
 
 **Key columns:** `TraceId`, `SpanId`, `ParentSpanId`, `SpanName`, `SpanKind` (server/client/producer/consumer), `Duration` (nanoseconds), `StatusCode` (ok/error/unset), `StatusMessage`, `SpanAttributes` (Map), `ResourceAttributes` (Map). Events (timestamped annotations within a span) and links (cross-trace references) are stored as parallel arrays.
 
@@ -161,9 +164,9 @@ A **span** is one unit of work (HTTP request, DB query, function call). Spans li
 
 **Populated by:** `otel_traces_trace_id_ts_mv` (fires automatically on every insert to `otel_traces`)
 
-Aggregates `min(Timestamp)` and `max(Timestamp)` per `TenantId + TraceId`. Without it, answering "how long did trace X take?" requires scanning all spans. With it, it's a single row lookup.
+Aggregates `min(Timestamp)` and `max(Timestamp)` per `ProjectId + TraceId`. Without it, answering "how long did trace X take?" requires scanning all spans. With it, it's a single row lookup.
 
-**Sorting key:** `TenantId, TraceId, toUnixTimestamp(Start)`
+**Sorting key:** `ProjectId, TraceId, toUnixTimestamp(Start)`
 
 ### Logs — `otel_logs`
 
@@ -171,7 +174,7 @@ Aggregates `min(Timestamp)` and `max(Timestamp)` per `TenantId + TraceId`. Witho
 
 A **log record** is a timestamped text message with a severity level. Optionally correlated to a trace via `TraceId`/`SpanId`.
 
-**Sorting key:** `TenantId, ServiceName, TimestampTime, Timestamp`
+**Sorting key:** `ProjectId, ServiceName, TimestampTime, Timestamp`
 
 **Key columns:** `SeverityText` (INFO/WARN/ERROR/FATAL), `SeverityNumber` (0-24), `Body` (the log message), `TraceId`, `SpanId` (for trace correlation), `LogAttributes` (Map), `ResourceAttributes` (Map).
 
@@ -185,7 +188,7 @@ A **log record** is a timestamped text message with a severity level. Optionally
 
 A **gauge** is a snapshot reading at a point in time. The value can go up or down freely.
 
-**Sorting key:** `TenantId, ServiceName, MetricName, Attributes, toUnixTimestamp64Nano(TimeUnix)`
+**Sorting key:** `ProjectId, ServiceName, MetricName, Attributes, toUnixTimestamp64Nano(TimeUnix)`
 
 **Key columns:** `MetricName`, `Value` (Float64), `Attributes` (Map), `MetricUnit`, `MetricDescription`.
 
@@ -199,7 +202,7 @@ A **sum** is a cumulative counter. You compute rates by diffing consecutive valu
 
 **Sorting key:** same as gauge
 
-**Key columns:** same as gauge plus `AggregationTemporality` (Int32, cumulative vs delta) and `IsMonotonic` (Bool, only goes up vs can decrease). Separate from gauge because you query them differently — gauges you take the latest value, sums you compute `max(Value) - min(Value)` over a window for a rate.
+**Key columns:** same as gauge plus `AggregationTemporality` (Int32, cumulative vs delta) and `IsMonotonic` (Bool, only goes up vs can decrease). Separate from gauge because you query them differently. Gauges you take the latest value, sums you compute `max(Value) - min(Value)` over a window for a rate.
 
 **Examples:** total requests served (1,847,293), total bytes sent (53GB), total errors (412).
 
@@ -219,7 +222,7 @@ A **histogram** captures the distribution of values using predefined bucket boun
 
 **Ingested from:** `POST /v1/metrics` (when `metric.exponentialHistogram` is set) → `otel_metrics_exponential_histogram`
 
-Same idea as histogram but buckets are logarithmically spaced and auto-scale. No need to predefine boundaries — the SDK picks them based on a `scale` parameter. Better precision at the tails.
+Same idea as histogram but buckets are logarithmically spaced and auto-scale. No need to predefine boundaries. The SDK picks them based on a `scale` parameter. Better precision at the tails.
 
 **Sorting key:** same as gauge
 
@@ -245,9 +248,9 @@ The worker scans incoming data for exceptions:
 - **From logs:** log records with `exception.type` or `exception.message` in `LogAttributes`
 - **From traces:** span events where `name === 'exception'` (the OTel convention for recording exceptions on spans)
 
-When an exception is detected, the worker extracts it into a denormalized error row and writes it to `otel_errors`. The original log/trace row is still written to its respective table — errors are an additional extraction, not a replacement.
+When an exception is detected, the worker extracts it into a denormalized error row and writes it to `otel_errors`. The original log/trace row is still written to its respective table. Errors are an additional extraction, not a replacement.
 
-**Sorting key:** `TenantId, ServiceName, FingerprintHash, toDateTime(Timestamp)`
+**Sorting key:** `ProjectId, ServiceName, FingerprintHash, toDateTime(Timestamp)`
 
 **Key columns:** `ExceptionType`, `ExceptionMessage`, `ExceptionStacktrace` (raw string), `ExceptionFrames` (JSON string of structured frames), `Fingerprint` (Array(String)), `FingerprintHash` (hex hash for GROUP BY), `MechanismType`, `MechanismHandled`, `DebugId`, `Level`, `Release`, `Environment`, `Tags` (Map), `TraceId`, `SpanId` (for correlation back to traces/logs), `SourceSignal` (`"log"` or `"trace"`).
 
@@ -257,7 +260,7 @@ When an exception is detected, the worker extracts it into a denormalized error 
 
 ## Error tracking — custom OTel attributes
 
-Strada extends OTel's standard `exception.*` attributes with additional error-tracking attributes. These are NOT part of the OTel semantic conventions — they are custom attributes that Strada SDKs set on OTel log records (or span event attributes) alongside the standard ones. Any OTel SDK can set them as regular string attributes.
+Strada extends OTel's standard `exception.*` attributes with additional error-tracking attributes. These are NOT part of the OTel semantic conventions. They are custom attributes that Strada SDKs set on OTel log records (or span event attributes) alongside the standard ones. Any OTel SDK can set them as regular string attributes.
 
 We use the `exception.*` namespace (not a vendor prefix like `strada.*`) because these concepts are universal to error tracking, not Strada-specific. If OTel ever standardizes fingerprinting or mechanism metadata, the names would be similar.
 
@@ -354,7 +357,7 @@ Run from the `otel-collector/` directory.
 
 ## Reference schema
 
-The Tinybird OTel template (https://github.com/tinybirdco/tinybird-otel-template) is the base inspiration for our OTel schema and SQL query examples. Our `tinybird/datasources/` files are derived from it with multi-tenancy additions. Use it as reference for column names, types, indexes, sorting keys, and example queries against OTel data in ClickHouse.
+The Tinybird OTel template (https://github.com/tinybirdco/tinybird-otel-template) is the base inspiration for our OTel schema and SQL query examples. Our `tinybird/datasources/` files are derived from it with project isolation additions. Use it as reference for column names, types, indexes, sorting keys, and example queries against OTel data in ClickHouse.
 
 ## Tinybird
 

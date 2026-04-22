@@ -4,7 +4,7 @@ DESCRIPTION >
     Sum/counter metric data points from OpenTelemetry.
 
 SCHEMA >
-    `TenantId` LowCardinality(String) `json:$.tenant_id` CODEC(ZSTD(1)),
+    `ProjectId` LowCardinality(String) `json:$.project_id` CODEC(ZSTD(1)),
     `ResourceAttributes` Map(LowCardinality(String), String) `json:$.resource_attributes` CODEC(ZSTD(1)),
     `ResourceSchemaUrl` String `json:$.resource_schema_url` CODEC(ZSTD(1)),
     `ScopeName` String `json:$.scope_name` CODEC(ZSTD(1)),
@@ -31,7 +31,7 @@ SCHEMA >
 
 ENGINE "MergeTree"
 ENGINE_PARTITION_KEY "toDate(TimeUnix)"
-ENGINE_SORTING_KEY "TenantId, ServiceName, MetricName, Attributes, toUnixTimestamp64Nano(TimeUnix)"
+ENGINE_SORTING_KEY "ProjectId, ServiceName, MetricName, Attributes, toUnixTimestamp64Nano(TimeUnix)"
 ENGINE_SETTINGS index_granularity=8192
 
 INDEXES >

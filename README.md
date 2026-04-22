@@ -36,7 +36,7 @@ Strada uses [Tinybird](https://www.tinybird.co) as its default storage backend. 
 - **Also runs on plain ClickHouse.** If you don't want Tinybird, point Strada at any ClickHouse instance. Same schema, same queries. No lock-in.
 - **Fast queries.** ClickHouse is columnar and designed for analytical workloads. Querying millions of spans or logs takes milliseconds, not seconds.
 - **Just SQL.** No custom query language, no proprietary DSL. Standard ClickHouse SQL. Your agents can query data directly with `SELECT`. 
-- **Built-in multi-tenancy.** Tinybird's JWT row-level filtering lets us isolate tenants without any application-level query rewriting. Each customer gets a scoped token that filters automatically.
+- **Built-in project isolation.** Tinybird's JWT row-level filtering lets you isolate projects without any application-level query rewriting. Each project gets a scoped token that filters automatically.
 - **Storage is cheap.** $0.058/GB/month with ZSTD compression. Orders of magnitude cheaper than Datadog or Sentry for the same volume. Auto-delete old data with per-table TTL.
 - **No idle compute cost.** You only pay for active vCPU minutes (actual queries and ingestion). When nobody is using the system, only the base plan fee and storage are charged.
 

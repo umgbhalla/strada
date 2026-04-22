@@ -4,15 +4,15 @@
 //   - Tinybird: set TINYBIRD_ENDPOINT + TINYBIRD_TOKEN
 //   - ClickHouse: set CLICKHOUSE_URL (+ CLICKHOUSE_DATABASE, CLICKHOUSE_USER, CLICKHOUSE_PASSWORD)
 //
-// Multi-tenancy: tenant_id is extracted from the hostname.
-// Each tenant gets a subdomain: {tenant}-ingest.strada.sh
-// The worker parses the hostname to get the tenant_id and injects it
+// Project isolation: project_id is extracted from the hostname.
+// Each project gets a subdomain: {project}-ingest.strada.sh
+// The worker parses the hostname to get the project_id and injects it
 // into every NDJSON row. No KV or DB lookup needed.
 
 import { Spiceflow } from "spiceflow";
 import { cors } from "spiceflow/cors";
 import { datasources } from "./env.ts";
-import { getTenantId } from "./get-tenant-id.ts";
+import { getProjectId } from "./get-project-id.ts";
 import { transformTraces } from "./transform-traces.ts";
 import { transformLogs } from "./transform-logs.ts";
 import { transformMetrics } from "./transform-metrics.ts";
@@ -30,16 +30,16 @@ const app = new Spiceflow()
     }),
   )
   .post("/v1/traces", async ({ request, waitUntil }) => {
-    const tenantId = getTenantId(request);
+    const projectId = getProjectId(request);
     const body = (await request.json()) as ExportTraceServiceRequest;
     const backend = createBackend();
 
-    const ndjson = transformTraces(body, tenantId);
+    const ndjson = transformTraces(body, projectId);
     if (ndjson) {
       waitUntil(backend.send(datasources.traces, "traces", ndjson));
     }
 
-    const errorsNdjson = extractErrorsFromTraces(body, tenantId);
+    const errorsNdjson = extractErrorsFromTraces(body, projectId);
     if (errorsNdjson) {
       waitUntil(backend.send(datasources.errors, "errors", errorsNdjson));
     }
@@ -47,16 +47,16 @@ const app = new Spiceflow()
     return {};
   })
   .post("/v1/logs", async ({ request, waitUntil }) => {
-    const tenantId = getTenantId(request);
+    const projectId = getProjectId(request);
     const body = (await request.json()) as ExportLogsServiceRequest;
     const backend = createBackend();
 
-    const ndjson = transformLogs(body, tenantId);
+    const ndjson = transformLogs(body, projectId);
     if (ndjson) {
       waitUntil(backend.send(datasources.logs, "logs", ndjson));
     }
 
-    const errorsNdjson = extractErrorsFromLogs(body, tenantId);
+    const errorsNdjson = extractErrorsFromLogs(body, projectId);
     if (errorsNdjson) {
       waitUntil(backend.send(datasources.errors, "errors", errorsNdjson));
     }
@@ -64,10 +64,10 @@ const app = new Spiceflow()
     return {};
   })
   .post("/v1/metrics", async ({ request, waitUntil }) => {
-    const tenantId = getTenantId(request);
+    const projectId = getProjectId(request);
     const body = (await request.json()) as ExportMetricsServiceRequest;
     const backend = createBackend();
-    const payloads = transformMetrics(body, tenantId, {
+    const payloads = transformMetrics(body, projectId, {
       gauge: datasources.gauge,
       sum: datasources.sum,
       histogram: datasources.histogram,

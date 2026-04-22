@@ -1,39 +1,39 @@
 import { describe, it, expect } from "vitest";
-import { getTenantId } from "./get-tenant-id.ts";
+import { getProjectId } from "./get-project-id.ts";
 
-describe("getTenantId", () => {
-  it("extracts tenant from standard ingest subdomain", () => {
+describe("getProjectId", () => {
+  it("extracts project from standard ingest subdomain", () => {
     const req = new Request("https://acme-ingest.strada.sh/v1/traces");
-    expect(getTenantId(req)).toBe("acme");
+    expect(getProjectId(req)).toBe("acme");
   });
 
-  it("extracts tenant with hyphens in name", () => {
+  it("extracts project with hyphens in name", () => {
     const req = new Request("https://my-company-ingest.strada.sh/v1/logs");
-    expect(getTenantId(req)).toBe("my-company");
+    expect(getProjectId(req)).toBe("my-company");
   });
 
   it("returns empty string for plain ingest subdomain (self-hosted)", () => {
     const req = new Request("https://ingest.mycompany.com/v1/traces");
-    expect(getTenantId(req)).toBe("");
+    expect(getProjectId(req)).toBe("");
   });
 
   it("returns empty string for ingest.strada.sh", () => {
     const req = new Request("https://ingest.strada.sh/v1/logs");
-    expect(getTenantId(req)).toBe("");
+    expect(getProjectId(req)).toBe("");
   });
 
   it("returns empty string for localhost", () => {
     const req = new Request("http://localhost:8080/v1/traces");
-    expect(getTenantId(req)).toBe("");
+    expect(getProjectId(req)).toBe("");
   });
 
   it("returns empty string for plain domain", () => {
     const req = new Request("https://strada.sh/v1/traces");
-    expect(getTenantId(req)).toBe("");
+    expect(getProjectId(req)).toBe("");
   });
 
   it("returns empty string for IP address", () => {
     const req = new Request("http://127.0.0.1:3000/v1/traces");
-    expect(getTenantId(req)).toBe("");
+    expect(getProjectId(req)).toBe("");
   });
 });

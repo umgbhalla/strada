@@ -3,7 +3,7 @@
 -- This schema follows the standard OTel ClickHouse exporter column naming
 -- (PascalCase) from opentelemetry-collector-contrib/exporter/clickhouseexporter.
 --
--- No TenantId column — self-hosted users run single-tenant. Multi-tenancy
+-- No ProjectId column — self-hosted users run single-project. Project isolation
 -- is only used in the hosted Tinybird deployment (see tinybird/datasources/).
 --
 -- Database: create your own or use `default`. The worker's CLICKHOUSE_DATABASE

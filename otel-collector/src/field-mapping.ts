@@ -7,7 +7,7 @@
 // OTel ClickHouse column name after case conversion. These are listed as
 // per-signal exceptions below.
 //
-// tenant_id is always stripped — self-hosted ClickHouse runs single-tenant.
+// project_id is always stripped — self-hosted ClickHouse runs single-project.
 
 // ─── Signal types ───
 
@@ -56,7 +56,7 @@ const METRICS_EXCEPTIONS: Record<string, string | null> = {
 
 // ─── Shared drops ───
 // Fields stripped from all signals before INSERT.
-const ALWAYS_DROP = new Set(["tenant_id"]);
+const ALWAYS_DROP = new Set(["project_id"]);
 
 // ─── Signal → exceptions lookup ───
 
@@ -83,7 +83,7 @@ export function getMappingForSignal(signal: SignalKind) {
 /**
  * Remap a single NDJSON row's keys from snake_case to PascalCase.
  * Uses automatic case conversion with per-signal exceptions.
- * Drops tenant_id and any field mapped to null.
+ * Drops project_id and any field mapped to null.
  */
 export function remapRow(row: Record<string, unknown>, signal: SignalKind): Record<string, unknown> {
   const exceptions = getExceptions(signal);

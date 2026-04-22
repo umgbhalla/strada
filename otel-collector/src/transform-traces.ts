@@ -20,7 +20,7 @@ const STATUS_CODE_MAP: Record<number, string> = {
   2: "Error",
 };
 
-export function transformTraces(body: ExportTraceServiceRequest, tenantId: string): string {
+export function transformTraces(body: ExportTraceServiceRequest, projectId: string): string {
   const rows: string[] = [];
 
   for (const rs of body.resourceSpans ?? []) {
@@ -35,7 +35,7 @@ export function transformTraces(body: ExportTraceServiceRequest, tenantId: strin
         const endNano = BigInt(span.endTimeUnixNano);
 
         const row: OtelTraceRow = {
-          tenant_id: tenantId,
+          project_id: projectId,
           resource_schema_url: rs.schemaUrl ?? "",
           resource_attributes: resourceAttrs,
           service_name: serviceName,

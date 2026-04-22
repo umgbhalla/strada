@@ -5,7 +5,7 @@ import type { ExportLogsServiceRequest } from "./otlp-types.ts";
 import type { OtelLogRow } from "./otel-row-types.ts";
 import { convertAttributes, getServiceName, nanosToRFC3339, anyValueToString } from "./transform-attributes.ts";
 
-export function transformLogs(body: ExportLogsServiceRequest, tenantId: string): string {
+export function transformLogs(body: ExportLogsServiceRequest, projectId: string): string {
   const rows: string[] = [];
 
   for (const rl of body.resourceLogs ?? []) {
@@ -22,7 +22,7 @@ export function transformLogs(body: ExportLogsServiceRequest, tenantId: string):
           log.timeUnixNano && log.timeUnixNano !== "0" ? log.timeUnixNano : (log.observedTimeUnixNano ?? "0");
 
         const row: OtelLogRow = {
-          tenant_id: tenantId,
+          project_id: projectId,
           resource_schema_url: rl.schemaUrl ?? "",
           resource_attributes: resourceAttrs,
           service_name: serviceName,

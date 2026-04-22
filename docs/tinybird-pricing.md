@@ -22,7 +22,9 @@ Sources: https://www.tinybird.co/pricing, https://www.tinybird.co/docs/forward/p
 
 ### 1. Fixed monthly base fee
 
-The plan fee ($49/mo for the smallest Developer tier with 0.5 vCPU). Reserves your vCPU capacity ceiling and QPS limit. You pay this even if you do nothing.
+The **Free plan costs $0** and includes 0.25 vCPU, 10 GB storage, 10 QPS, and 300 vCPU hours/month. No credit card required, no time limit.
+
+Paid Developer plans start at $25/mo (0.25 vCPU, 25 GB storage). The base fee reserves your vCPU capacity ceiling and QPS limit. You pay it even if you do nothing.
 
 ### 2. Active vCPU minutes (usage-based)
 
@@ -47,7 +49,7 @@ Each plan has a QPS limit. Requests above that limit (up to 4x the plan's QPS ce
 
 ## What happens when nobody is querying
 
-You pay **only the fixed base fee + storage**. Zero active minutes are consumed. No compute overage.
+You pay **only the fixed base fee (or $0 on Free) + storage**. Zero active minutes are consumed. No compute overage.
 
 For an OTel use case like Strada, you're almost never truly idle because data is continuously ingested. Every ingestion batch burns active minutes. Materialized views firing on insert burn more. But if traffic goes quiet (e.g. overnight for a dev tool), active minutes stop accumulating.
 

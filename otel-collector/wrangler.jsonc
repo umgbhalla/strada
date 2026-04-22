@@ -3,8 +3,8 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-03-25",
   "compatibility_flags": ["nodejs_compat"],
-  // Route pattern: each tenant gets {tenant}-ingest.strada.sh
-  // The worker extracts tenant_id from the hostname and injects it into every row.
+  // Route pattern: each project gets {project}-ingest.strada.sh
+  // The worker extracts project_id from the hostname and injects it into every row.
   "routes": [
     {
       "pattern": "*-ingest.strada.sh/*",

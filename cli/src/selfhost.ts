@@ -240,7 +240,7 @@ export async function selfhostAction(options: SelfhostOptions) {
   console.log(`  ${picocolors.cyan("TINYBIRD_ENDPOINT")}=${baseUrl}`);
   console.log(`  ${picocolors.cyan("TINYBIRD_TOKEN")}=${token}`);
   console.log("");
-  console.log(picocolors.dim("TenantId is always empty string for self-hosted — no row-level filtering needed."));
+  console.log(picocolors.dim("ProjectId is always empty string for self-hosted — no row-level filtering needed."));
   console.log(picocolors.dim("For reads, use this same workspace admin token with Tinybird /v0/sql queries."));
 
   clack.outro("Done");

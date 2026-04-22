@@ -99,11 +99,11 @@ describe("remapRow", () => {
     expect(result).not.toHaveProperty("TraceFlags");
   });
 
-  it("drops tenant_id for all signals", () => {
-    expect(remapRow({ tenant_id: "acme", trace_id: "t1" }, "traces")).not.toHaveProperty("TenantId");
-    expect(remapRow({ tenant_id: "acme" }, "logs")).not.toHaveProperty("TenantId");
-    expect(remapRow({ tenant_id: "acme" }, "errors")).not.toHaveProperty("TenantId");
-    expect(remapRow({ tenant_id: "acme" }, "metrics_gauge")).not.toHaveProperty("TenantId");
+  it("drops project_id for all signals", () => {
+    expect(remapRow({ project_id: "acme", trace_id: "t1" }, "traces")).not.toHaveProperty("ProjectId");
+    expect(remapRow({ project_id: "acme" }, "logs")).not.toHaveProperty("ProjectId");
+    expect(remapRow({ project_id: "acme" }, "errors")).not.toHaveProperty("ProjectId");
+    expect(remapRow({ project_id: "acme" }, "metrics_gauge")).not.toHaveProperty("ProjectId");
   });
 
   it("passes through unknown keys with automatic case conversion", () => {

@@ -4,7 +4,7 @@ DESCRIPTION >
     Trace span events from OpenTelemetry.
 
 SCHEMA >
-    `TenantId` LowCardinality(String) `json:$.tenant_id` CODEC(ZSTD(1)),
+    `ProjectId` LowCardinality(String) `json:$.project_id` CODEC(ZSTD(1)),
     `Timestamp` DateTime64(9) `json:$.start_time` CODEC(Delta(8), ZSTD(1)),
     `TraceId` String `json:$.trace_id` CODEC(ZSTD(1)),
     `SpanId` String `json:$.span_id` CODEC(ZSTD(1)),
@@ -33,7 +33,7 @@ SCHEMA >
 
 ENGINE "MergeTree"
 ENGINE_PARTITION_KEY "toDate(Timestamp)"
-ENGINE_SORTING_KEY "TenantId, ServiceName, SpanName, toDateTime(Timestamp)"
+ENGINE_SORTING_KEY "ProjectId, ServiceName, SpanName, toDateTime(Timestamp)"
 ENGINE_SETTINGS index_granularity=8192
 
 INDEXES >

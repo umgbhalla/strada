@@ -3,10 +3,10 @@ DESCRIPTION >
     Populated automatically by the otel_traces_trace_id_ts_mv materialization pipe.
 
 SCHEMA >
-    `TenantId` LowCardinality(String),
+    `ProjectId` LowCardinality(String),
     `TraceId` String,
     `Start` DateTime64(9) CODEC(Delta(8), ZSTD(1)),
     `End` DateTime64(9) CODEC(Delta(8), ZSTD(1))
 
 ENGINE "MergeTree"
-ENGINE_SORTING_KEY "TenantId, TraceId, toUnixTimestamp(Start)"
+ENGINE_SORTING_KEY "ProjectId, TraceId, toUnixTimestamp(Start)"

@@ -25,13 +25,13 @@ Users must configure their OTel SDKs to export as JSON, not protobuf. For the JS
 - `POST /v1/logs` → transforms to NDJSON → writes to `otel_logs`
 - `POST /v1/metrics` → transforms to NDJSON → writes to `otel_metrics_gauge`, `otel_metrics_sum`, `otel_metrics_histogram`, `otel_metrics_exponential_histogram` (depending on metric type)
 
-## Multi-tenancy
+## Project isolation
 
-Tenant ID is extracted from the request hostname. See the root `AGENTS.md` for the full explanation. The function is in `get-tenant-id.ts`.
+Project ID is extracted from the request hostname. See the root `AGENTS.md` for the full explanation. The function is in `get-project-id.ts`.
 
 ## Auth
 
-No auth on writes. The hostname IS the tenant identity (like Sentry's DSN). Security is enforced on reads via Tinybird JWT (or ClickHouse auth for self-hosted), not on writes. If spam becomes a problem, add Cloudflare rate limiting per IP.
+No auth on writes. The hostname IS the project identity (like Sentry's DSN). Security is enforced on reads via Tinybird JWT (or ClickHouse auth for self-hosted), not on writes. If spam becomes a problem, add Cloudflare rate limiting per IP.
 
 ## Transform pipeline
 
@@ -42,7 +42,7 @@ Each signal has a transform module that converts OTLP JSON into NDJSON:
 - `transform-metrics.ts` — flattens `resourceMetrics[].scopeMetrics[].metrics[]` into rows, splitting by metric type (gauge/sum/histogram/exponential histogram)
 - `transform-attributes.ts` — shared utilities (attribute conversion, nanosecond timestamps, exemplars)
 
-All transforms inject `tenant_id` into every row and output snake_case JSON keys. Row types are defined in `otel-row-types.ts`.
+All transforms inject `project_id` into every row and output snake_case JSON keys. Row types are defined in `otel-row-types.ts`.
 
 ## Field mapping (ClickHouse backend only)
 

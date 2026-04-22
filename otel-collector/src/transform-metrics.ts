@@ -27,7 +27,7 @@ function parseIntString(value: string | undefined): number | string {
 
 export function transformMetrics(
   body: ExportMetricsServiceRequest,
-  tenantId: string,
+  projectId: string,
   datasourceNames: {
     gauge: string;
     sum: string;
@@ -53,7 +53,7 @@ export function transformMetrics(
 
       for (const metric of sm.metrics ?? []) {
         const base = {
-          tenant_id: tenantId,
+          project_id: projectId,
           resource_schema_url: schemaUrl,
           resource_attributes: resourceAttrs,
           service_name: serviceName,

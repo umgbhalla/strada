@@ -194,7 +194,7 @@ describe("extractErrorsFromLogs", () => {
     const ndjson = extractErrorsFromLogs(input, "acme");
     const row = JSON.parse(ndjson.trim());
 
-    expect(row.tenant_id).toBe("acme");
+    expect(row.project_id).toBe("acme");
     expect(row.service_name).toBe("my-api");
     expect(row.exception_type).toBe("TypeError");
     expect(row.exception_message).toBe("x is null");
@@ -485,7 +485,7 @@ describe("extractErrorsFromTraces", () => {
     expect(lines).toHaveLength(1);
 
     const row = JSON.parse(lines[0]!);
-    expect(row.tenant_id).toBe("acme");
+    expect(row.project_id).toBe("acme");
     expect(row.service_name).toBe("order-svc");
     expect(row.exception_type).toBe("ValueError");
     expect(row.exception_message).toBe("Invalid order ID");

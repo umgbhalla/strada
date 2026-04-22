@@ -40,7 +40,7 @@ import { SeverityNumber, logs } from "@opentelemetry/api-logs";
 
 // ── Configuration ──────────────────────────────────────────────────────────
 // Replace with your Strada ingest URL.
-// Each tenant gets a subdomain: {tenant}-ingest.strada.sh
+// Each project gets a subdomain: {project}-ingest.strada.sh
 // Self-hosted: use your own domain, e.g. https://ingest.mycompany.com
 const STRADA_URL = "https://acme-ingest.strada.sh";
 
@@ -418,7 +418,7 @@ Once `sdk.start()` runs, the OTel SDK works in the background. You don't call it
 | Logs    | `logger.emit()`      | 1s             | 512 logs   | `/v1/logs`     |
 | Errors  | `captureException()` | 1s             | 512 logs   | `/v1/logs`     |
 
-All exports use **HTTP POST with JSON body**. No auth headers needed; tenant identity comes from the hostname.
+All exports use **HTTP POST with JSON body**. No auth headers needed; project identity comes from the hostname.
 
 ## Environment variable configuration
 
@@ -469,17 +469,17 @@ pnpm test:integration
 
 Uses random ports by default. Pin with `OTEL_COLLECTOR_TEST_PORT` / `OTEL_COLLECTOR_FAKE_BACKEND_PORT`.
 
-## Multi-tenancy
+## Project isolation
 
-Tenant identity comes from the hostname. No SDK configuration needed, just point at the right subdomain:
+Project identity comes from the hostname. No SDK configuration needed, just point at the right subdomain:
 
 ```
-https://acme-ingest.strada.sh      → tenant "acme"
-https://mycompany-ingest.strada.sh → tenant "mycompany"
-https://ingest.yourdomain.com      → empty tenant (self-hosted)
+https://acme-ingest.strada.sh      → project "acme"
+https://myapp-ingest.strada.sh     → project "myapp"
+https://ingest.yourdomain.com      → empty project (self-hosted)
 ```
 
-No API keys. The hostname IS the tenant identity (same model as Sentry's DSN). Security is enforced on reads via Tinybird JWT, not on writes.
+No API keys. The hostname IS the project identity (same model as Sentry's DSN). Security is enforced on reads via Tinybird JWT, not on writes.
 
 ## Links
 
