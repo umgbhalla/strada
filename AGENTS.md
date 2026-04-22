@@ -1,5 +1,7 @@
 # Strada
 
+this project is still unreleased. ignore backwards compatibility. instead strive to make code and architecture simple and elegant, discarding backwards compatibility
+
 This repo uses **pnpm** as its package manager. Always use `pnpm` (not bun/npm/yarn) for install, run, and publish commands.
 
 Open-source OpenTelemetry observability platform. Reimplements the core value of Sentry (error tracking, tracing, logs, metrics) based on the OpenTelemetry standard instead of proprietary bloated SDKs. Users send OTel data via standard SDKs, Strada stores it in their ClickHouse database (Tinybird as first-class support), and they query it with SQL.
@@ -242,6 +244,16 @@ For reads, the backend generates a short-lived JWT scoped to a specific project:
       "type": "DATASOURCES:READ",
       "resource": "otel_errors",
       "filter": "ProjectId = 'acme'"
+    },
+    {
+      "type": "DATASOURCES:READ",
+      "resource": "otel_analytics_pages",
+      "filter": "ProjectId = 'acme'"
+    },
+    {
+      "type": "DATASOURCES:READ",
+      "resource": "otel_analytics_sessions",
+      "filter": "ProjectId = 'acme'"
     }
   ],
   "limits": { "rps": 10 }
@@ -292,6 +304,26 @@ A **span** is one unit of work (HTTP request, DB query, function call). Spans li
 Aggregates `min(Timestamp)` and `max(Timestamp)` per `ProjectId + TraceId`. Without it, answering "how long did trace X take?" requires scanning all spans. With it, it's a single row lookup.
 
 **Sorting key:** `ProjectId, TraceId, toUnixTimestamp(Start)`
+
+### Browser analytics pages — `otel_analytics_pages`
+
+**Populated by:** `otel_analytics_pages_mv` from `otel_traces` pageview spans only.
+
+Pre-aggregated pageview analytics by domain, pathname, referrer, device, browser, country, and language. Powers top pages, top browsers, countries, referrers, and pageview/visitor timeseries without scanning raw traces.
+
+**Sorting key:** `ProjectId, ServiceName, Domain, Date, Device, Browser, Country, Pathname`
+
+**Key columns:** `Date`, `Domain`, `Pathname`, `Referrer`, `Device`, `Browser`, `Country`, `Language`, `Visits` (`uniqState(session.id)`), `Hits` (`countState()`).
+
+### Browser analytics sessions — `otel_analytics_sessions`
+
+**Populated by:** `otel_analytics_sessions_mv` from `otel_traces` pageview spans only.
+
+Pre-aggregated per-session rows for bounce rate, average session duration, and unique visitor calculations.
+
+**Sorting key:** `ProjectId, ServiceName, Domain, Date, SessionId`
+
+**Key columns:** `SessionId`, `Device`, `Browser`, `Country`, `FirstHit`, `LatestHit`, `Hits`.
 
 ### Logs — `otel_logs`
 
@@ -355,7 +387,7 @@ Same idea as histogram but buckets are logarithmically spaced and auto-scale. No
 
 ### Shared table properties
 
-All tables use:
+Raw OTel signal tables use:
 
 - `MergeTree` engine
 - Daily partitions (`toDate(Timestamp)` or `toDate(TimeUnix)`)
@@ -363,6 +395,12 @@ All tables use:
 - `ZSTD(1)` compression on all columns, `Delta(8)` on timestamps
 - `LowCardinality(String)` on low-cardinality fields (ServiceName, SpanKind, SeverityText, etc.)
 - `Map(LowCardinality(String), String)` for flexible key-value attributes
+
+Analytics aggregate tables use:
+
+- `AggregatingMergeTree`
+- Daily partitions by `Date`
+- 90-day TTL independent from raw trace retention
 
 ### Errors — `otel_errors`
 

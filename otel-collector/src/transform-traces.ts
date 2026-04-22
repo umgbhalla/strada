@@ -5,6 +5,11 @@ import type { ExportTraceServiceRequest } from "./otlp-types.ts";
 import type { OtelTraceRow } from "./otel-row-types.ts";
 import { convertAttributes, getServiceName, nanosToRFC3339 } from "./transform-attributes.ts";
 
+interface TraceEnrichment {
+  country?: string;
+  userAgent?: string;
+}
+
 const SPAN_KIND_MAP: Record<number, string> = {
   0: "Unspecified",
   1: "Internal",
@@ -20,7 +25,11 @@ const STATUS_CODE_MAP: Record<number, string> = {
   2: "Error",
 };
 
-export function transformTraces(body: ExportTraceServiceRequest, projectId: string): string {
+export function transformTraces(
+  body: ExportTraceServiceRequest,
+  projectId: string,
+  enrichment: TraceEnrichment = {},
+): string {
   const rows: string[] = [];
 
   for (const rs of body.resourceSpans ?? []) {
@@ -33,6 +42,15 @@ export function transformTraces(body: ExportTraceServiceRequest, projectId: stri
       for (const span of ss.spans ?? []) {
         const startNano = BigInt(span.startTimeUnixNano);
         const endNano = BigInt(span.endTimeUnixNano);
+        const spanAttributes = convertAttributes(span.attributes);
+
+        if (enrichment.country && !spanAttributes["geo.country"]) {
+          spanAttributes["geo.country"] = enrichment.country;
+        }
+
+        if (enrichment.userAgent && !spanAttributes["user_agent.original"]) {
+          spanAttributes["user_agent.original"] = enrichment.userAgent;
+        }
 
         const row: OtelTraceRow = {
           project_id: projectId,
@@ -50,7 +68,7 @@ export function transformTraces(body: ExportTraceServiceRequest, projectId: stri
           trace_flags: span.flags ?? 0,
           span_name: span.name,
           span_kind: SPAN_KIND_MAP[span.kind ?? 0] ?? "Unspecified",
-          span_attributes: convertAttributes(span.attributes),
+          span_attributes: spanAttributes,
           start_time: nanosToRFC3339(span.startTimeUnixNano),
           end_time: nanosToRFC3339(span.endTimeUnixNano),
           duration: Number(endNano - startNano),

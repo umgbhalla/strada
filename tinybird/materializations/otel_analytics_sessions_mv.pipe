@@ -1,0 +1,54 @@
+DESCRIPTION >
+    Materialized view that pre-aggregates pageview spans into per-session analytics rows.
+
+NODE otel_analytics_sessions_mv_node
+SQL >
+    WITH source AS (
+        SELECT
+            ProjectId,
+            toDate(Timestamp) AS Date,
+            ServiceName,
+            domainWithoutWWW(SpanAttributes['url.full']) AS Domain,
+            SpanAttributes['session.id'] AS SessionId,
+            lower(coalesce(nullIf(SpanAttributes['user_agent.original'], ''), ResourceAttributes['user_agent.original'])) AS ua,
+            coalesce(nullIf(SpanAttributes['geo.country'], ''), 'Unknown') AS Country,
+            Timestamp
+        FROM otel_traces
+        WHERE
+            SpanName = 'pageview'
+            AND SpanAttributes['session.id'] != ''
+            AND SpanAttributes['url.full'] != ''
+    )
+    SELECT
+        ProjectId,
+        Date,
+        ServiceName,
+        Domain,
+        SessionId,
+        anySimpleState(
+            CASE
+                WHEN match(ua, 'bot[^a-z]|crawl|spider|wget|curl|urllib|ahrefsbot|semrushbot|mj12bot|dotbot|bingbot|googlebot|yandex|baidu|bytespider|petalbot|gptbot|chatgpt|facebookexternalhit|twitterbot|linkedinbot|whatsapp|telegrambot|discordbot|slackbot|applebot|lighthouse|headless|phantom|puppeteer|python|java/|go-http|node-fetch|pingdom|uptimerobot|httrack|scrapy|feedfetcher|bitdiscovery') THEN 'bot'
+                WHEN match(ua, 'android') THEN 'mobile-android'
+                WHEN match(ua, 'ipad|iphone|ipod') THEN 'mobile-ios'
+                ELSE 'desktop'
+            END
+        ) AS Device,
+        anySimpleState(
+            CASE
+                WHEN match(ua, 'firefox') THEN 'firefox'
+                WHEN match(ua, 'chrome|crios') THEN 'chrome'
+                WHEN match(ua, 'opera') THEN 'opera'
+                WHEN match(ua, 'msie|trident') THEN 'ie'
+                WHEN match(ua, 'iphone|ipad|safari') THEN 'safari'
+                ELSE 'Unknown'
+            END
+        ) AS Browser,
+        anySimpleState(Country) AS Country,
+        minSimpleState(Timestamp) AS FirstHit,
+        maxSimpleState(Timestamp) AS LatestHit,
+        countState() AS Hits
+    FROM source
+    GROUP BY ProjectId, Date, ServiceName, Domain, SessionId
+
+TYPE MATERIALIZED
+DATASOURCE otel_analytics_sessions

@@ -245,4 +245,76 @@ describe("transformTraces", () => {
     expect(rows[2]!.service_name).toBe("svc-b");
     expect(rows[2]!.span_name).toBe("span-3");
   });
+
+  it("injects collector analytics enrichments into span attributes", () => {
+    const input: ExportTraceServiceRequest = {
+      resourceSpans: [
+        {
+          scopeSpans: [
+            {
+              spans: [
+                {
+                  traceId: "abc123",
+                  spanId: "def456",
+                  name: "pageview",
+                  startTimeUnixNano: "1000000000",
+                  endTimeUnixNano: "2000000000",
+                  attributes: [{ key: "url.path", value: { stringValue: "/pricing" } }],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const ndjson = transformTraces(input, "acme", {
+      country: "IT",
+      userAgent: "Mozilla/5.0 Test Browser",
+    });
+    const row = JSON.parse(ndjson.trim());
+
+    expect(row.span_attributes).toEqual({
+      "geo.country": "IT",
+      "url.path": "/pricing",
+      "user_agent.original": "Mozilla/5.0 Test Browser",
+    });
+  });
+
+  it("does not overwrite existing span attributes when enrichments are present", () => {
+    const input: ExportTraceServiceRequest = {
+      resourceSpans: [
+        {
+          scopeSpans: [
+            {
+              spans: [
+                {
+                  traceId: "abc123",
+                  spanId: "def456",
+                  name: "pageview",
+                  startTimeUnixNano: "1000000000",
+                  endTimeUnixNano: "2000000000",
+                  attributes: [
+                    { key: "geo.country", value: { stringValue: "FR" } },
+                    { key: "user_agent.original", value: { stringValue: "Browser From SDK" } },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const ndjson = transformTraces(input, "acme", {
+      country: "IT",
+      userAgent: "Browser From Header",
+    });
+    const row = JSON.parse(ndjson.trim());
+
+    expect(row.span_attributes).toEqual({
+      "geo.country": "FR",
+      "user_agent.original": "Browser From SDK",
+    });
+  });
 });

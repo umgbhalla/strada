@@ -1,0 +1,22 @@
+DESCRIPTION >
+    Pre-aggregated browser pageview analytics by path, device, browser, country, language, and referrer.
+
+SCHEMA >
+    `ProjectId` LowCardinality(String),
+    `Date` Date,
+    `ServiceName` LowCardinality(String),
+    `Domain` String,
+    `Pathname` String,
+    `Referrer` String,
+    `Device` LowCardinality(String),
+    `Browser` LowCardinality(String),
+    `Country` LowCardinality(String),
+    `Language` LowCardinality(String),
+    `Visits` AggregateFunction(uniq, String),
+    `Hits` AggregateFunction(count, UInt64)
+
+ENGINE "AggregatingMergeTree"
+ENGINE_PARTITION_KEY "Date"
+ENGINE_SORTING_KEY "ProjectId, ServiceName, Domain, Date, Device, Browser, Country, Pathname"
+ENGINE_TTL "Date + INTERVAL 90 DAY"
+ENGINE_SETTINGS index_granularity=8192

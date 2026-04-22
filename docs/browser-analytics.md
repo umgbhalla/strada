@@ -1080,24 +1080,24 @@ OTel is **deprecating `span.addEvent()`** (targeted March 2026) in favor of the 
 
 ### Collector changes (minimal)
 
-- [ ] Read `CF-IPCountry` header and inject as `geo.country` in span_attributes of every trace row
-- [ ] Read `User-Agent` header and inject as `user_agent.original` in span_attributes (fallback for when the browser detector doesn't set it as a resource attribute)
-- [ ] Both are general enrichments, not analytics-specific
+- [x] Read `CF-IPCountry` header and inject as `geo.country` in span_attributes of every trace row
+- [x] Read `User-Agent` header and inject as `user_agent.original` in span_attributes (fallback for when the browser detector doesn't set it as a resource attribute)
+- [x] Both are general enrichments, not analytics-specific
 
 ### New Tinybird datasources
 
-- [ ] `tinybird/datasources/otel_analytics_pages.datasource` (AggregatingMergeTree)
-- [ ] `tinybird/datasources/otel_analytics_sessions.datasource` (AggregatingMergeTree)
+- [x] `tinybird/datasources/otel_analytics_pages.datasource` (AggregatingMergeTree)
+- [x] `tinybird/datasources/otel_analytics_sessions.datasource` (AggregatingMergeTree)
 
 ### New Tinybird materializations
 
-- [ ] `tinybird/materializations/otel_analytics_pages_mv.pipe` (fires on insert to `otel_traces`, WHERE SpanName = 'pageview')
-- [ ] `tinybird/materializations/otel_analytics_sessions_mv.pipe` (fires on insert to `otel_traces`, WHERE SpanName = 'pageview')
+- [x] `tinybird/materializations/otel_analytics_pages_mv.pipe` (fires on insert to `otel_traces`, WHERE SpanName = 'pageview')
+- [x] `tinybird/materializations/otel_analytics_sessions_mv.pipe` (fires on insert to `otel_traces`, WHERE SpanName = 'pageview')
 
 ### ClickHouse DDL (self-hosted)
 
-- [ ] Add `otel_analytics_pages` table + MV to `clickhouse.sql`
-- [ ] Add `otel_analytics_sessions` table + MV to `clickhouse.sql`
+- [x] Add `otel_analytics_pages` table + MV to `clickhouse.sql`
+- [x] Add `otel_analytics_sessions` table + MV to `clickhouse.sql`
 
 ### JWT scopes
 

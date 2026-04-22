@@ -3,9 +3,6 @@
 -- This schema follows the standard OTel ClickHouse exporter column naming
 -- (PascalCase) from opentelemetry-collector-contrib/exporter/clickhouseexporter.
 --
--- No ProjectId column — self-hosted users run single-project. Project isolation
--- is only used in the hosted Tinybird deployment (see tinybird/datasources/).
---
 -- Database: create your own or use `default`. The worker's CLICKHOUSE_DATABASE
 -- env var controls which database it writes to.
 
@@ -77,6 +74,155 @@ SELECT
 FROM otel_traces
 WHERE TraceId != ''
 GROUP BY TraceId;
+
+-- ============================================================================
+-- ANALYTICS: Page aggregates from browser pageview spans
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS otel_analytics_pages
+(
+    `ProjectId`    LowCardinality(String) CODEC(ZSTD(1)),
+    `Date`         Date,
+    `ServiceName`  LowCardinality(String) CODEC(ZSTD(1)),
+    `Domain`       String                 CODEC(ZSTD(1)),
+    `Pathname`     String                 CODEC(ZSTD(1)),
+    `Referrer`     String                 CODEC(ZSTD(1)),
+    `Device`       LowCardinality(String) CODEC(ZSTD(1)),
+    `Browser`      LowCardinality(String) CODEC(ZSTD(1)),
+    `Country`      LowCardinality(String) CODEC(ZSTD(1)),
+    `Language`     LowCardinality(String) CODEC(ZSTD(1)),
+    `Visits`       AggregateFunction(uniq, String),
+    `Hits`         AggregateFunction(count, UInt64)
+)
+ENGINE = AggregatingMergeTree
+PARTITION BY Date
+ORDER BY (ProjectId, ServiceName, Domain, Date, Device, Browser, Country, Pathname)
+TTL Date + INTERVAL 90 DAY
+SETTINGS index_granularity = 8192;
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS otel_analytics_pages_mv
+TO otel_analytics_pages
+AS
+WITH source AS (
+    SELECT
+        ProjectId,
+        toDate(Timestamp) AS Date,
+        ServiceName,
+        domainWithoutWWW(SpanAttributes['url.full']) AS Domain,
+        SpanAttributes['url.path'] AS Pathname,
+        concat(domainWithoutWWW(SpanAttributes['http.request.header.referer']), path(SpanAttributes['http.request.header.referer'])) AS Referrer,
+        lower(coalesce(nullIf(SpanAttributes['user_agent.original'], ''), ResourceAttributes['user_agent.original'])) AS ua,
+        coalesce(nullIf(SpanAttributes['geo.country'], ''), 'Unknown') AS Country,
+        coalesce(nullIf(ResourceAttributes['browser.language'], ''), 'Unknown') AS Language,
+        SpanAttributes['session.id'] AS SessionId
+    FROM otel_traces
+    WHERE
+        SpanName = 'pageview'
+        AND SpanAttributes['session.id'] != ''
+        AND SpanAttributes['url.path'] != ''
+        AND SpanAttributes['url.full'] != ''
+)
+SELECT
+    ProjectId,
+    Date,
+    ServiceName,
+    Domain,
+    Pathname,
+    Referrer,
+    CASE
+        WHEN match(ua, 'bot[^a-z]|crawl|spider|wget|curl|urllib|ahrefsbot|semrushbot|mj12bot|dotbot|bingbot|googlebot|yandex|baidu|bytespider|petalbot|gptbot|chatgpt|facebookexternalhit|twitterbot|linkedinbot|whatsapp|telegrambot|discordbot|slackbot|applebot|lighthouse|headless|phantom|puppeteer|python|java/|go-http|node-fetch|pingdom|uptimerobot|httrack|scrapy|feedfetcher|bitdiscovery') THEN 'bot'
+        WHEN match(ua, 'android') THEN 'mobile-android'
+        WHEN match(ua, 'ipad|iphone|ipod') THEN 'mobile-ios'
+        ELSE 'desktop'
+    END AS Device,
+    CASE
+        WHEN match(ua, 'firefox') THEN 'firefox'
+        WHEN match(ua, 'chrome|crios') THEN 'chrome'
+        WHEN match(ua, 'opera') THEN 'opera'
+        WHEN match(ua, 'msie|trident') THEN 'ie'
+        WHEN match(ua, 'iphone|ipad|safari') THEN 'safari'
+        ELSE 'Unknown'
+    END AS Browser,
+    Country,
+    Language,
+    uniqState(SessionId) AS Visits,
+    countState() AS Hits
+FROM source
+GROUP BY ProjectId, Date, ServiceName, Domain, Pathname, Referrer, Device, Browser, Country, Language;
+
+-- ============================================================================
+-- ANALYTICS: Session aggregates from browser pageview spans
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS otel_analytics_sessions
+(
+    `ProjectId`    LowCardinality(String) CODEC(ZSTD(1)),
+    `Date`         Date,
+    `ServiceName`  LowCardinality(String) CODEC(ZSTD(1)),
+    `Domain`       String                 CODEC(ZSTD(1)),
+    `SessionId`    String                 CODEC(ZSTD(1)),
+    `Device`       SimpleAggregateFunction(any, LowCardinality(String)),
+    `Browser`      SimpleAggregateFunction(any, LowCardinality(String)),
+    `Country`      SimpleAggregateFunction(any, LowCardinality(String)),
+    `FirstHit`     SimpleAggregateFunction(min, DateTime64(9)) CODEC(Delta(8), ZSTD(1)),
+    `LatestHit`    SimpleAggregateFunction(max, DateTime64(9)) CODEC(Delta(8), ZSTD(1)),
+    `Hits`         AggregateFunction(count, UInt64)
+)
+ENGINE = AggregatingMergeTree
+PARTITION BY Date
+ORDER BY (ProjectId, ServiceName, Domain, Date, SessionId)
+TTL Date + INTERVAL 90 DAY
+SETTINGS index_granularity = 8192;
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS otel_analytics_sessions_mv
+TO otel_analytics_sessions
+AS
+WITH source AS (
+    SELECT
+        ProjectId,
+        toDate(Timestamp) AS Date,
+        ServiceName,
+        domainWithoutWWW(SpanAttributes['url.full']) AS Domain,
+        SpanAttributes['session.id'] AS SessionId,
+        lower(coalesce(nullIf(SpanAttributes['user_agent.original'], ''), ResourceAttributes['user_agent.original'])) AS ua,
+        coalesce(nullIf(SpanAttributes['geo.country'], ''), 'Unknown') AS Country,
+        Timestamp
+    FROM otel_traces
+    WHERE
+        SpanName = 'pageview'
+        AND SpanAttributes['session.id'] != ''
+        AND SpanAttributes['url.full'] != ''
+)
+SELECT
+    ProjectId,
+    Date,
+    ServiceName,
+    Domain,
+    SessionId,
+    anySimpleState(
+        CASE
+            WHEN match(ua, 'bot[^a-z]|crawl|spider|wget|curl|urllib|ahrefsbot|semrushbot|mj12bot|dotbot|bingbot|googlebot|yandex|baidu|bytespider|petalbot|gptbot|chatgpt|facebookexternalhit|twitterbot|linkedinbot|whatsapp|telegrambot|discordbot|slackbot|applebot|lighthouse|headless|phantom|puppeteer|python|java/|go-http|node-fetch|pingdom|uptimerobot|httrack|scrapy|feedfetcher|bitdiscovery') THEN 'bot'
+            WHEN match(ua, 'android') THEN 'mobile-android'
+            WHEN match(ua, 'ipad|iphone|ipod') THEN 'mobile-ios'
+            ELSE 'desktop'
+        END
+    ) AS Device,
+    anySimpleState(
+        CASE
+            WHEN match(ua, 'firefox') THEN 'firefox'
+            WHEN match(ua, 'chrome|crios') THEN 'chrome'
+            WHEN match(ua, 'opera') THEN 'opera'
+            WHEN match(ua, 'msie|trident') THEN 'ie'
+            WHEN match(ua, 'iphone|ipad|safari') THEN 'safari'
+            ELSE 'Unknown'
+        END
+    ) AS Browser,
+    anySimpleState(Country) AS Country,
+    minSimpleState(Timestamp) AS FirstHit,
+    maxSimpleState(Timestamp) AS LatestHit,
+    countState() AS Hits
+FROM source
+GROUP BY ProjectId, Date, ServiceName, Domain, SessionId;
 
 -- ============================================================================
 -- LOGS

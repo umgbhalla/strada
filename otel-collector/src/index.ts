@@ -33,8 +33,10 @@ const app = new Spiceflow()
     const projectId = getProjectId(request);
     const body = (await request.json()) as ExportTraceServiceRequest;
     const backend = createBackend();
+    const country = request.headers.get("cf-ipcountry") ?? undefined;
+    const userAgent = request.headers.get("user-agent") ?? undefined;
 
-    const ndjson = transformTraces(body, projectId);
+    const ndjson = transformTraces(body, projectId, { country, userAgent });
     if (ndjson) {
       waitUntil(backend.send(datasources.traces, "traces", ndjson));
     }

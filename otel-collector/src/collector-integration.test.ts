@@ -315,11 +315,12 @@ describe.sequential('collector integration with official OTel SDKs', () => {
       collector = {
         server: listener.server,
         host: '127.0.0.1',
-        port: listener.port,
-        baseUrl: `http://127.0.0.1:${listener.port}`,
+        port: listener.port ?? 0,
+        baseUrl: `http://127.0.0.1:${listener.port ?? 0}`,
       }
+      const collectorBaseUrl = collector.baseUrl
 
-      await emitOtelData(collector.baseUrl)
+      await emitOtelData(collectorBaseUrl)
 
       await waitFor(() => {
         const tables = new Set(inserts.map((insert) => insert.table))
@@ -607,6 +608,7 @@ describe.sequential('collector integration with official OTel SDKs', () => {
                 "SpanAttributes": {
                   "http.method": "POST",
                   "http.route": "/checkout",
+                  "user_agent.original": "OTel-OTLP-Exporter-JavaScript/0.214.0",
                 },
                 "SpanKind": "Internal",
                 "SpanName": "checkout",

@@ -1,0 +1,21 @@
+DESCRIPTION >
+    Pre-aggregated browser session analytics for bounce rate, session duration, and unique visitors.
+
+SCHEMA >
+    `ProjectId` LowCardinality(String),
+    `Date` Date,
+    `ServiceName` LowCardinality(String),
+    `Domain` String,
+    `SessionId` String,
+    `Device` SimpleAggregateFunction(any, LowCardinality(String)),
+    `Browser` SimpleAggregateFunction(any, LowCardinality(String)),
+    `Country` SimpleAggregateFunction(any, LowCardinality(String)),
+    `FirstHit` SimpleAggregateFunction(min, DateTime64(9)),
+    `LatestHit` SimpleAggregateFunction(max, DateTime64(9)),
+    `Hits` AggregateFunction(count, UInt64)
+
+ENGINE "AggregatingMergeTree"
+ENGINE_PARTITION_KEY "Date"
+ENGINE_SORTING_KEY "ProjectId, ServiceName, Domain, Date, SessionId"
+ENGINE_TTL "Date + INTERVAL 90 DAY"
+ENGINE_SETTINGS index_granularity=8192
