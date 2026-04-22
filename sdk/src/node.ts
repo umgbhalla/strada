@@ -15,6 +15,7 @@ import {
   LoggerProvider,
   BatchLogRecordProcessor,
 } from "@opentelemetry/sdk-logs";
+import { registerInstrumentations } from "@opentelemetry/instrumentation";
 import { resourceFromAttributes } from "@opentelemetry/resources";
 import { logs } from "@opentelemetry/api-logs";
 import type { Logger } from "@opentelemetry/api-logs";
@@ -113,8 +114,8 @@ export function initStrada(options: StradaOptions): void {
   logs.setGlobalLoggerProvider(_loggerProvider);
   _logger = _loggerProvider.getLogger("strada");
 
-  // NodeSDK (traces + metrics + auto-instrumentation)
-  const sdkConfig: ConstructorParameters<typeof NodeSDK>[0] = {
+  // NodeSDK (traces + metrics)
+  _sdk = new NodeSDK({
     resource,
     traceExporter: new OTLPTraceExporter({
       url: `${endpoint}/v1/traces`,
@@ -125,27 +126,28 @@ export function initStrada(options: StradaOptions): void {
       }),
       exportIntervalMillis: 10_000,
     }),
-  };
-
-  // Try to load auto-instrumentations (optional peer dep)
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const mod = require("@opentelemetry/auto-instrumentations-node");
-    if (mod && typeof mod.getNodeAutoInstrumentations === "function") {
-      sdkConfig.instrumentations = mod.getNodeAutoInstrumentations();
-    }
-  } catch {
-    // auto-instrumentations-node not installed, that's fine
-    if (options.debug) {
-      console.log(
-        "[@strada.sh/sdk] @opentelemetry/auto-instrumentations-node not found, skipping auto-instrumentation",
-      );
-    }
-  }
-
-  _sdk = new NodeSDK(sdkConfig);
+  });
 
   _sdk.start();
+
+  // Try to load auto-instrumentations (optional peer dep).
+  // Dynamic import so the ESM package stays clean. registerInstrumentations()
+  // hooks into the global providers which are already registered by sdk.start().
+  import("@opentelemetry/auto-instrumentations-node")
+    .then((mod) => {
+      if (typeof mod.getNodeAutoInstrumentations === "function") {
+        registerInstrumentations({
+          instrumentations: mod.getNodeAutoInstrumentations(),
+        });
+      }
+    })
+    .catch(() => {
+      if (options.debug) {
+        console.log(
+          "[@strada.sh/sdk] @opentelemetry/auto-instrumentations-node not found, skipping auto-instrumentation",
+        );
+      }
+    });
 
   // Global error handlers
   process.on("uncaughtException", (error) => {

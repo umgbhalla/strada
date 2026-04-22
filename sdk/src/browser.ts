@@ -28,7 +28,7 @@ import type { LogRecordProcessor } from "@opentelemetry/sdk-logs";
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
 import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-http";
 import { registerInstrumentations } from "@opentelemetry/instrumentation";
-import { resourceFromAttributes, detectResources } from "@opentelemetry/resources";
+import { resourceFromAttributes } from "@opentelemetry/resources";
 import { logs } from "@opentelemetry/api-logs";
 import type { Logger } from "@opentelemetry/api-logs";
 
@@ -262,32 +262,33 @@ export function initStrada(options: StradaOptions): void {
 
   const getUserId = () => resolveUserId(_options);
 
-  // Build resource with Strada attributes + browser detector
-  let resource = resourceFromAttributes({
+  // Build resource with Strada attributes + browser detection.
+  // Browser attributes are detected inline (navigator APIs are synchronous)
+  // instead of requiring an external package.
+  const browserAttrs: Record<string, string | boolean | string[]> = {};
+  if (typeof navigator !== "undefined") {
+    const uaData = (navigator as Navigator & {
+      userAgentData?: { platform: string; brands: { brand: string; version: string }[]; mobile: boolean };
+    }).userAgentData;
+    if (uaData) {
+      browserAttrs["browser.platform"] = uaData.platform;
+      browserAttrs["browser.brands"] = uaData.brands.map((b) => `${b.brand} ${b.version}`);
+      browserAttrs["browser.mobile"] = uaData.mobile;
+    }
+    if (navigator.userAgent) {
+      browserAttrs["user_agent.original"] = navigator.userAgent;
+    }
+    if (navigator.language) {
+      browserAttrs["browser.language"] = navigator.language;
+    }
+  }
+
+  const resource = resourceFromAttributes({
     "service.name": options.service,
     ...(options.version ? { "service.version": options.version } : {}),
     ...(options.environment ? { "deployment.environment.name": options.environment } : {}),
+    ...browserAttrs,
   });
-
-  // Detect browser attributes (platform, brands, mobile, language, user_agent)
-  // using the OTel browser detector. This is synchronous since navigator APIs
-  // are available immediately in the browser.
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const mod = require("@opentelemetry/opentelemetry-browser-detector");
-    if (mod && mod.browserDetector) {
-      const detected = detectResources({ detectors: [mod.browserDetector] });
-      resource = resource.merge(detected);
-    }
-  } catch {
-    // Browser detector not installed, that's fine.
-    // Users can install @opentelemetry/opentelemetry-browser-detector to
-    // get automatic browser.platform, browser.brands, browser.mobile,
-    // browser.language, and user_agent.original resource attributes.
-    if (options.debug) {
-      console.log("[@strada.sh/sdk] @opentelemetry/opentelemetry-browser-detector not found, skipping");
-    }
-  }
 
   const endpoint = options.endpoint.replace(/\/+$/, "");
 
