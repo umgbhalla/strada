@@ -12,7 +12,8 @@
     "build": "pnpm run --filter '*' build",
     "release": "pnpm run build && changeset",
     "typecheck": "tsc -b",
-    "fix": "oxfmt --write && oxlint --fix && tsc -b"
+    "fix": "oxfmt --write && oxlint --fix && tsc -b",
+    "secrets:sync": "pnpm --dir website secrets && pnpm --dir otel-collector secrets"
   },
   "dependencies": {
     "oxlint-tsgolint": "^0.17.4"
