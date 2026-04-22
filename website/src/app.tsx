@@ -6,6 +6,7 @@ import type { SpiceflowRegister } from 'spiceflow/react'
 import { z } from 'zod'
 import * as orm from 'drizzle-orm'
 import * as schema from 'db/src/schema.ts'
+import { ulid } from 'ulid'
 import {
   getDb, getAuth, getSession, requireSession, requireOrgMember,
   hashToken, generateProjectToken,
@@ -45,6 +46,20 @@ async function parseJsonBody<TSchema extends z.ZodTypeAny>(
   bodySchema: TSchema,
 ): Promise<z.infer<TSchema>> {
   return bodySchema.parse(await request.json())
+}
+
+async function createOrgForUser(userId: string, name: string) {
+  const db = getDb()
+  const orgId = ulid()
+  const dbId = ulid()
+
+  await db.batch([
+    db.insert(schema.org).values({ id: orgId, name }),
+    db.insert(schema.orgMember).values({ orgId, userId, role: 'admin' }),
+    db.insert(schema.database).values({ id: dbId, orgId, backend: 'tinybird' }),
+  ])
+
+  return { id: orgId, name, databaseId: dbId, role: 'admin' as const }
 }
 
 export const app = new Spiceflow()
@@ -113,19 +128,40 @@ export const app = new Spiceflow()
     request: createOrgRequestSchema,
     async handler({ request }) {
       const session = await requireSession(request)
-      const db = getDb()
       const body = await parseJsonBody(request, createOrgRequestSchema)
+      const org = await createOrgForUser(session.userId, body.name)
+      return { id: org.id, name: org.name, databaseId: org.databaseId }
+    },
+  })
 
-      const orgId = (await import('ulid')).ulid()
-      const dbId = (await import('ulid')).ulid()
+  // ── API: Ensure default org for current user ───────────────────
+  .route({
+    method: 'POST',
+    path: '/api/orgs/ensure-default',
+    async handler({ request }) {
+      const session = await requireSession(request)
+      const db = getDb()
+      const members = await db.query.orgMember.findMany({
+        where: { userId: session.userId },
+        with: { org: true },
+      })
+      const existing = members.find((member) => member.org != null)
+      if (existing?.org) {
+        return {
+          id: existing.org.id,
+          name: existing.org.name,
+          role: existing.role,
+          created: false,
+        }
+      }
 
-      await db.batch([
-        db.insert(schema.org).values({ id: orgId, name: body.name }),
-        db.insert(schema.orgMember).values({ orgId, userId: session.userId, role: 'admin' }),
-        db.insert(schema.database).values({ id: dbId, orgId, backend: 'tinybird' }),
-      ])
-
-      return { id: orgId, name: body.name, databaseId: dbId }
+      const org = await createOrgForUser(session.userId, 'Personal')
+      return {
+        id: org.id,
+        name: org.name,
+        role: org.role,
+        created: true,
+      }
     },
   })
 
@@ -462,33 +498,6 @@ export const app = new Spiceflow()
         status: 500, headers: { 'content-type': 'application/json' },
       })
     },
-  })
-
-  // ── Internal: resolve project config for collector ────────────
-  // The collector calls this to get database credentials for a project ID.
-  // No user auth; uses a shared internal secret or is accessed via service binding.
-  .get('/internal/project-config/:projectId', async ({ params }) => {
-    const db = getDb()
-    const proj = await db.query.project.findFirst({
-      where: { id: params.projectId },
-      with: { database: true },
-    })
-    if (!proj || !proj.database) {
-      throw new Response(JSON.stringify({ error: 'project not found' }), {
-        status: 404, headers: { 'content-type': 'application/json' },
-      })
-    }
-    const dbConfig = proj.database
-    return {
-      projectId: proj.id,
-      backend: dbConfig.backend,
-      tinybirdEndpoint: dbConfig.tinybirdEndpoint,
-      tinybirdAdminToken: dbConfig.tinybirdAdminToken,
-      clickhouseUrl: dbConfig.clickhouseUrl,
-      clickhouseDatabase: dbConfig.clickhouseDatabase,
-      clickhouseUser: dbConfig.clickhouseUser,
-      clickhousePassword: dbConfig.clickhousePassword,
-    }
   })
 
 export type App = typeof app

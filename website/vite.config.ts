@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 import { spiceflowPlugin } from 'spiceflow/vite'
 
-const port = parseInt(process.env.PORT || '5199', 10)
+const port = parseInt(process.env.PORT || '5444', 10)
 
 export default defineConfig({
   server: { port, strictPort: true },

@@ -19,6 +19,7 @@ import { LoggerProvider, BatchLogRecordProcessor } from '@opentelemetry/sdk-logs
 import { MeterProvider, PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics'
 import { BatchSpanProcessor, NodeTracerProvider } from '@opentelemetry/sdk-trace-node'
 import { ATTR_SERVICE_NAME } from '@opentelemetry/semantic-conventions'
+import { createCollectorApp } from './app.ts'
 
 interface CapturedInsert {
   query: string
@@ -86,6 +87,50 @@ async function startServer(
     host,
     port: address.port,
     baseUrl: `http://${host}:${address.port}`,
+  }
+}
+
+function setResponseHeaders(response: Response, res: ServerResponse): void {
+  response.headers.forEach((value, key) => {
+    res.setHeader(key, value)
+  })
+}
+
+function createFakeD1(projectId: string, clickhouseUrl: string): D1Database {
+  return {
+    prepare() {
+      return {
+        bind(boundProjectId: string) {
+          return {
+            async first() {
+              if (boundProjectId !== projectId) return null
+              return {
+                project_id: projectId,
+                backend: 'clickhouse' as const,
+                tinybird_endpoint: null,
+                tinybird_admin_token: null,
+                clickhouse_url: clickhouseUrl,
+                clickhouse_database: 'default',
+                clickhouse_user: 'default',
+                clickhouse_password: '',
+              }
+            },
+          }
+        },
+      } as D1PreparedStatement
+    },
+    batch() {
+      throw new Error('Fake D1 batch() not implemented in integration test')
+    },
+    exec() {
+      throw new Error('Fake D1 exec() not implemented in integration test')
+    },
+    withSession() {
+      throw new Error('Fake D1 withSession() not implemented in integration test')
+    },
+    dump() {
+      throw new Error('Fake D1 dump() not implemented in integration test')
+    },
   }
 }
 
@@ -257,6 +302,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 describe.sequential('collector integration with official OTel SDKs', () => {
   it('exports traces/logs/metrics to ClickHouse SQL with valid JSON payloads', async () => {
+    const projectId = 'test-project'
     const tmpDir = await mkdtemp(join(tmpdir(), 'collector-integration-'))
     const outputFile = join(tmpDir, 'captured-inserts.json')
     const inserts: CapturedInsert[] = []
@@ -305,19 +351,27 @@ describe.sequential('collector integration with official OTel SDKs', () => {
       process.env.CLICKHOUSE_USER = 'default'
       process.env.CLICKHOUSE_PASSWORD = ''
 
-      const collectorModule = await import('./index.ts')
+      const app = createCollectorApp({
+        db: createFakeD1(projectId, fakeBackend.baseUrl),
+      })
 
-      const listener = await collectorModule.app.listen(
+      collector = await startServer(
         parsePortFromEnv('OTEL_COLLECTOR_TEST_PORT'),
-        '127.0.0.1',
+        async (req, res) => {
+          const body = req.method === 'POST' ? await readBody(req) : undefined
+          const url = new URL(req.url ?? '/', `http://${projectId}-ingest.strada.sh`)
+          const response = await app.handle(new Request(url, {
+            method: req.method,
+            headers: req.headers as HeadersInit,
+            body,
+          }))
+
+          res.statusCode = response.status
+          setResponseHeaders(response, res)
+          res.end(await response.text())
+        },
       )
 
-      collector = {
-        server: listener.server,
-        host: '127.0.0.1',
-        port: listener.port ?? 0,
-        baseUrl: `http://127.0.0.1:${listener.port ?? 0}`,
-      }
       const collectorBaseUrl = collector.baseUrl
 
       await emitOtelData(collectorBaseUrl)
@@ -386,7 +440,7 @@ describe.sequential('collector integration with official OTel SDKs', () => {
                 "Level": "error",
                 "MechanismHandled": true,
                 "MechanismType": "generic",
-                "ProjectId": "",
+                "ProjectId": "test-project",
                 "Release": "",
                 "ResourceAttributes": {
                   "service.name": "collector-integration-test",
@@ -416,7 +470,7 @@ describe.sequential('collector integration with official OTel SDKs', () => {
                 "Level": "error",
                 "MechanismHandled": true,
                 "MechanismType": "generic",
-                "ProjectId": "",
+                "ProjectId": "test-project",
                 "Release": "",
                 "ResourceAttributes": {
                   "service.name": "collector-integration-test",
@@ -439,7 +493,7 @@ describe.sequential('collector integration with official OTel SDKs', () => {
                   "exception.type": "CheckoutError",
                   "order_id": "order-123",
                 },
-                "ProjectId": "",
+                "ProjectId": "test-project",
                 "ResourceAttributes": {
                   "service.name": "collector-integration-test",
                 },
@@ -468,7 +522,7 @@ describe.sequential('collector integration with official OTel SDKs', () => {
                 "MetricDescription": "",
                 "MetricName": "queue.depth",
                 "MetricUnit": "",
-                "ProjectId": "",
+                "ProjectId": "test-project",
                 "ResourceAttributes": {
                   "service.name": "collector-integration-test",
                 },
@@ -535,7 +589,7 @@ describe.sequential('collector integration with official OTel SDKs', () => {
                 "MetricName": "checkout.duration.ms",
                 "MetricUnit": "",
                 "Min": 245.5,
-                "ProjectId": "",
+                "ProjectId": "test-project",
                 "ResourceAttributes": {
                   "service.name": "collector-integration-test",
                 },
@@ -565,7 +619,7 @@ describe.sequential('collector integration with official OTel SDKs', () => {
                 "MetricDescription": "",
                 "MetricName": "checkout.attempts",
                 "MetricUnit": "",
-                "ProjectId": "",
+                "ProjectId": "test-project",
                 "ResourceAttributes": {
                   "service.name": "collector-integration-test",
                 },
@@ -602,7 +656,7 @@ describe.sequential('collector integration with official OTel SDKs', () => {
                 "LinksSpanId": [],
                 "LinksTraceId": [],
                 "LinksTraceState": [],
-                "ProjectId": "",
+                "ProjectId": "test-project",
                 "ResourceAttributes": {
                   "service.name": "collector-integration-test",
                 },

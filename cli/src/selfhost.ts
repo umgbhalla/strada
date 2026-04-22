@@ -12,6 +12,7 @@ import { loadTinybirdResources } from "./tinybird-resources.ts";
 import { TinybirdClient } from "./tinybird.ts";
 import { requireAuth } from "./config.ts";
 import { createApiClient } from "./api-client.ts";
+import { ensureDefaultOrg } from "./projects.ts";
 
 export interface SelfhostOptions {
   token?: string;
@@ -102,17 +103,13 @@ export async function selfhostAction(
 
   const { safeFetch, authHeaders } = createApiClient(stradaAuth.baseUrl, stradaAuth.sessionToken);
 
-  // Get the user's org
-  const orgsRes = await safeFetch("/api/orgs", { headers: { ...authHeaders } });
-  if (orgsRes instanceof Error) {
-    clack.log.error(orgsRes.message);
+  // Create a default personal org on first use so `strada login` -> `strada selfhost`
+  // works end to end without a manual org bootstrap step.
+  const org = await ensureDefaultOrg(safeFetch, authHeaders).catch((error) => error as Error);
+  if (org instanceof Error) {
+    clack.log.error(org.message);
     return proc.exit(1);
   }
-  if (orgsRes.orgs.length === 0) {
-    clack.log.error("No organizations found. Create one first.");
-    return proc.exit(1);
-  }
-  const org = orgsRes.orgs[0]!;
   clack.log.info(`Using organization: ${picocolors.cyan(org.name)}`);
 
   // Authenticate with Tinybird

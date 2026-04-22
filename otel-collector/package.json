@@ -8,7 +8,8 @@
   "scripts": {
     "dev": "wrangler dev",
     "dev:localhost": "tsx scripts/dev-localhost.ts",
-    "deploy": "wrangler deploy",
+    "deploy": "wrangler deploy --env preview",
+    "deploy:prod": "wrangler deploy",
     "test": "vitest run",
     "test:integration": "vitest run src/collector-integration.test.ts",
     "typecheck": "tsc -b",

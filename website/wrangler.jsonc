@@ -1,16 +1,20 @@
 {
+  "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "strada-website",
-  "compatibility_date": "2026-06-01",
+  "compatibility_date": "2026-04-14",
   "compatibility_flags": ["nodejs_compat"],
   "main": "spiceflow/cloudflare-entrypoint",
   "observability": {
     "enabled": true,
   },
+  "vars": {
+    "BETTER_AUTH_URL": "https://strada.sh",
+  },
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "strada-db",
-      "database_id": "PLACEHOLDER_CREATE_WITH_WRANGLER",
+      "database_id": "696d53b4-bce6-4ef0-89dd-aba145a03d12",
       "migrations_dir": "../db/drizzle",
     },
   ],
@@ -30,11 +34,14 @@
   "env": {
     "preview": {
       "name": "strada-website-preview",
+      "vars": {
+        "BETTER_AUTH_URL": "https://preview.strada.sh",
+      },
       "d1_databases": [
         {
           "binding": "DB",
           "database_name": "strada-preview-db",
-          "database_id": "PLACEHOLDER_CREATE_WITH_WRANGLER",
+          "database_id": "1e220c20-0396-4623-a62f-c2006a262d78",
           "migrations_dir": "../db/drizzle",
         },
       ],

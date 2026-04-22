@@ -1,7 +1,8 @@
 {
+  "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "strada-otel-ingester",
   "main": "src/index.ts",
-  "compatibility_date": "2026-06-01",
+  "compatibility_date": "2026-04-14",
   "compatibility_flags": ["nodejs_compat"],
   // Route pattern: each project gets {projectId}-ingest.strada.sh
   // The worker extracts project_id from the hostname and resolves config from D1.
@@ -16,7 +17,25 @@
     {
       "binding": "DB",
       "database_name": "strada-db",
-      "database_id": "PLACEHOLDER_CREATE_WITH_WRANGLER",
+      "database_id": "696d53b4-bce6-4ef0-89dd-aba145a03d12",
     },
   ],
+  "env": {
+    "preview": {
+      "name": "strada-otel-ingester-preview",
+      "routes": [
+        {
+          "pattern": "*-ingest.preview.strada.sh/*",
+          "zone_name": "strada.sh"
+        }
+      ],
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "strada-preview-db",
+          "database_id": "1e220c20-0396-4623-a62f-c2006a262d78"
+        }
+      ]
+    }
+  }
 }

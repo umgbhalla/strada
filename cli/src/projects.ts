@@ -8,13 +8,16 @@ import { createApiClient } from "./api-client.ts";
 
 export const projectsCli = goke();
 
-async function getDefaultOrg(safeFetch: ReturnType<typeof createApiClient>["safeFetch"], authHeaders: Record<string, string>) {
-  const res = await safeFetch("/api/orgs", { headers: { ...authHeaders } });
+export async function ensureDefaultOrg(
+  safeFetch: ReturnType<typeof createApiClient>["safeFetch"],
+  authHeaders: Record<string, string>,
+) {
+  const res = await safeFetch("/api/orgs/ensure-default", {
+    method: "POST",
+    headers: { ...authHeaders },
+  });
   if (res instanceof Error) throw res;
-  if (res.orgs.length === 0) {
-    throw new Error("No organizations found. Create one first.");
-  }
-  return res.orgs[0]!;
+  return { id: res.id, name: res.name, role: "admin" as const };
 }
 
 projectsCli
@@ -22,7 +25,7 @@ projectsCli
   .action(async (_options, { console: output }) => {
     const auth = requireAuth();
     const { safeFetch, authHeaders } = createApiClient(auth.baseUrl, auth.sessionToken);
-    const org = await getDefaultOrg(safeFetch, authHeaders);
+    const org = await ensureDefaultOrg(safeFetch, authHeaders);
     const res = await safeFetch(`/api/orgs/${org.id}/projects`, { headers: { ...authHeaders } });
     if (res instanceof Error) throw res;
 
@@ -44,7 +47,7 @@ projectsCli
   .action(async (slug, _options, { console: output }) => {
     const auth = requireAuth();
     const { safeFetch, authHeaders } = createApiClient(auth.baseUrl, auth.sessionToken);
-    const org = await getDefaultOrg(safeFetch, authHeaders);
+    const org = await ensureDefaultOrg(safeFetch, authHeaders);
     const res = await safeFetch(`/api/orgs/${org.id}/projects`, {
       method: "POST",
       headers: { ...authHeaders, "Content-Type": "application/json" },
@@ -80,7 +83,7 @@ projectsCli
   .action(async (sql, options, { console: output, process: proc }) => {
     const auth = requireAuth();
     const { safeFetch, authHeaders } = createApiClient(auth.baseUrl, auth.sessionToken);
-    const org = await getDefaultOrg(safeFetch, authHeaders);
+    const org = await ensureDefaultOrg(safeFetch, authHeaders);
 
     let projectId = options.project;
     if (!projectId) {
