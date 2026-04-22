@@ -10,3 +10,4 @@ opensrc
 .cache
 *.local.*
 .env
+tmp
