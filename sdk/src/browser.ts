@@ -119,8 +119,8 @@ class FilteringLogProcessor implements LogRecordProcessor {
 
   onEmit(...args: Parameters<LogRecordProcessor["onEmit"]>): void {
     const record = args[0];
-    const message = String(record.attributes?.[ATTR.EXCEPTION_MESSAGE] ?? "");
-    const stack = String(record.attributes?.[ATTR.EXCEPTION_STACKTRACE] ?? "");
+    const message = String(record.attributes?.[ATTR["exception.message"]] ?? "");
+    const stack = String(record.attributes?.[ATTR["exception.stacktrace"]] ?? "");
 
     if (message === "Script error." || message === "Script error") return;
     if (message.includes("ResizeObserver loop limit exceeded")) return;
@@ -159,7 +159,7 @@ class StradaSpanProcessor implements SpanProcessor {
 
   onStart(span: Span): void {
     const sessionId = this.getSessionId();
-    span.setAttribute(ATTR.SESSION_ID, sessionId);
+    span.setAttribute(ATTR["session.id"], sessionId);
 
     // Current page URL info
     if (typeof window !== "undefined") {
@@ -172,7 +172,7 @@ class StradaSpanProcessor implements SpanProcessor {
 
     const userId = this.getUserId();
     if (userId) {
-      span.setAttribute(ATTR.USER_ID, userId);
+      span.setAttribute(ATTR["user.id"], userId);
     }
   }
 
@@ -209,14 +209,14 @@ class ContextLogProcessor implements LogRecordProcessor {
     const record = args[0];
 
     // Inject analytics context into the log record
-    record.setAttribute(ATTR.SESSION_ID, this.getSessionId());
+    record.setAttribute(ATTR["session.id"], this.getSessionId());
     if (typeof window !== "undefined") {
-      record.setAttribute(ATTR.URL_PATH, window.location.pathname);
-      record.setAttribute(ATTR.URL_FULL, window.location.href);
+      record.setAttribute(ATTR["url.path"], window.location.pathname);
+      record.setAttribute(ATTR["url.full"], window.location.href);
     }
     const userId = this.getUserId();
     if (userId) {
-      record.setAttribute(ATTR.USER_ID, userId);
+      record.setAttribute(ATTR["user.id"], userId);
     }
 
     this.inner.onEmit(...args);
@@ -251,10 +251,10 @@ function getPageAttributes(
   referrer: string = document.referrer,
 ): Record<string, string> {
   return {
-    [ATTR.URL_PATH]: url.pathname,
-    [ATTR.URL_QUERY]: url.search,
-    [ATTR.URL_FULL]: url.href,
-    ...(referrer ? { [ATTR.REFERER]: referrer } : {}),
+    [ATTR["url.path"]]: url.pathname,
+    [ATTR["url.query"]]: url.search,
+    [ATTR["url.full"]]: url.href,
+    ...(referrer ? { [ATTR["http.request.header.referer"]]: referrer } : {}),
   };
 }
 
@@ -348,7 +348,7 @@ export function initStrada(options: StradaOptions): void {
       const mobile = Reflect.get(uaData, "mobile");
 
       if (typeof platform === "string") {
-        browserAttrs[ATTR.BROWSER_PLATFORM] = platform;
+        browserAttrs[ATTR["browser.platform"]] = platform;
       }
       if (Array.isArray(brands)) {
         const normalizedBrands = brands
@@ -363,25 +363,25 @@ export function initStrada(options: StradaOptions): void {
           })
           .filter((brand): brand is string => Boolean(brand));
         if (normalizedBrands.length > 0) {
-          browserAttrs[ATTR.BROWSER_BRANDS] = normalizedBrands;
+          browserAttrs[ATTR["browser.brands"]] = normalizedBrands;
         }
       }
       if (typeof mobile === "boolean") {
-        browserAttrs[ATTR.BROWSER_MOBILE] = mobile;
+        browserAttrs[ATTR["browser.mobile"]] = mobile;
       }
     }
     if (navigator.userAgent) {
-      browserAttrs[ATTR.USER_AGENT_ORIGINAL] = navigator.userAgent;
+      browserAttrs[ATTR["user_agent.original"]] = navigator.userAgent;
     }
     if (navigator.language) {
-      browserAttrs[ATTR.BROWSER_LANGUAGE] = navigator.language;
+      browserAttrs[ATTR["browser.language"]] = navigator.language;
     }
   }
 
   const resource = resourceFromAttributes({
-    [ATTR.SERVICE_NAME]: options.service,
-    ...(options.version ? { [ATTR.SERVICE_VERSION]: options.version } : {}),
-    ...(options.environment ? { [ATTR.DEPLOYMENT_ENVIRONMENT_NAME]: options.environment } : {}),
+    [ATTR["service.name"]]: options.service,
+    ...(options.version ? { [ATTR["service.version"]]: options.version } : {}),
+    ...(options.environment ? { [ATTR["deployment.environment.name"]]: options.environment } : {}),
     ...browserAttrs,
   });
 
@@ -494,8 +494,8 @@ export function initStrada(options: StradaOptions): void {
 
       endCurrentPageSpan();
       startPageSpan(dest, {
-        [ATTR.NAVIGATION_TYPE]: event.navigationType, // "push" | "replace" | "traverse"
-        [ATTR.NAVIGATION_USER_INITIATED]: event.userInitiated,
+        [ATTR["navigation.type"]]: event.navigationType, // "push" | "replace" | "traverse"
+        [ATTR["navigation.user_initiated"]]: event.userInitiated,
       }, window.location.href);
     };
     navigation.addEventListener("navigate", _navigateListener);
@@ -525,7 +525,7 @@ export function startPageSpan(
   const tracer = trace.getTracer("strada-web");
   _currentPageviewSpan = tracer.startSpan("pageview", {
     attributes: {
-      [ATTR.SESSION_ID]: _sessionId ?? "",
+      [ATTR["session.id"]]: _sessionId ?? "",
       ...getPageAttributes(pageUrl, referrer),
       ...extraAttributes,
     },
@@ -571,7 +571,7 @@ export function track(
   }
 
   const attributes: Record<string, string | number | boolean> = {
-    [ATTR.EVENT_NAME]: name,
+    [ATTR["event.name"]]: name,
   };
 
   // Add custom properties with custom.* prefix

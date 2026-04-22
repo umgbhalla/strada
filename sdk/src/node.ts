@@ -101,12 +101,12 @@ class BaggageSpanProcessor implements SpanProcessor {
 
     const sessionId = baggage.getEntry(BAGGAGE_SESSION_ID)?.value;
     if (sessionId) {
-      span.setAttribute(ATTR.SESSION_ID, sessionId);
+      span.setAttribute(ATTR["session.id"], sessionId);
     }
 
     const userId = baggage.getEntry(BAGGAGE_USER_ID)?.value;
     if (userId) {
-      span.setAttribute(ATTR.USER_ID, userId);
+      span.setAttribute(ATTR["user.id"], userId);
     }
   }
 
@@ -142,12 +142,12 @@ class BaggageLogProcessor implements LogRecordProcessor {
     if (baggage) {
       const sessionId = baggage.getEntry(BAGGAGE_SESSION_ID)?.value;
       if (sessionId) {
-        record.setAttribute(ATTR.SESSION_ID, sessionId);
+        record.setAttribute(ATTR["session.id"], sessionId);
       }
 
       const userId = baggage.getEntry(BAGGAGE_USER_ID)?.value;
       if (userId) {
-        record.setAttribute(ATTR.USER_ID, userId);
+        record.setAttribute(ATTR["user.id"], userId);
       }
     }
 
@@ -208,10 +208,10 @@ export function initStrada(options: StradaOptions): void {
   const resource = defaultResource()
     .merge(detectResources({ detectors: [envDetector, processDetector, hostDetector] }))
     .merge(resourceFromAttributes({
-      [ATTR.SERVICE_NAME]: options.service,
-      ...(options.version ? { [ATTR.SERVICE_VERSION]: options.version } : {}),
+      [ATTR["service.name"]]: options.service,
+      ...(options.version ? { [ATTR["service.version"]]: options.version } : {}),
       ...(options.environment
-        ? { [ATTR.DEPLOYMENT_ENVIRONMENT_NAME]: options.environment }
+        ? { [ATTR["deployment.environment.name"]]: options.environment }
         : {}),
     }));
 

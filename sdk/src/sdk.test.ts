@@ -167,11 +167,11 @@ describe("errorToAttributes", () => {
     const err = new TypeError("boom");
     const attrs = errorToAttributes(err);
 
-    expect(attrs[ATTR.EXCEPTION_TYPE]).toBe("TypeError");
-    expect(attrs[ATTR.EXCEPTION_MESSAGE]).toBe("boom");
-    expect(attrs[ATTR.EXCEPTION_STACKTRACE]).toBeTruthy();
-    expect(attrs[ATTR.EXCEPTION_MECHANISM_TYPE]).toBe("generic");
-    expect(attrs[ATTR.EXCEPTION_MECHANISM_HANDLED]).toBe("true");
+    expect(attrs[ATTR["exception.type"]]).toBe("TypeError");
+    expect(attrs[ATTR["exception.message"]]).toBe("boom");
+    expect(attrs[ATTR["exception.stacktrace"]]).toBeTruthy();
+    expect(attrs[ATTR["exception.mechanism.type"]]).toBe("generic");
+    expect(attrs[ATTR["exception.mechanism.handled"]]).toBe("true");
   });
 
   it("marks unhandled errors correctly", () => {
@@ -181,16 +181,16 @@ describe("errorToAttributes", () => {
       mechanism: "onerror",
     });
 
-    expect(attrs[ATTR.EXCEPTION_MECHANISM_TYPE]).toBe("onerror");
-    expect(attrs[ATTR.EXCEPTION_MECHANISM_HANDLED]).toBe("false");
+    expect(attrs[ATTR["exception.mechanism.type"]]).toBe("onerror");
+    expect(attrs[ATTR["exception.mechanism.handled"]]).toBe("false");
   });
 
   it("uses generic as the default mechanism type", () => {
     const err = new Error("crash");
     const attrs = errorToAttributes(err, { handled: false });
 
-    expect(attrs[ATTR.EXCEPTION_MECHANISM_TYPE]).toBe("generic");
-    expect(attrs[ATTR.EXCEPTION_MECHANISM_HANDLED]).toBe("false");
+    expect(attrs[ATTR["exception.mechanism.type"]]).toBe("generic");
+    expect(attrs[ATTR["exception.mechanism.handled"]]).toBe("false");
   });
 
   it("extracts fingerprint from options", () => {
@@ -199,7 +199,7 @@ describe("errorToAttributes", () => {
       fingerprint: ["db-timeout", "users-service"],
     });
 
-    expect(attrs[ATTR.EXCEPTION_FINGERPRINT]).toBe(
+    expect(attrs[ATTR["exception.fingerprint"]]).toBe(
       '["db-timeout","users-service"]',
     );
   });
@@ -210,7 +210,7 @@ describe("errorToAttributes", () => {
     });
     const attrs = errorToAttributes(err);
 
-    expect(attrs[ATTR.EXCEPTION_FINGERPRINT]).toBe(
+    expect(attrs[ATTR["exception.fingerprint"]]).toBe(
       '["checkout-failed","processOrder"]',
     );
   });
@@ -223,7 +223,7 @@ describe("errorToAttributes", () => {
       fingerprint: ["from-options"],
     });
 
-    expect(attrs[ATTR.EXCEPTION_FINGERPRINT]).toBe('["from-options"]');
+    expect(attrs[ATTR["exception.fingerprint"]]).toBe('["from-options"]');
   });
 
   it("merges tags from options", () => {
@@ -260,16 +260,16 @@ describe("errorToAttributes", () => {
     const err = new Error("fail");
     const attrs = errorToAttributes(err);
 
-    expect(attrs[ATTR.USER_ID]).toBe("user_42");
-    expect(attrs[ATTR.USER_EMAIL]).toBe("tommy@acme.com");
+    expect(attrs[ATTR["user.id"]]).toBe("user_42");
+    expect(attrs[ATTR["user.email"]]).toBe("tommy@acme.com");
   });
 
   it("does not include user attributes when user is not set", () => {
     const err = new Error("fail");
     const attrs = errorToAttributes(err);
 
-    expect(attrs[ATTR.USER_ID]).toBeUndefined();
-    expect(attrs[ATTR.USER_EMAIL]).toBeUndefined();
+    expect(attrs[ATTR["user.id"]]).toBeUndefined();
+    expect(attrs[ATTR["user.email"]]).toBeUndefined();
   });
 });
 

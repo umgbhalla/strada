@@ -40,73 +40,73 @@ export const ATTR = {
   // -- Session and user context (injected by browser SDK, propagated via baggage) --
 
   /** Per-tab browser session UUID, stored in sessionStorage. Groups pageviews, events, and errors into one visit. */
-  SESSION_ID: "session.id",
+  "session.id": "session.id",
   /** Signed-in user identity from setUser() or StradaOptions.userId. Correlates telemetry across sessions. */
-  USER_ID: "user.id",
+  "user.id": "user.id",
   /** User email from setUser(). Attached to error logs for user context. */
-  USER_EMAIL: "user.email",
+  "user.email": "user.email",
   /** Username from setUser(). Attached to error logs for user context. */
-  USER_USERNAME: "user.username",
+  "user.username": "user.username",
 
   // -- URL context (injected by browser SDK into every span and log) --
 
   /** Current page pathname, e.g. "/pricing". From window.location.pathname. */
-  URL_PATH: "url.path",
+  "url.path": "url.path",
   /** Current page query string, e.g. "?plan=pro". From window.location.search. */
-  URL_QUERY: "url.query",
+  "url.query": "url.query",
   /** Full page URL including protocol, host, path, query. From window.location.href. */
-  URL_FULL: "url.full",
+  "url.full": "url.full",
   /** Referrer URL. From document.referrer. Useful for entry page attribution. */
-  REFERER: "http.request.header.referer",
+  "http.request.header.referer": "http.request.header.referer",
 
   // -- Custom events (track API) --
 
   /** Structured event name that distinguishes custom events from ordinary logs, e.g. "signup_started". */
-  EVENT_NAME: "event.name",
+  "event.name": "event.name",
 
   // -- Exception attributes (standard OTel + Strada extensions) --
 
   /** Fully-qualified exception class name, e.g. "TypeError". Standard OTel. */
-  EXCEPTION_TYPE: "exception.type",
+  "exception.type": "exception.type",
   /** The exception message string. Standard OTel. */
-  EXCEPTION_MESSAGE: "exception.message",
+  "exception.message": "exception.message",
   /** Raw stacktrace string in the language's natural format. Standard OTel. */
-  EXCEPTION_STACKTRACE: "exception.stacktrace",
+  "exception.stacktrace": "exception.stacktrace",
   /** How the exception was captured: "generic", "onerror", "unhandledrejection", "uncaughtException". */
-  EXCEPTION_MECHANISM_TYPE: "exception.mechanism.type",
+  "exception.mechanism.type": "exception.mechanism.type",
   /** "true" if user code caught it, "false" if caught by a global handler. String, not boolean. */
-  EXCEPTION_MECHANISM_HANDLED: "exception.mechanism.handled",
+  "exception.mechanism.handled": "exception.mechanism.handled",
   /** Custom fingerprint override for issue grouping. JSON array string. */
-  EXCEPTION_FINGERPRINT: "exception.fingerprint",
+  "exception.fingerprint": "exception.fingerprint",
 
   // -- SPA navigation (set on pageview spans during client-side navigation) --
 
   /** How the navigation was triggered: "push", "replace", "traverse". From Navigation API. */
-  NAVIGATION_TYPE: "navigation.type",
+  "navigation.type": "navigation.type",
   /** Whether the user clicked a link vs programmatic navigation. Boolean. */
-  NAVIGATION_USER_INITIATED: "navigation.user_initiated",
+  "navigation.user_initiated": "navigation.user_initiated",
 
   // -- Browser detection (set as resource attributes on SDK init) --
 
   /** OS platform, e.g. "macOS", "Windows". From navigator.userAgentData.platform. */
-  BROWSER_PLATFORM: "browser.platform",
+  "browser.platform": "browser.platform",
   /** Brand strings, e.g. "Google Chrome 147, Chromium 147". From navigator.userAgentData.brands. */
-  BROWSER_BRANDS: "browser.brands",
+  "browser.brands": "browser.brands",
   /** Whether the device is mobile. From navigator.userAgentData.mobile. */
-  BROWSER_MOBILE: "browser.mobile",
+  "browser.mobile": "browser.mobile",
   /** Browser language, e.g. "en-US". From navigator.language. */
-  BROWSER_LANGUAGE: "browser.language",
+  "browser.language": "browser.language",
   /** Full user agent string. From navigator.userAgent. */
-  USER_AGENT_ORIGINAL: "user_agent.original",
+  "user_agent.original": "user_agent.original",
 
   // -- Resource attributes (standard OTel semantic conventions) --
 
   /** Logical name of the service, e.g. "api", "frontend". Standard OTel resource attribute. */
-  SERVICE_NAME: "service.name",
+  "service.name": "service.name",
   /** Version of the service/app. Maps to Release in error tracking. Standard OTel resource attribute. */
-  SERVICE_VERSION: "service.version",
+  "service.version": "service.version",
   /** Deployment environment, e.g. "production", "staging". Standard OTel resource attribute. */
-  DEPLOYMENT_ENVIRONMENT_NAME: "deployment.environment.name",
+  "deployment.environment.name": "deployment.environment.name",
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -311,11 +311,11 @@ export function errorToAttributes(
 ): Record<string, string> {
   const fingerprintValue = Reflect.get(error, "fingerprint");
   const attributes: Record<string, string> = {
-    [ATTR.EXCEPTION_TYPE]: error.name || "Error",
-    [ATTR.EXCEPTION_MESSAGE]: error.message || "",
-    [ATTR.EXCEPTION_STACKTRACE]: error.stack ?? "",
-    [ATTR.EXCEPTION_MECHANISM_TYPE]: opts?.mechanism ?? "generic",
-    [ATTR.EXCEPTION_MECHANISM_HANDLED]: String(opts?.handled ?? true),
+    [ATTR["exception.type"]]: error.name || "Error",
+    [ATTR["exception.message"]]: error.message || "",
+    [ATTR["exception.stacktrace"]]: error.stack ?? "",
+    [ATTR["exception.mechanism.type"]]: opts?.mechanism ?? "generic",
+    [ATTR["exception.mechanism.handled"]]: String(opts?.handled ?? true),
   };
 
   // Custom fingerprint from options or from error.fingerprint property
@@ -323,7 +323,7 @@ export function errorToAttributes(
     opts?.fingerprint ??
     (Array.isArray(fingerprintValue) ? fingerprintValue : undefined);
   if (fingerprint) {
-    attributes[ATTR.EXCEPTION_FINGERPRINT] = JSON.stringify(fingerprint);
+    attributes[ATTR["exception.fingerprint"]] = JSON.stringify(fingerprint);
   }
 
   // Merge user-set tags
@@ -334,9 +334,9 @@ export function errorToAttributes(
 
   // Merge user context
   if (_user) {
-    if (_user.id) attributes[ATTR.USER_ID] = _user.id;
-    if (_user.email) attributes[ATTR.USER_EMAIL] = _user.email;
-    if (_user.username) attributes[ATTR.USER_USERNAME] = _user.username;
+    if (_user.id) attributes[ATTR["user.id"]] = _user.id;
+    if (_user.email) attributes[ATTR["user.email"]] = _user.email;
+    if (_user.username) attributes[ATTR["user.username"]] = _user.username;
   }
 
   return attributes;
