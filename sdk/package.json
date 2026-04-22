@@ -27,8 +27,8 @@
     "./package.json": "./package.json",
     ".": {
       "types": "./dist/index.d.ts",
-      "browser": "./dist/browser.js",
       "workerd": "./dist/cloudflare.js",
+      "browser": "./dist/browser.js",
       "default": "./dist/index.js"
     },
     "./node": {

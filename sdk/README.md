@@ -484,7 +484,7 @@ On **Node.js**:
 - `uncaughtException` captures the error, flushes logs + traces + metrics, then exits
 - `SIGTERM` / `SIGINT` call `shutdown()`
 
-- `telemetry.metrics` is currently only meaningful on runtimes where Strada configures a metric exporter, which today is Node.js
+- `telemetry.metrics` is currently only meaningful on Node.js. Workers do not configure a metric exporter; `metrics.getMeter()` returns a noop on Workers
 
 On **Cloudflare Workers**:
 
@@ -603,7 +603,8 @@ The Workers build is minimal and opt-in only:
 - W3C Baggage extraction with `BaggageSpanProcessor` and `BaggageLogProcessor`
 - Auto-flush via `waitUntil` from `cloudflare:workers` (no manual flush needed)
 - `cloud.provider: cloudflare` and `cloud.platform: cloudflare.workers` resource attributes
-- No automatic spans, no metrics provider, no process handlers
+- No automatic spans, no process handlers
+- No metrics provider. `metrics.getMeter()` returns a noop on Workers. Use Cloudflare Analytics Engine or Workers Observability for metrics instead
 - Zero HTTP requests to the collector unless user code creates telemetry
 
 ## Auto-instrumentation (optional)

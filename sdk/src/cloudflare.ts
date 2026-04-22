@@ -124,8 +124,11 @@ class WorkerContextManager implements ContextManager {
   bind<T>(context: Context, target: T): T {
     if (typeof target === "function") {
       const manager = this;
-      return ((...fnArgs: unknown[]) =>
-        manager.with(context, () => (target as Function)(...fnArgs))) as T;
+      return function (this: unknown, ...args: unknown[]) {
+        return manager.with(context, () =>
+          (target as Function).apply(this, args),
+        );
+      } as T;
     }
     return target;
   }
@@ -316,7 +319,9 @@ export function initStrada(options: StradaOptions): void {
     resource,
     processors: [
       new AutoFlushLogProcessor(
-        new BaggageLogProcessor(new BatchLogRecordProcessor(logExporter)),
+        new BaggageLogProcessor(
+          new BatchLogRecordProcessor(logExporter, options.telemetry?.logs),
+        ),
       ),
     ],
   });
@@ -330,6 +335,7 @@ export function initStrada(options: StradaOptions): void {
       new BaggageSpanProcessor(),
       new BatchSpanProcessor(
         new OTLPTraceExporter({ url: `${endpoint}/v1/traces` }),
+        options.telemetry?.traces,
       ),
       new AutoFlushSpanProcessor(),
     ],
