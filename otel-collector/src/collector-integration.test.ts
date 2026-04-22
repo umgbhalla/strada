@@ -96,14 +96,23 @@ function setResponseHeaders(response: Response, res: ServerResponse): void {
   })
 }
 
-function createFakeD1(projectId: string, clickhouseUrl: string): D1Database {
+function createFakeD1(
+  {
+    projectId,
+    clickhouseUrl,
+  }: {
+    projectId: string
+    clickhouseUrl: string
+  },
+): D1Database {
   return {
-    prepare() {
+    prepare(sql: string) {
       return {
-        bind(boundProjectId: string) {
+        bind(...params: string[]) {
           return {
             async first() {
-              if (boundProjectId !== projectId) return null
+              if (params[0] !== projectId) return null
+
               return {
                 project_id: projectId,
                 backend: 'clickhouse' as const,
@@ -302,7 +311,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 describe.sequential('collector integration with official OTel SDKs', () => {
   it('exports traces/logs/metrics to ClickHouse SQL with valid JSON payloads', async () => {
-    const projectId = 'test-project'
+    const projectId = 'TEST-PROJECT'
     const tmpDir = await mkdtemp(join(tmpdir(), 'collector-integration-'))
     const outputFile = join(tmpDir, 'captured-inserts.json')
     const inserts: CapturedInsert[] = []
@@ -352,14 +361,14 @@ describe.sequential('collector integration with official OTel SDKs', () => {
       process.env.CLICKHOUSE_PASSWORD = ''
 
       const app = createCollectorApp({
-        db: createFakeD1(projectId, fakeBackend.baseUrl),
+        db: createFakeD1({ projectId, clickhouseUrl: fakeBackend.baseUrl }),
       })
 
       collector = await startServer(
         parsePortFromEnv('OTEL_COLLECTOR_TEST_PORT'),
         async (req, res) => {
           const body = req.method === 'POST' ? await readBody(req) : undefined
-          const url = new URL(req.url ?? '/', `http://${projectId}-ingest.strada.sh`)
+          const url = new URL(req.url ?? '/', `http://${projectId.toLowerCase()}-ingest.strada.sh`)
           const response = await app.handle(new Request(url, {
             method: req.method,
             headers: req.headers as HeadersInit,
@@ -440,7 +449,7 @@ describe.sequential('collector integration with official OTel SDKs', () => {
                 "Level": "error",
                 "MechanismHandled": true,
                 "MechanismType": "generic",
-                "ProjectId": "test-project",
+                "ProjectId": "TEST-PROJECT",
                 "Release": "",
                 "ResourceAttributes": {
                   "service.name": "collector-integration-test",
@@ -470,7 +479,7 @@ describe.sequential('collector integration with official OTel SDKs', () => {
                 "Level": "error",
                 "MechanismHandled": true,
                 "MechanismType": "generic",
-                "ProjectId": "test-project",
+                "ProjectId": "TEST-PROJECT",
                 "Release": "",
                 "ResourceAttributes": {
                   "service.name": "collector-integration-test",
@@ -493,7 +502,7 @@ describe.sequential('collector integration with official OTel SDKs', () => {
                   "exception.type": "CheckoutError",
                   "order_id": "order-123",
                 },
-                "ProjectId": "test-project",
+                "ProjectId": "TEST-PROJECT",
                 "ResourceAttributes": {
                   "service.name": "collector-integration-test",
                 },
@@ -522,7 +531,7 @@ describe.sequential('collector integration with official OTel SDKs', () => {
                 "MetricDescription": "",
                 "MetricName": "queue.depth",
                 "MetricUnit": "",
-                "ProjectId": "test-project",
+                "ProjectId": "TEST-PROJECT",
                 "ResourceAttributes": {
                   "service.name": "collector-integration-test",
                 },
@@ -589,7 +598,7 @@ describe.sequential('collector integration with official OTel SDKs', () => {
                 "MetricName": "checkout.duration.ms",
                 "MetricUnit": "",
                 "Min": 245.5,
-                "ProjectId": "test-project",
+                "ProjectId": "TEST-PROJECT",
                 "ResourceAttributes": {
                   "service.name": "collector-integration-test",
                 },
@@ -619,7 +628,7 @@ describe.sequential('collector integration with official OTel SDKs', () => {
                 "MetricDescription": "",
                 "MetricName": "checkout.attempts",
                 "MetricUnit": "",
-                "ProjectId": "test-project",
+                "ProjectId": "TEST-PROJECT",
                 "ResourceAttributes": {
                   "service.name": "collector-integration-test",
                 },
@@ -656,7 +665,7 @@ describe.sequential('collector integration with official OTel SDKs', () => {
                 "LinksSpanId": [],
                 "LinksTraceId": [],
                 "LinksTraceState": [],
-                "ProjectId": "test-project",
+                "ProjectId": "TEST-PROJECT",
                 "ResourceAttributes": {
                   "service.name": "collector-integration-test",
                 },

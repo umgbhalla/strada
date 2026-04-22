@@ -16,11 +16,13 @@ import type {
   ExportMetricsServiceRequest,
 } from "./otlp-types.ts";
 
-interface CreateCollectorAppOptions {
+async function resolveOrFail({
+  db,
+  projectId,
+}: {
   db: D1Database;
-}
-
-async function resolveOrFail(db: D1Database, projectId: string) {
+  projectId: string;
+}) {
   if (!projectId) {
     throw new Response(JSON.stringify({ error: "missing project id in hostname" }), {
       status: 400, headers: { "content-type": "application/json" },
@@ -37,7 +39,7 @@ async function resolveOrFail(db: D1Database, projectId: string) {
   return config;
 }
 
-export function createCollectorApp({ db }: CreateCollectorAppOptions) {
+export function createCollectorApp({ db }: { db: D1Database }) {
   return new Spiceflow()
     .use(
       cors({
@@ -49,7 +51,7 @@ export function createCollectorApp({ db }: CreateCollectorAppOptions) {
     )
     .post("/v1/traces", async ({ request, waitUntil }) => {
       const projectId = getProjectId(request);
-      const config = await resolveOrFail(db, projectId);
+      const config = await resolveOrFail({ db, projectId });
 
       const body = (await request.json()) as ExportTraceServiceRequest;
       const backend = createBackend(config);
@@ -70,7 +72,7 @@ export function createCollectorApp({ db }: CreateCollectorAppOptions) {
     })
     .post("/v1/logs", async ({ request, waitUntil }) => {
       const projectId = getProjectId(request);
-      const config = await resolveOrFail(db, projectId);
+      const config = await resolveOrFail({ db, projectId });
 
       const body = (await request.json()) as ExportLogsServiceRequest;
       const backend = createBackend(config);
@@ -89,7 +91,7 @@ export function createCollectorApp({ db }: CreateCollectorAppOptions) {
     })
     .post("/v1/metrics", async ({ request, waitUntil }) => {
       const projectId = getProjectId(request);
-      const config = await resolveOrFail(db, projectId);
+      const config = await resolveOrFail({ db, projectId });
 
       const body = (await request.json()) as ExportMetricsServiceRequest;
       const backend = createBackend(config);

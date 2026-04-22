@@ -22,28 +22,18 @@ const RESOLVE_SQL = `
   LIMIT 1
 `;
 
-export async function resolveProjectConfig(
-  db: D1Database,
-  projectId: string,
-): Promise<ProjectConfig | null> {
-  if (!projectId) return null;
+type ProjectConfigRow = {
+  project_id: string;
+  backend: "tinybird" | "clickhouse";
+  tinybird_endpoint: string | null;
+  tinybird_admin_token: string | null;
+  clickhouse_url: string | null;
+  clickhouse_database: string | null;
+  clickhouse_user: string | null;
+  clickhouse_password: string | null;
+};
 
-  const row = await db
-    .prepare(RESOLVE_SQL)
-    .bind(projectId)
-    .first<{
-      project_id: string;
-      backend: "tinybird" | "clickhouse";
-      tinybird_endpoint: string | null;
-      tinybird_admin_token: string | null;
-      clickhouse_url: string | null;
-      clickhouse_database: string | null;
-      clickhouse_user: string | null;
-      clickhouse_password: string | null;
-    }>();
-
-  if (!row) return null;
-
+function toProjectConfig(row: ProjectConfigRow): ProjectConfig {
   return {
     projectId: row.project_id,
     backend: row.backend,
@@ -54,4 +44,20 @@ export async function resolveProjectConfig(
     clickhouseUser: row.clickhouse_user,
     clickhousePassword: row.clickhouse_password,
   };
+}
+
+export async function resolveProjectConfig(
+  db: D1Database,
+  projectId: string,
+): Promise<ProjectConfig | null> {
+  if (!projectId) return null;
+
+  const row = await db
+    .prepare(RESOLVE_SQL)
+    .bind(projectId)
+    .first<ProjectConfigRow>();
+
+  if (!row) return null;
+
+  return toProjectConfig(row);
 }
