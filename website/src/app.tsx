@@ -375,7 +375,7 @@ export const app = new Spiceflow()
       id: row.id,
       backend: row.backend,
       tinybirdEndpoint: row.tinybirdEndpoint,
-      tinybirdReadToken: row.tinybirdReadToken,
+      hasReadToken: !!row.tinybirdReadToken,
       hasAdminToken: !!row.tinybirdAdminToken,
       clickhouseUrl: row.clickhouseUrl,
       clickhouseDatabase: row.clickhouseDatabase,

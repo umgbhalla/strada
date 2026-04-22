@@ -13,6 +13,22 @@
 import { remapNdjson, type SignalKind } from "./field-mapping.ts";
 import type { ProjectConfig } from "./env.ts";
 
+function logBackendError({
+  backend,
+  table,
+  response,
+}: {
+  backend: string;
+  table: string;
+  response: Response;
+}): void {
+  const requestId = response.headers.get("x-request-id")
+    ?? response.headers.get("cf-ray")
+    ?? response.headers.get("x-tinybird-request-id");
+  const suffix = requestId ? ` request_id=${requestId}` : "";
+  console.error(`${backend} error for table "${table}": status=${response.status}${suffix}`);
+}
+
 // ─── Backend interface ───
 
 export interface Backend {
@@ -41,8 +57,7 @@ export class TinybirdBackend implements Backend {
     });
 
     if (!response.ok) {
-      const body = await response.text();
-      console.error(`Tinybird error for table "${table}": ${response.status} ${body}`);
+      logBackendError({ backend: "Tinybird", table, response });
     }
   }
 }
@@ -75,8 +90,7 @@ export class ClickHouseBackend implements Backend {
     });
 
     if (!response.ok) {
-      const body = await response.text();
-      console.error(`ClickHouse error for table "${table}": ${response.status} ${body}`);
+      logBackendError({ backend: "ClickHouse", table, response });
     }
   }
 }
