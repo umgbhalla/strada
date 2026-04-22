@@ -12,9 +12,6 @@
       "path": "./otel-logs-prototype"
     },
     {
-      "path": "./otel-query"
-    },
-    {
       "path": "./sdk"
     }
   ]
