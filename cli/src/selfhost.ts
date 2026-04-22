@@ -40,64 +40,48 @@ selfhostCli
   .example("strada selfhost --token p.eyXXX --base-url https://api.tinybird.co")
   .action((options, context) => selfhostAction(options, context));
 
-async function deployResources(
-  client: TinybirdClient,
-  datasources: Array<{ name: string; content: string }>,
-  pipes: Array<{ name: string; content: string }>,
-): Promise<{ success: boolean; error?: string; errors?: Array<{ filename?: string; error: string }> }> {
-  try {
-    for (const deployment of await client.listDeployments()) {
+async function deployResources({ client, datasources, pipes }: {
+  client: TinybirdClient;
+  datasources: Array<{ name: string; content: string }>;
+  pipes: Array<{ name: string; content: string }>;
+}) {
+  const deployments = await client.listDeployments();
+  if (!(deployments instanceof Error)) {
+    for (const deployment of deployments) {
       if (!deployment.live && deployment.status !== "live") {
-        await client.deleteDeployment(deployment.id);
+        const deleteResult = await client.deleteDeployment({ deploymentId: deployment.id });
+        if (deleteResult instanceof Error) {
+          console.warn(`Failed to delete stale deployment ${deployment.id}:`, deleteResult.message);
+        }
       }
     }
-  } catch {
-    // Ignore cleanup errors and try deployment anyway.
+  } else {
+    console.warn("Failed to list stale deployments before deploy:", deployments.message);
   }
 
   const deployResponse = await client.createDeployment({ datasources, pipes });
-
+  if (deployResponse instanceof Error) return deployResponse;
   if (deployResponse.result === "failed") {
-    const errors = deployResponse.errors ?? deployResponse.deployment?.errors;
-    return {
-      success: false,
-      ...(deployResponse.error !== undefined ? { error: deployResponse.error } : undefined),
-      ...(errors !== undefined ? { errors } : undefined),
-    };
+    return new Error(deployResponse.error || deployResponse.errors?.map((error) => error.error).join("\n") || "Tinybird deployment failed");
   }
-
-  if (deployResponse.result === "no_changes") {
-    return { success: true };
-  }
+  if (deployResponse.result === "no_changes") return null;
 
   const deploymentId = deployResponse.deployment?.id;
   if (!deploymentId) {
-    return { success: false, error: "No deployment ID in Tinybird response" };
+    return new Error("No deployment ID in Tinybird response");
   }
 
   for (let i = 0; i < 120; i++) {
     await new Promise((resolve) => setTimeout(resolve, 1000));
-    const statusResponse = await client.getDeploymentStatus(deploymentId);
-
-    if (statusResponse.deployment.status === "data_ready") {
-      break;
-    }
-
+    const statusResponse = await client.getDeploymentStatus({ deploymentId });
+    if (statusResponse instanceof Error) return statusResponse;
+    if (statusResponse.deployment.status === "data_ready") break;
     if (statusResponse.deployment.status === "failed" || statusResponse.deployment.status === "error") {
-      return { success: false, error: `Deployment failed with status ${statusResponse.deployment.status}` };
+      return new Error(`Deployment failed with status ${statusResponse.deployment.status}`);
     }
   }
 
-  try {
-    await client.promoteDeployment(deploymentId);
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : String(error),
-    };
-  }
-
-  return { success: true };
+  return client.promoteDeployment({ deploymentId });
 }
 
 export async function selfhostAction(
@@ -106,82 +90,61 @@ export async function selfhostAction(
 ) {
   clack.intro(picocolors.bold("Strada — Self-hosted Tinybird setup"));
 
-  let token = options.token;
-  let baseUrl = options.baseUrl;
-
-  if (token && baseUrl) {
-    clack.log.info(`Using provided token for ${baseUrl}`);
-  } else if (token && !baseUrl) {
-    clack.log.error("--base-url is required when using --token");
-    return process.exit(1);
-  } else {
-    clack.log.info("Opening browser to authenticate with Tinybird...");
-
-    try {
-      const auth = await browserLogin();
-      token = auth.token;
-      baseUrl = auth.baseUrl;
-
-      const workspace = await new TinybirdClient({ baseUrl, token }).getWorkspace();
-
-      clack.log.success(
-        `Authenticated as ${picocolors.cyan(workspace.user_email)} ` + `in workspace ${picocolors.cyan(workspace.name)}`,
-      );
-    } catch (error) {
-      clack.log.error(error instanceof Error ? error.message : String(error));
-      return process.exit(1);
+  const auth = await (async () => {
+    if (options.token && options.baseUrl) {
+      clack.log.info(`Using provided token for ${options.baseUrl}`);
+      return { token: options.token, baseUrl: options.baseUrl };
     }
-  }
 
-  if (!token || !baseUrl) {
-    clack.log.error("Tinybird authentication did not return a token and base URL");
+    if (options.token && !options.baseUrl) {
+      return new Error("--base-url is required when using --token");
+    }
+
+    clack.log.info("Opening browser to authenticate with Tinybird...");
+    return browserLogin();
+  })();
+  if (auth instanceof Error) {
+    clack.log.error(auth.message);
     return process.exit(1);
   }
 
-  const client = new TinybirdClient({ baseUrl, token });
+  const client = new TinybirdClient({ baseUrl: auth.baseUrl, token: auth.token });
+  const workspace = await client.getWorkspace();
+  if (workspace instanceof Error) {
+    clack.log.error(workspace.message);
+    return process.exit(1);
+  }
+
+  clack.log.success(`Authenticated as ${picocolors.cyan(workspace.user_email)} in workspace ${picocolors.cyan(workspace.name)}`);
 
   const spinner = clack.spinner();
   spinner.start("Loading Tinybird resource files...");
 
-  let resources;
-  try {
-    resources = loadTinybirdResources();
-  } catch (error) {
+  const resources = await (async () => loadTinybirdResources())().catch((cause) => new Error(String(cause instanceof Error ? cause.message : cause)));
+  if (resources instanceof Error) {
     spinner.stop("Failed to load resources");
-    clack.log.error(error instanceof Error ? error.message : String(error));
+    clack.log.error(resources.message);
     return process.exit(1);
   }
 
   spinner.message(`Found ${resources.datasources.length} datasources, ${resources.pipes.length} pipes`);
   spinner.message("Deploying to Tinybird...");
 
-  try {
-    const result = await deployResources(client, resources.datasources, resources.pipes);
-    if (!result.success) {
-      spinner.stop("Deployment failed");
-      if (result.error) clack.log.error(result.error);
-      if (result.errors?.length) {
-        for (const error of result.errors) {
-          clack.log.error(`  ${error.filename || ""}: ${error.error}`);
-        }
-      }
-      return process.exit(1);
-    }
-
-    spinner.stop("Deployed successfully");
-  } catch (error) {
+  const deployment = await deployResources({ client, datasources: resources.datasources, pipes: resources.pipes });
+  if (deployment instanceof Error) {
     spinner.stop("Deployment failed");
-    clack.log.error(error instanceof Error ? error.message : String(error));
+    clack.log.error(deployment.message);
     return process.exit(1);
   }
 
+  spinner.stop("Deployed successfully");
   clack.log.success("Strada is deployed to your Tinybird workspace!");
 
   output.log("");
   output.log(picocolors.bold("Add these environment variables to your otel-collector:"));
   output.log("");
-  output.log(`  ${picocolors.cyan("TINYBIRD_ENDPOINT")}=${baseUrl}`);
-  output.log(`  ${picocolors.cyan("TINYBIRD_TOKEN")}=${token}`);
+  output.log(`  ${picocolors.cyan("TINYBIRD_ENDPOINT")}=${auth.baseUrl}`);
+  output.log(`  ${picocolors.cyan("TINYBIRD_TOKEN")}=${auth.token}`);
   output.log("");
   output.log(picocolors.dim("ProjectId is always empty string for self-hosted — no row-level filtering needed."));
   output.log(picocolors.dim("For reads, use this same workspace admin token with Tinybird /v0/sql queries."));

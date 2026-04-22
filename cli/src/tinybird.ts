@@ -16,6 +16,7 @@
 // - @tinybirdco/sdk/dist/cli/auth.d.ts
 
 import type { TinybirdWorkspace } from "@tinybirdco/sdk/api/workspaces";
+import * as errore from "errore";
 
 export interface TinybirdResourceFile {
   name: string;
@@ -59,166 +60,216 @@ export interface TinybirdCliLoginResponse {
   user_email?: string;
 }
 
-export class TinybirdClientError extends Error {
-  constructor(
-    message: string,
-    public readonly status?: number,
-    public readonly body?: string,
-  ) {
-    super(message);
-    this.name = "TinybirdClientError";
-  }
-}
+class TinybirdResponseShapeError extends errore.createTaggedError({
+  name: "TinybirdResponseShapeError",
+  message: "Tinybird returned an invalid response for $operation",
+}) {}
 
-function expectObject(value: unknown, message: string): Record<string, unknown> {
+class TinybirdRequestError extends errore.createTaggedError({
+  name: "TinybirdRequestError",
+  message: "Tinybird request failed for $operation",
+}) {}
+
+function expectObject({ value, operation }: { value: unknown; operation: string }) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new TinybirdClientError(message);
+    return new TinybirdResponseShapeError({ operation });
   }
 
-  return Object.fromEntries(Object.entries(value));
+  const record: Record<string, unknown> = {};
+  Object.assign(record, value);
+  return record;
 }
 
-function expectString(record: Record<string, unknown>, key: string, message: string): string {
+function expectString({ record, key, operation }: { record: Record<string, unknown>; key: string; operation: string }) {
   const value = record[key];
   if (typeof value !== "string") {
-    throw new TinybirdClientError(message);
+    return new TinybirdResponseShapeError({ operation });
   }
 
   return value;
 }
 
-function optionalString(record: Record<string, unknown>, key: string): string | undefined {
+function optionalString({ record, key }: { record: Record<string, unknown>; key: string }) {
   const value = record[key];
   return typeof value === "string" ? value : undefined;
 }
 
-function optionalBoolean(record: Record<string, unknown>, key: string): boolean | undefined {
+function optionalBoolean({ record, key }: { record: Record<string, unknown>; key: string }) {
   const value = record[key];
   return typeof value === "boolean" ? value : undefined;
 }
 
-function optionalStringArray(record: Record<string, unknown>, key: string): string[] | undefined {
+function optionalStringArray({ record, key }: { record: Record<string, unknown>; key: string }) {
   const value = record[key];
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : undefined;
 }
 
-function parseDeploymentError(value: unknown): TinybirdDeploymentError | undefined {
-  const record = expectObject(value, "Expected Tinybird deployment error object");
-  const error = optionalString(record, "error");
-  if (!error) {
-    return undefined;
-  }
+function parseDeploymentError({ value }: { value: unknown }) {
+  const record = expectObject({ value, operation: "deployment error item" });
+  if (record instanceof Error) return record;
+
+  const error = optionalString({ record, key: "error" });
+  if (!error) return null;
 
   return {
     error,
-    filename: optionalString(record, "filename"),
-  };
+    filename: optionalString({ record, key: "filename" }),
+  } satisfies TinybirdDeploymentError;
 }
 
-function optionalDeploymentErrors(record: Record<string, unknown>, key: string): TinybirdDeploymentError[] | undefined {
+function parseDeploymentErrors({ record, key }: { record: Record<string, unknown>; key: string }) {
   const value = record[key];
-  if (!Array.isArray(value)) {
-    return undefined;
+  if (!Array.isArray(value)) return undefined;
+
+  const errors: TinybirdDeploymentError[] = [];
+  for (const item of value) {
+    const parsed = parseDeploymentError({ value: item });
+    if (parsed instanceof Error) return parsed;
+    if (parsed) errors.push(parsed);
   }
 
-  return value.flatMap((item) => {
-    const parsed = parseDeploymentError(item);
-    return parsed ? [parsed] : [];
-  });
+  return errors;
 }
 
-function parseWorkspace(value: unknown): TinybirdWorkspace {
-  const record = expectObject(value, "Expected Tinybird workspace response");
+function parseWorkspace({ value }: { value: unknown }) {
+  const record = expectObject({ value, operation: "workspace" });
+  if (record instanceof Error) return record;
+
+  const id = expectString({ record, key: "id", operation: "workspace.id" });
+  if (id instanceof Error) return id;
+  const name = expectString({ record, key: "name", operation: "workspace.name" });
+  if (name instanceof Error) return name;
+  const userId = expectString({ record, key: "user_id", operation: "workspace.user_id" });
+  if (userId instanceof Error) return userId;
+  const userEmail = expectString({ record, key: "user_email", operation: "workspace.user_email" });
+  if (userEmail instanceof Error) return userEmail;
+  const scope = expectString({ record, key: "scope", operation: "workspace.scope" });
+  if (scope instanceof Error) return scope;
+
   return {
-    id: expectString(record, "id", "Missing Tinybird workspace id"),
-    name: expectString(record, "name", "Missing Tinybird workspace name"),
-    user_id: expectString(record, "user_id", "Missing Tinybird workspace user_id"),
-    user_email: expectString(record, "user_email", "Missing Tinybird workspace user_email"),
-    scope: expectString(record, "scope", "Missing Tinybird workspace scope"),
-    main: record.main === null ? null : optionalString(record, "main") || null,
-  };
+    id,
+    name,
+    user_id: userId,
+    user_email: userEmail,
+    scope,
+    main: record.main === null ? null : optionalString({ record, key: "main" }) || null,
+  } satisfies TinybirdWorkspace;
 }
 
-function parseDeployment(value: unknown): TinybirdDeployment | undefined {
-  const record = expectObject(value, "Expected Tinybird deployment object");
-  const id = optionalString(record, "id");
-  const status = optionalString(record, "status");
-  if (!id || !status) {
-    return undefined;
-  }
+function parseDeployment({ value }: { value: unknown }) {
+  const record = expectObject({ value, operation: "deployment" });
+  if (record instanceof Error) return record;
+
+  const id = optionalString({ record, key: "id" });
+  const status = optionalString({ record, key: "status" });
+  if (!id || !status) return null;
 
   return {
     id,
     status,
-    live: optionalBoolean(record, "live"),
-  };
+    live: optionalBoolean({ record, key: "live" }),
+  } satisfies TinybirdDeployment;
 }
 
-function parseDeploymentDetails(value: unknown): TinybirdDeploymentDetails | undefined {
-  const base = parseDeployment(value);
-  if (!base) {
-    return undefined;
-  }
+function parseDeploymentDetails({ value }: { value: unknown }) {
+  const deployment = parseDeployment({ value });
+  if (deployment instanceof Error || deployment === null) return deployment;
 
-  const record = expectObject(value, "Expected Tinybird deployment details object");
+  const record = expectObject({ value, operation: "deployment details" });
+  if (record instanceof Error) return record;
+
+  const errors = parseDeploymentErrors({ record, key: "errors" });
+  if (errors instanceof Error) return errors;
+
   return {
-    ...base,
-    new_datasource_names: optionalStringArray(record, "new_datasource_names"),
-    new_pipe_names: optionalStringArray(record, "new_pipe_names"),
-    errors: optionalDeploymentErrors(record, "errors"),
-  };
+    ...deployment,
+    new_datasource_names: optionalStringArray({ record, key: "new_datasource_names" }),
+    new_pipe_names: optionalStringArray({ record, key: "new_pipe_names" }),
+    errors,
+  } satisfies TinybirdDeploymentDetails;
 }
 
-function parseDeploymentsList(value: unknown): TinybirdDeployment[] {
-  const record = expectObject(value, "Expected Tinybird deployments list response");
+function parseDeploymentsList({ value }: { value: unknown }) {
+  const record = expectObject({ value, operation: "deployments list" });
+  if (record instanceof Error) return record;
+
   const deployments = record.deployments;
-  if (!Array.isArray(deployments)) {
-    return [];
+  if (!Array.isArray(deployments)) return [];
+
+  const parsed: TinybirdDeployment[] = [];
+  for (const item of deployments) {
+    const deployment = parseDeployment({ value: item });
+    if (deployment instanceof Error) return deployment;
+    if (deployment) parsed.push(deployment);
   }
 
-  return deployments.flatMap((item) => {
-    const parsed = parseDeployment(item);
-    return parsed ? [parsed] : [];
-  });
+  return parsed;
 }
 
-function parseDeployResponse(value: unknown): TinybirdDeployResponse {
-  const record = expectObject(value, "Expected Tinybird deploy response");
-  const result = optionalString(record, "result");
+function parseDeployResponse({ value }: { value: unknown }) {
+  const record = expectObject({ value, operation: "deploy response" });
+  if (record instanceof Error) return record;
+
+  const result = optionalString({ record, key: "result" });
   if (result !== "success" && result !== "failed" && result !== "no_changes") {
-    throw new TinybirdClientError("Unexpected Tinybird deploy result");
+    return new TinybirdResponseShapeError({ operation: "deploy result" });
   }
+
+  const deployment = record.deployment ? parseDeploymentDetails({ value: record.deployment }) : undefined;
+  if (deployment instanceof Error) return deployment;
+
+  const errors = parseDeploymentErrors({ record, key: "errors" });
+  if (errors instanceof Error) return errors;
 
   return {
     result,
-    deployment: record.deployment ? parseDeploymentDetails(record.deployment) : undefined,
-    error: optionalString(record, "error"),
-    errors: optionalDeploymentErrors(record, "errors"),
-  };
+    deployment: deployment === null ? undefined : deployment,
+    error: optionalString({ record, key: "error" }),
+    errors,
+  } satisfies TinybirdDeployResponse;
 }
 
-function parseDeploymentStatusResponse(value: unknown): TinybirdDeploymentStatusResponse {
-  const record = expectObject(value, "Expected Tinybird deployment status response");
-  const deployment = parseDeployment(record.deployment);
-  if (!deployment) {
-    throw new TinybirdClientError("Unexpected Tinybird deployment status response");
+function parseDeploymentStatusResponse({ value }: { value: unknown }) {
+  const record = expectObject({ value, operation: "deployment status" });
+  if (record instanceof Error) return record;
+
+  const deployment = parseDeployment({ value: record.deployment });
+  if (deployment instanceof Error) return deployment;
+  if (deployment === null) {
+    return new TinybirdResponseShapeError({ operation: "deployment status payload" });
   }
 
   return {
-    result: optionalString(record, "result") || "unknown",
+    result: optionalString({ record, key: "result" }) || "unknown",
     deployment,
-  };
+  } satisfies TinybirdDeploymentStatusResponse;
 }
 
-function parseCliLoginResponse(value: unknown): TinybirdCliLoginResponse {
-  const record = expectObject(value, "Expected Tinybird CLI login response");
+function parseCliLoginResponse({ value }: { value: unknown }) {
+  const record = expectObject({ value, operation: "cli login" });
+  if (record instanceof Error) return record;
+
+  const workspaceToken = expectString({ record, key: "workspace_token", operation: "cli login workspace_token" });
+  if (workspaceToken instanceof Error) return workspaceToken;
+  const userToken = expectString({ record, key: "user_token", operation: "cli login user_token" });
+  if (userToken instanceof Error) return userToken;
+  const apiHost = expectString({ record, key: "api_host", operation: "cli login api_host" });
+  if (apiHost instanceof Error) return apiHost;
+
   return {
-    workspace_token: expectString(record, "workspace_token", "Missing Tinybird workspace_token"),
-    user_token: expectString(record, "user_token", "Missing Tinybird user_token"),
-    api_host: expectString(record, "api_host", "Missing Tinybird api_host"),
-    workspace_name: optionalString(record, "workspace_name"),
-    user_email: optionalString(record, "user_email"),
-  };
+    workspace_token: workspaceToken,
+    user_token: userToken,
+    api_host: apiHost,
+    workspace_name: optionalString({ record, key: "workspace_name" }),
+    user_email: optionalString({ record, key: "user_email" }),
+  } satisfies TinybirdCliLoginResponse;
+}
+
+function toHttpError({ operation, response }: { operation: string; response: Response }) {
+  return response
+    .text()
+    .then((body) => new TinybirdRequestError({ operation, cause: new Error(`HTTP ${response.status} ${response.statusText}: ${body}`) }))
+    .catch((cause: unknown) => new TinybirdRequestError({ operation, cause }));
 }
 
 export class TinybirdClient {
@@ -234,105 +285,91 @@ export class TinybirdClient {
     return this.config.fetch ?? fetch;
   }
 
-  private get baseUrl(): string {
+  private get baseUrl() {
     return this.config.baseUrl.replace(/\/$/, "");
   }
 
-  private async request(path: string, init?: RequestInit): Promise<Response> {
+  private async request({ path, init }: { path: string; init?: RequestInit }) {
     return this.fetchFn(`${this.baseUrl}${path}`, {
       ...init,
       headers: {
         Authorization: `Bearer ${this.config.token}`,
         ...(init?.headers ?? {}),
       },
-    });
+    }).catch((cause: unknown) => new TinybirdRequestError({ operation: path, cause }));
   }
 
-  private async requestJson<T>(path: string, parser: (value: unknown) => T, init?: RequestInit): Promise<T> {
-    const response = await this.request(path, init);
-    if (!response.ok) {
-      throw new TinybirdClientError(
-        `Tinybird request failed: ${response.status} ${response.statusText}`,
-        response.status,
-        await response.text(),
-      );
-    }
+  private async requestJson<T>({ path, parser, init }: { path: string; parser: (args: { value: unknown }) => Error | T; init?: RequestInit }) {
+    const response = await this.request({ path, init });
+    if (response instanceof Error) return response;
+    if (!response.ok) return toHttpError({ operation: path, response });
 
-    return parser(await response.json());
+    const body = await response.json().catch((cause: unknown) => new TinybirdRequestError({ operation: `${path} json`, cause }));
+    if (body instanceof Error) return body;
+
+    return parser({ value: body });
   }
 
-  async getWorkspace(): Promise<TinybirdWorkspace> {
-    return this.requestJson("/v1/workspace", parseWorkspace);
+  async getWorkspace() {
+    return this.requestJson({ path: "/v1/workspace", parser: parseWorkspace });
   }
 
-  async listDeployments(): Promise<TinybirdDeployment[]> {
-    return this.requestJson("/v1/deployments", parseDeploymentsList);
+  async listDeployments() {
+    return this.requestJson({ path: "/v1/deployments", parser: parseDeploymentsList });
   }
 
-  async deleteDeployment(deploymentId: string): Promise<void> {
-    const response = await this.request(`/v1/deployments/${deploymentId}`, { method: "DELETE" });
-    if (!response.ok) {
-      throw new TinybirdClientError(
-        `Failed to delete Tinybird deployment ${deploymentId}`,
-        response.status,
-        await response.text(),
-      );
-    }
+  async deleteDeployment({ deploymentId }: { deploymentId: string }) {
+    const response = await this.request({ path: `/v1/deployments/${deploymentId}`, init: { method: "DELETE" } });
+    if (response instanceof Error) return response;
+    if (!response.ok) return toHttpError({ operation: `delete deployment ${deploymentId}`, response });
+    return null;
   }
 
-  async createDeployment(resources: {
-    datasources: TinybirdResourceFile[];
-    pipes: TinybirdResourceFile[];
-  }): Promise<TinybirdDeployResponse> {
+  async createDeployment({ datasources, pipes }: { datasources: TinybirdResourceFile[]; pipes: TinybirdResourceFile[] }) {
     const formData = new FormData();
 
-    for (const datasource of resources.datasources) {
+    for (const datasource of datasources) {
       formData.append("data_project://", new Blob([datasource.content], { type: "text/plain" }), `${datasource.name}.datasource`);
     }
 
-    for (const pipe of resources.pipes) {
+    for (const pipe of pipes) {
       formData.append("data_project://", new Blob([pipe.content], { type: "text/plain" }), `${pipe.name}.pipe`);
     }
 
-    return this.requestJson("/v1/deploy", parseDeployResponse, {
-      method: "POST",
-      body: formData,
+    return this.requestJson({
+      path: "/v1/deploy",
+      parser: parseDeployResponse,
+      init: { method: "POST", body: formData },
     });
   }
 
-  async getDeploymentStatus(deploymentId: string): Promise<TinybirdDeploymentStatusResponse> {
-    return this.requestJson(`/v1/deployments/${deploymentId}`, parseDeploymentStatusResponse);
+  async getDeploymentStatus({ deploymentId }: { deploymentId: string }) {
+    return this.requestJson({ path: `/v1/deployments/${deploymentId}`, parser: parseDeploymentStatusResponse });
   }
 
-  async promoteDeployment(deploymentId: string): Promise<void> {
-    const response = await this.request(`/v1/deployments/${deploymentId}/set-live`, { method: "POST" });
-    if (!response.ok) {
-      throw new TinybirdClientError(
-        `Failed to promote Tinybird deployment ${deploymentId}`,
-        response.status,
-        await response.text(),
-      );
-    }
+  async promoteDeployment({ deploymentId }: { deploymentId: string }) {
+    const response = await this.request({ path: `/v1/deployments/${deploymentId}/set-live`, init: { method: "POST" } });
+    if (response instanceof Error) return response;
+    if (!response.ok) return toHttpError({ operation: `promote deployment ${deploymentId}`, response });
+    return null;
   }
 }
 
-export async function exchangeTinybirdCliCode(args: {
-  authHost: string;
-  code: string;
-  fetch?: typeof fetch;
-}): Promise<TinybirdCliLoginResponse> {
-  const fetchFn = args.fetch ?? fetch;
-  const url = new URL("/api/cli-login", args.authHost);
-  url.searchParams.set("code", args.code);
+export async function exchangeTinybirdCliCode({ authHost, code, fetch: customFetch }: { authHost: string; code: string; fetch?: typeof fetch }) {
+  const fetchFn = customFetch ?? fetch;
+  const url = new URL("/api/cli-login", authHost);
+  url.searchParams.set("code", code);
 
-  const response = await fetchFn(url.toString());
-  if (!response.ok) {
-    throw new TinybirdClientError(
-      `Tinybird CLI login exchange failed: ${response.status} ${response.statusText}`,
-      response.status,
-      await response.text(),
-    );
-  }
+  const response = await fetchFn(url.toString()).catch(
+    (cause: unknown) => new TinybirdRequestError({ operation: "cli login exchange", cause }),
+  );
+  if (response instanceof Error) return response;
+  if (!response.ok) return toHttpError({ operation: "cli login exchange", response });
 
-  return parseCliLoginResponse(await response.json());
+  const body = await response.json().catch(
+    (cause: unknown) => new TinybirdRequestError({ operation: "cli login exchange json", cause }),
+  );
+  if (body instanceof Error) return body;
+
+  return parseCliLoginResponse({ value: body });
 }
