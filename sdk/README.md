@@ -8,96 +8,15 @@ Import from `@strada.sh/sdk` in every runtime. The package uses export condition
 import { initStrada, captureException, trace } from "@strada.sh/sdk"
 
 initStrada({
-  service: "frontend",
-  endpoint: "https://my-project-ingest.strada.sh",
-  environment: "production",
-  version: "1.0.0",
-  telemetry: {
-    traces: {
-      scheduledDelayMillis: 2000,
-      maxExportBatchSize: 256,
-    },
-    logs: {
-      scheduledDelayMillis: 2000,
-    },
-    metrics: {
-      exportIntervalMillis: 5000,
-      exportTimeoutMillis: 3000,
-    },
-  },
-})
-
-const tracer = trace.getTracer("app")
-
-const span = tracer.startSpan("checkout")
-span.setAttribute("cart.items", 3)
-span.end()
-
-try {
-  throw new Error("payment failed")
-} catch (error) {
-  captureException(error)
-}
-```
-
-## Why use it
-
-- **One import path** for browser and server code
-- **Standard OTel APIs** after setup. Keep using `trace`, `logs`, and `metrics`
-- **Browser analytics built in**. Pageviews, fetch/XHR spans, custom events, session context
-- **Error tracking built on logs**. Exceptions become OTel log records with `exception.*` attributes
-- **No custom protocol**. Everything goes through OTLP HTTP
-
-## Install
-
-```bash
-pnpm add @strada.sh/sdk
-```
-
-Optional peer dependencies for auto-instrumentation:
-
-```bash
-pnpm add @opentelemetry/auto-instrumentations-node
-pnpm add @opentelemetry/auto-instrumentations-web
-```
-
-## Quick start
-
-## Browser
-
-```ts
-import { initStrada, captureException, setUser } from "@strada.sh/sdk"
-
-initStrada({
-  service: "frontend",
-  endpoint: "https://my-project-ingest.strada.sh",
-  environment: "production",
-  version: "1.0.0",
-})
-
-setUser({ id: "user_123", email: "a@example.com" })
-
-window.addEventListener("click", async () => {
-  try {
-    await fetch("/api/plans")
-  } catch (error) {
-    captureException(error)
-  }
-})
-```
-
-## Node.js
-
-Call `initStrada()` as early as possible, ideally before importing the rest of the app.
-
-```ts
-import { initStrada, captureException, shutdown } from "@strada.sh/sdk"
-
-initStrada({
   service: "api",
   endpoint: "https://my-project-ingest.strada.sh",
   environment: "production",
   version: "1.0.0",
+  telemetry: {
+    traces: { scheduledDelayMillis: 2000 },
+    logs: { scheduledDelayMillis: 2000 },
+    metrics: { exportIntervalMillis: 5000 },
+  },
 })
 
 process.on("SIGTERM", () => {
@@ -121,8 +40,8 @@ After `initStrada()`, the global OTel providers are configured. You can use stan
 import { initStrada, trace, logs, metrics, SeverityNumber } from "@strada.sh/sdk"
 
 initStrada({
+  projectId: "my-project",
   service: "worker",
-  endpoint: "https://my-project-ingest.strada.sh",
 })
 
 const tracer = trace.getTracer("jobs")
@@ -149,8 +68,8 @@ Use the standard OTel tracing API after `initStrada()`.
 import { initStrada, trace, SpanStatusCode } from "@strada.sh/sdk"
 
 initStrada({
+  projectId: "my-project",
   service: "api",
-  endpoint: "https://my-project-ingest.strada.sh",
 })
 
 const tracer = trace.getTracer("checkout")
@@ -183,8 +102,8 @@ try {
 import { initStrada, trace, context } from "@strada.sh/sdk"
 
 initStrada({
+  projectId: "my-project",
   service: "api",
-  endpoint: "https://my-project-ingest.strada.sh",
 })
 
 const tracer = trace.getTracer("checkout")
@@ -216,8 +135,8 @@ Important: **`console.log()` and other console methods are not sent by default**
 import { initStrada, logs, SeverityNumber } from "@strada.sh/sdk"
 
 initStrada({
+  projectId: "my-project",
   service: "frontend",
-  endpoint: "https://my-project-ingest.strada.sh",
 })
 
 const logger = logs.getLogger("app")
@@ -239,8 +158,8 @@ logger.emit({
 import { initStrada, logs, SeverityNumber } from "@strada.sh/sdk"
 
 initStrada({
+  projectId: "my-project",
   service: "api",
-  endpoint: "https://my-project-ingest.strada.sh",
 })
 
 const logger = logs.getLogger("app")
@@ -270,8 +189,8 @@ For analytics-style events, prefer `track()` in the browser:
 import { initStrada, track } from "@strada.sh/sdk"
 
 initStrada({
+  projectId: "my-project",
   service: "frontend",
-  endpoint: "https://my-project-ingest.strada.sh",
 })
 
 track("checkout_started", {
@@ -286,8 +205,8 @@ For errors, prefer `captureException()` when you want Strada's error conventions
 import { initStrada, captureException } from "@strada.sh/sdk"
 
 initStrada({
+  projectId: "my-project",
   service: "api",
-  endpoint: "https://my-project-ingest.strada.sh",
 })
 
 try {
@@ -308,8 +227,8 @@ In the browser runtime, Strada also exposes `track()` for product analytics styl
 import { initStrada, track } from "@strada.sh/sdk"
 
 initStrada({
+  projectId: "my-project",
   service: "frontend",
-  endpoint: "https://my-project-ingest.strada.sh",
 })
 
 track("signup_started", {
@@ -433,8 +352,8 @@ You can tune batching and cadence with `telemetry` in `initStrada()`:
 
 ```ts
 initStrada({
+  projectId: "my-project",
   service: "api",
-  endpoint: "https://my-project-ingest.strada.sh",
   telemetry: {
     traces: {
       scheduledDelayMillis: 1000,
@@ -578,22 +497,85 @@ The browser build sets up:
 - `LoggerProvider`
 - OTLP HTTP exporters for traces and logs
 - W3C Baggage propagation for session.id and user.id
-- optional `@opentelemetry/auto-instrumentations-web`
 - global `error` and `unhandledrejection` handlers
 - pageview span lifecycle
+- SPA navigation detection via the Navigation API
 - log filtering for noisy browser junk like `Script error.` and extension frames
 
 ## Node runtime
 
 The server build sets up:
 
-- `NodeSDK` for traces and metrics
-- a separate `LoggerProvider` for logs
+- `NodeTracerProvider` for traces with `AsyncLocalStorageContextManager`
+- `MeterProvider` for metrics
+- `LoggerProvider` for logs
 - OTLP HTTP exporters for traces, logs, metrics
 - W3C Baggage extraction with `BaggageSpanProcessor` and `BaggageLogProcessor`
-- optional `@opentelemetry/auto-instrumentations-node`
+- Resource detection (`telemetry.sdk.*`, `process.*`, `host.*`, `OTEL_RESOURCE_ATTRIBUTES`)
 - global `uncaughtException` and `unhandledRejection` handlers
 - `flush()` and `shutdown()` helpers for graceful process exit
+
+## Auto-instrumentation (optional)
+
+The SDK does **not** include auto-instrumentation by default. It only sets up providers, exporters, and error handlers. If you want automatic spans for HTTP requests, database queries, or browser interactions, install the OTel auto-instrumentation packages separately.
+
+### Node auto-instrumentation
+
+Automatically creates spans for outgoing/incoming HTTP requests, database queries (pg, mysql, mongodb, redis), gRPC calls, and more. No code changes needed; it monkey-patches Node.js modules at import time.
+
+```bash
+pnpm add @opentelemetry/auto-instrumentations-node
+```
+
+```ts
+import { getNodeAutoInstrumentations } from "@opentelemetry/auto-instrumentations-node"
+import { registerInstrumentations } from "@opentelemetry/instrumentation"
+import { initStrada } from "@strada.sh/sdk"
+
+initStrada({
+  projectId: "my-project",
+  service: "api",
+})
+
+// Call after initStrada() so the global providers are registered
+registerInstrumentations({
+  instrumentations: [getNodeAutoInstrumentations()],
+})
+```
+
+This adds spans for `http`, `https`, `fetch`, `express`, `fastify`, `koa`, `pg`, `mysql`, `mongodb`, `redis`, `ioredis`, `grpc`, `graphql`, `aws-sdk`, `fs`, `dns`, `net`, and many more. See the [full list](https://github.com/open-telemetry/opentelemetry-js-contrib/tree/main/metapackages/auto-instrumentations-node).
+
+### Browser auto-instrumentation
+
+Automatically creates spans for `fetch`, `XMLHttpRequest`, document load timing, and user interactions (clicks, navigation). Useful for seeing how long page loads and API calls take without adding manual spans.
+
+```bash
+pnpm add @opentelemetry/auto-instrumentations-web
+```
+
+```ts
+import { getWebAutoInstrumentations } from "@opentelemetry/auto-instrumentations-web"
+import { registerInstrumentations } from "@opentelemetry/instrumentation"
+import { initStrada } from "@strada.sh/sdk"
+
+initStrada({
+  projectId: "my-project",
+  service: "frontend",
+})
+
+registerInstrumentations({
+  instrumentations: [getWebAutoInstrumentations()],
+})
+```
+
+This adds spans for:
+- **fetch / XHR** — every `fetch()` and `XMLHttpRequest` call becomes a span with URL, method, status code, and duration
+- **document load** — spans for DNS, TCP, TLS, request, response, DOM processing, and load event timing
+- **user interaction** — spans for click events on interactive elements
+
+### Why it's not built in
+
+Auto-instrumentation packages are large. The node metapackage pulls in ~30 instrumentation libraries, AWS/GCP resource detectors, gRPC bindings, and polyfills, adding **~2MB** to the bundle. The browser package adds **~70kB**. By keeping them opt-in, the SDK stays lightweight for users who only need error tracking, custom events, or manual tracing.
 
 ## Error handling semantics
 

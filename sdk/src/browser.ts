@@ -29,7 +29,6 @@ import {
 import type { LogRecordProcessor } from "@opentelemetry/sdk-logs";
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
 import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-http";
-import { registerInstrumentations } from "@opentelemetry/instrumentation";
 import { resourceFromAttributes } from "@opentelemetry/resources";
 import { logs } from "@opentelemetry/api-logs";
 import type { Logger } from "@opentelemetry/api-logs";
@@ -47,6 +46,7 @@ import {
   setTags,
   resetContext,
   resolveUserId,
+  resolveEndpoint,
   ATTR,
   createStradaBaggage,
   BAGGAGE_SESSION_ID,
@@ -385,7 +385,7 @@ export function initStrada(options: StradaOptions): void {
     ...browserAttrs,
   });
 
-  const endpoint = options.endpoint.replace(/\/+$/, "");
+  const endpoint = resolveEndpoint(options);
 
   // Tracer provider with context-injecting processor
   _tracerProvider = new WebTracerProvider({
@@ -434,24 +434,6 @@ export function initStrada(options: StradaOptions): void {
   });
   logs.setGlobalLoggerProvider(_loggerProvider);
   _logger = _loggerProvider.getLogger("strada-web");
-
-  // Try to load web auto-instrumentations (optional peer dep).
-  // Unlike Node, we keep the literal specifier here so bundlers can resolve
-  // and inline it. Browsers can't resolve bare specifiers at runtime, so
-  // the non-static trick used in node.ts would silently break this.
-  import("@opentelemetry/auto-instrumentations-web")
-    .then((mod) => {
-      if (typeof mod.getWebAutoInstrumentations === "function") {
-        registerInstrumentations({
-          instrumentations: mod.getWebAutoInstrumentations(),
-        });
-      }
-    })
-    .catch(() => {
-      if (options.debug) {
-        console.log("[@strada.sh/sdk] @opentelemetry/auto-instrumentations-web not found, skipping");
-      }
-    });
 
   // Start first pageview span
   startPageSpan();

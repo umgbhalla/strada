@@ -128,10 +128,12 @@ export interface StradaTelemetryOptions {
 }
 
 export interface StradaOptions {
-  /** Strada ingest URL, e.g. "https://acme-ingest.strada.sh" */
-  endpoint: string;
+  /** Strada project identifier. Used to construct the default ingest endpoint. */
+  projectId: string;
   /** service.name resource attribute */
   service: string;
+  /** Override the ingest endpoint. Defaults to https://{projectId}-ingest.strada.sh */
+  endpoint?: string;
   /** service.version resource attribute (maps to Release in error tracking) */
   version?: string;
   /** deployment.environment.name resource attribute */
@@ -395,6 +397,21 @@ export function resolveUserId(options: StradaOptions | undefined): string | unde
 // backend so that server-side spans and logs can be correlated to the
 // browser session. The baggage header is injected by the W3CBaggagePropagator
 // on every outgoing fetch/XHR, and extracted by the backend OTel SDK.
+
+// ---------------------------------------------------------------------------
+// Endpoint resolution
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolve the ingest endpoint from StradaOptions.
+ * If endpoint is provided, use it as-is. Otherwise derive from projectId.
+ */
+export function resolveEndpoint(options: StradaOptions): string {
+  if (options.endpoint) {
+    return options.endpoint.replace(/\/+$/, "");
+  }
+  return `https://${options.projectId}-ingest.strada.sh`;
+}
 
 export const BAGGAGE_SESSION_ID = "strada.session.id";
 export const BAGGAGE_USER_ID = "strada.user.id";

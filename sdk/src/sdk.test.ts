@@ -304,7 +304,7 @@ describe("resolveMetricReaderOptions", () => {
   it("uses the sdk default metrics export interval", () => {
     expect(
       resolveMetricReaderOptions({
-        endpoint: "https://ingest.example.com",
+        projectId: "test",
         service: "frontend",
       }),
     ).toMatchInlineSnapshot(`
@@ -317,7 +317,7 @@ describe("resolveMetricReaderOptions", () => {
   it("lets telemetry.metrics override the default interval", () => {
     expect(
       resolveMetricReaderOptions({
-        endpoint: "https://ingest.example.com",
+        projectId: "test",
         service: "frontend",
         telemetry: {
           metrics: {

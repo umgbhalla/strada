@@ -20,7 +20,6 @@ import type { LogRecordProcessor } from "@opentelemetry/sdk-logs";
 import { BatchSpanProcessor } from "@opentelemetry/sdk-trace-base";
 import type { Span, SpanProcessor } from "@opentelemetry/sdk-trace-base";
 import { NodeTracerProvider } from "@opentelemetry/sdk-trace-node";
-import { registerInstrumentations } from "@opentelemetry/instrumentation";
 import {
   defaultResource,
   detectResources,
@@ -48,6 +47,7 @@ import {
   setTags,
   resetContext,
   resolveMetricReaderOptions,
+  resolveEndpoint,
   ATTR,
   BAGGAGE_SESSION_ID,
   BAGGAGE_USER_ID,
@@ -215,7 +215,7 @@ export function initStrada(options: StradaOptions): void {
         : {}),
     }));
 
-  const endpoint = options.endpoint.replace(/\/+$/, "");
+  const endpoint = resolveEndpoint(options);
 
   // Log provider (used for both logs and error capture).
   // Wrapped in BaggageLogProcessor to extract session.id and user.id from
@@ -267,28 +267,6 @@ export function initStrada(options: StradaOptions): void {
     ],
   });
   metrics.setGlobalMeterProvider(_meterProvider);
-
-  // Try to load auto-instrumentations (optional peer dep).
-  // registerInstrumentations() hooks into the global providers registered above.
-  // The specifier is constructed at runtime so bundlers (esbuild, webpack, etc.)
-  // don't resolve and inline the entire auto-instrumentations dependency tree
-  // into the user's bundle. It stays a true runtime-only optional import.
-  const autoInstPkg = ["@opentelemetry", "auto-instrumentations-node"].join("/");
-  import(autoInstPkg)
-    .then((mod) => {
-      if (typeof mod.getNodeAutoInstrumentations === "function") {
-        registerInstrumentations({
-          instrumentations: mod.getNodeAutoInstrumentations(),
-        });
-      }
-    })
-    .catch(() => {
-      if (options.debug) {
-        console.log(
-          "[@strada.sh/sdk] @opentelemetry/auto-instrumentations-node not found, skipping auto-instrumentation",
-        );
-      }
-    });
 
   // Global error handlers
   process.on("uncaughtException", (error) => {
