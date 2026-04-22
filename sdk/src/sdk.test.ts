@@ -5,6 +5,7 @@ import {
   shouldIgnoreError,
   errorToAttributes,
   applyBeforeSend,
+  resolveMetricReaderOptions,
   setUser,
   setTags,
   resetContext,
@@ -288,6 +289,45 @@ describe("applyBeforeSend", () => {
     const rewritten = new Error("rewritten");
 
     expect(applyBeforeSend(err, () => rewritten)).toBe(rewritten);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// metric reader options
+// ---------------------------------------------------------------------------
+
+describe("resolveMetricReaderOptions", () => {
+  it("uses the sdk default metrics export interval", () => {
+    expect(
+      resolveMetricReaderOptions({
+        endpoint: "https://ingest.example.com",
+        service: "frontend",
+      }),
+    ).toMatchInlineSnapshot(`
+      {
+        "exportIntervalMillis": 10000,
+      }
+    `);
+  });
+
+  it("lets telemetry.metrics override the default interval", () => {
+    expect(
+      resolveMetricReaderOptions({
+        endpoint: "https://ingest.example.com",
+        service: "frontend",
+        telemetry: {
+          metrics: {
+            exportIntervalMillis: 2500,
+            exportTimeoutMillis: 1500,
+          },
+        },
+      }),
+    ).toMatchInlineSnapshot(`
+      {
+        "exportIntervalMillis": 2500,
+        "exportTimeoutMillis": 1500,
+      }
+    `);
   });
 });
 

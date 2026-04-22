@@ -10,6 +10,9 @@
  */
 
 import { SeverityNumber } from "@opentelemetry/api-logs";
+import type { BatchLogRecordProcessorBrowserConfig } from "@opentelemetry/sdk-logs";
+import type { PeriodicExportingMetricReaderOptions } from "@opentelemetry/sdk-metrics";
+import type { BatchSpanProcessorBrowserConfig } from "@opentelemetry/sdk-trace-base";
 
 // ---------------------------------------------------------------------------
 // Re-export OTel API primitives so users don't need @opentelemetry/api
@@ -20,10 +23,27 @@ export type { Tracer, Span, SpanContext, SpanOptions, SpanAttributes } from "@op
 export { SeverityNumber } from "@opentelemetry/api-logs";
 export { logs } from "@opentelemetry/api-logs";
 export type { Logger } from "@opentelemetry/api-logs";
+export type { BatchLogRecordProcessorBrowserConfig } from "@opentelemetry/sdk-logs";
+export type { PeriodicExportingMetricReaderOptions } from "@opentelemetry/sdk-metrics";
+export type { BatchSpanProcessorBrowserConfig } from "@opentelemetry/sdk-trace-base";
 
 // ---------------------------------------------------------------------------
 // Public types
 // ---------------------------------------------------------------------------
+
+export type StradaMetricReaderOptions = Omit<
+  PeriodicExportingMetricReaderOptions,
+  "exporter" | "metricProducers"
+>;
+
+export interface StradaTelemetryOptions {
+  /** Batch processor options for traces. Reuses OTel's browser batch config shape. */
+  traces?: BatchSpanProcessorBrowserConfig;
+  /** Batch processor options for logs. Reuses OTel's browser batch config shape. */
+  logs?: BatchLogRecordProcessorBrowserConfig;
+  /** Metric reader cadence options. Reuses OTel's PeriodicExportingMetricReader shape, minus exporter internals. */
+  metrics?: StradaMetricReaderOptions;
+}
 
 export interface StradaOptions {
   /** Strada ingest URL, e.g. "https://acme-ingest.strada.sh" */
@@ -42,6 +62,8 @@ export interface StradaOptions {
   beforeSend?: (error: Error) => Error | null;
   /** Enable OTel diagnostic logging */
   debug?: boolean;
+  /** Advanced OTel batching and export cadence options. */
+  telemetry?: StradaTelemetryOptions;
   /**
    * Dynamic user ID resolver (browser only).
    * Called on every span/log to get the current user ID.
@@ -247,6 +269,18 @@ export function applyBeforeSend(
   if (!beforeSend) return error;
   const result = beforeSend(error);
   return result ?? null;
+}
+
+/**
+ * Resolve metric reader options with the SDK default export interval.
+ */
+export function resolveMetricReaderOptions(
+  options: StradaOptions,
+): StradaMetricReaderOptions {
+  return {
+    exportIntervalMillis: 10_000,
+    ...options.telemetry?.metrics,
+  };
 }
 
 /**

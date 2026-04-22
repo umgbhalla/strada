@@ -12,17 +12,21 @@ import { OTLPMetricExporter } from "@opentelemetry/exporter-metrics-otlp-http";
 import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-http";
 import { PeriodicExportingMetricReader } from "@opentelemetry/sdk-metrics";
 import {
+  type BatchLogRecordProcessorBrowserConfig,
   LoggerProvider,
   BatchLogRecordProcessor,
 } from "@opentelemetry/sdk-logs";
+import { BatchSpanProcessor } from "@opentelemetry/sdk-trace-base";
 import { registerInstrumentations } from "@opentelemetry/instrumentation";
 import { resourceFromAttributes } from "@opentelemetry/resources";
 import { logs } from "@opentelemetry/api-logs";
 import type { Logger } from "@opentelemetry/api-logs";
 
 import {
+  type BatchSpanProcessorBrowserConfig,
   type StradaOptions,
   type CaptureExceptionOptions,
+  type StradaTelemetryOptions,
   type UserContext,
   applyBeforeSend,
   normalizeError,
@@ -31,6 +35,7 @@ import {
   setUser,
   setTags,
   resetContext,
+  resolveMetricReaderOptions,
   ERROR_SEVERITY,
   ERROR_SEVERITY_TEXT,
 } from "./shared.ts";
@@ -39,9 +44,13 @@ import {
 export {
   type StradaOptions,
   type CaptureExceptionOptions,
+  type StradaTelemetryOptions,
   type UserContext,
   setUser,
   setTags,
+  type BatchSpanProcessorBrowserConfig,
+  type BatchLogRecordProcessorBrowserConfig,
+  type PeriodicExportingMetricReaderOptions,
   // OTel API re-exports
   trace,
   context,
@@ -133,7 +142,12 @@ export function initStrada(options: StradaOptions): void {
   });
   _loggerProvider = new LoggerProvider({
     resource,
-    processors: [new BatchLogRecordProcessor(logExporter)],
+    processors: [
+      new BatchLogRecordProcessor(
+        logExporter,
+        options.telemetry?.logs,
+      ),
+    ],
   });
   logs.setGlobalLoggerProvider(_loggerProvider);
   _logger = _loggerProvider.getLogger("strada");
@@ -141,15 +155,22 @@ export function initStrada(options: StradaOptions): void {
   // NodeSDK (traces + metrics)
   _sdk = new NodeSDK({
     resource,
-    traceExporter: new OTLPTraceExporter({
-      url: `${endpoint}/v1/traces`,
-    }),
-    metricReader: new PeriodicExportingMetricReader({
-      exporter: new OTLPMetricExporter({
-        url: `${endpoint}/v1/metrics`,
+    spanProcessors: [
+      new BatchSpanProcessor(
+        new OTLPTraceExporter({
+          url: `${endpoint}/v1/traces`,
+        }),
+        options.telemetry?.traces,
+      ),
+    ],
+    metricReaders: [
+      new PeriodicExportingMetricReader({
+        exporter: new OTLPMetricExporter({
+          url: `${endpoint}/v1/metrics`,
+        }),
+        ...resolveMetricReaderOptions(options),
       }),
-      exportIntervalMillis: 10_000,
-    }),
+    ],
   });
 
   _sdk.start();

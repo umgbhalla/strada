@@ -357,13 +357,29 @@ When an exception is detected, the worker extracts it into a denormalized error 
 
 **Answers:** "what are the top errors?", "is this error handled or unhandled?", "how many times did this error happen?", "which release introduced this bug?", "show me the stacktrace for this error group"
 
-## Error tracking — custom OTel attributes
+## SDK custom attributes and event conventions
 
-Strada extends OTel's standard `exception.*` attributes with additional error-tracking attributes. These are NOT part of the OTel semantic conventions. They are custom attributes that Strada SDKs set on OTel log records (or span event attributes) alongside the standard ones. Any OTel SDK can set them as regular string attributes.
+Strada extends plain OpenTelemetry with a small set of **nonstandard but important conventions**. These are a superset of OTel, not a replacement for it. They let the SDK model error tracking, browser analytics, session context, and custom product events without inventing a separate transport or schema.
 
-We use the `exception.*` namespace (not a vendor prefix like `strada.*`) because these concepts are universal to error tracking, not Strada-specific. If OTel ever standardizes fingerprinting or mechanism metadata, the names would be similar.
+The rule is simple:
 
-### Standard OTel attributes (already defined by OTel spec)
+- keep using standard OTel APIs and standard semantic attributes where they already exist
+- add a few **custom attributes** only when OTel does not standardize the concept yet
+- keep those attributes stable so they can be queried directly from SQL later
+
+Any OTel SDK can set these as normal string attributes on spans, span events, or log records.
+
+### Why these conventions exist
+
+| Convention | Why Strada adds it |
+| ---------- | ------------------ |
+| `exception.*` extensions | OTel gives us the basics of exceptions, but not issue fingerprinting, capture mechanism metadata, or source-map oriented structured frames |
+| `event.name` + `custom.*` | OTel logs are flexible, but product analytics events need a stable way to distinguish events from ordinary logs and store event-specific properties |
+| `session.id` | Browser analytics and user journeys need a stable per-tab session key that survives page refreshes without forcing one giant browser trace |
+| `url.path`, `url.query`, `url.full`, `http.request.header.referer` on browser telemetry | These make page, funnel, and session analysis easy without requiring each app to add the attributes manually |
+| `user.id` on spans and logs | Correlates traces, logs, errors, and analytics events to the same signed-in user across browser and backend |
+
+### Standard OTel attributes we rely on
 
 | Attribute              | Type   | Description                                                                             |
 | ---------------------- | ------ | --------------------------------------------------------------------------------------- |
@@ -378,7 +394,41 @@ We use the `exception.*` namespace (not a vendor prefix like `strada.*`) because
 | `service.version`             | string | Release / app version. Stored as `Release` column                         |
 | `deployment.environment.name` | string | Environment (`"production"`, `"staging"`). Stored as `Environment` column |
 
+### Custom event convention (set by Strada SDKs)
+
+Custom product events are stored as **OTel log records**, not spans. They live in `otel_logs` next to ordinary logs, so Strada needs a stable way to tell them apart later when running SQL.
+
+| Attribute | Type | Description |
+| --------- | ---- | ----------- |
+| `event.name` | string | Structured event name. Presence of this key means the log record is a custom event, not an ordinary application log. Example: `"signup_started"`, `"purchase"` |
+| `custom.*` | string / number / boolean | Event-specific properties namespaced under `custom.` so they don't collide with OTel semantic attributes. Example: `custom.plan = "pro"`, `custom.source = "hero"` |
+
+This is how browser and backend custom events are queryable later with SQL while ignoring normal logs:
+
+```sql
+SELECT Timestamp, ServiceName, LogAttributes['event.name'] AS event_name
+FROM otel_logs
+WHERE mapContains(LogAttributes, 'event.name')
+ORDER BY Timestamp DESC
+LIMIT 100
+```
+
+### Browser/session context attributes (set by the browser SDK)
+
+These are injected into browser spans and log records so analytics, custom events, and errors can be grouped by visit, page, and user without app code needing to add them on every call.
+
+| Attribute | Type | Description |
+| --------- | ---- | ----------- |
+| `session.id` | string | Stable per-tab UUID stored in `sessionStorage`. Groups multiple pageview traces into one browser session without forcing one giant trace |
+| `url.path` | string | Current `window.location.pathname` |
+| `url.query` | string | Current `window.location.search` |
+| `url.full` | string | Current `window.location.href` |
+| `http.request.header.referer` | string | `document.referrer`, useful for entry page and attribution analysis |
+| `user.id` | string | Signed-in user identity from `setUser()` / `StradaOptions.userId`, injected into browser spans and logs and often mirrored on backend logs/spans too |
+
 ### Custom error-tracking attributes (set by Strada SDKs)
+
+We use the `exception.*` namespace, not a vendor prefix like `strada.*`, because these concepts are universal to error tracking even though OTel has not standardized all of them yet.
 
 | Attribute                     | Type                | Description                                                                                                                                                                                                                                                          |
 | ----------------------------- | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -426,6 +476,35 @@ Worker:
      → computes fingerprint
      → writes to otel_errors
 ```
+
+### How custom events flow through the system
+
+```text
+SDK: track("signup_started", { plan: "pro" })
+  |
+  v
+OTel Logger.emit({
+  body: "signup_started",
+  eventName: "signup_started",
+  attributes: {
+    "event.name": "signup_started",
+    "custom.plan": "pro",
+    "session.id": "...",
+    "url.path": "/pricing",
+    "user.id": "user_123"
+  }
+})
+  |
+  v  OTLP HTTP/JSON POST /v1/logs
+  |
+  v
+Worker:
+  1. transformLogs() → writes to otel_logs (unchanged)
+  2. no extra extraction step needed
+  3. later SQL can select only events with `mapContains(LogAttributes, 'event.name')`
+```
+
+This convention matters because **browser and backend custom events can share the same `otel_logs` table** while still being easy to query separately from ordinary logs.
 
 For traces, the same extraction happens when span events named `exception` are found:
 

@@ -22,8 +22,12 @@ export {
   setUser,
   setTags,
   type StradaOptions,
+  type StradaTelemetryOptions,
   type CaptureExceptionOptions,
   type UserContext,
+  type BatchSpanProcessorBrowserConfig,
+  type BatchLogRecordProcessorBrowserConfig,
+  type PeriodicExportingMetricReaderOptions,
   // OTel API re-exports
   trace,
   context,

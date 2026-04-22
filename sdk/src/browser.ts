@@ -21,6 +21,7 @@ import type { Span, SpanProcessor } from "@opentelemetry/sdk-trace-base";
 import { BatchSpanProcessor } from "@opentelemetry/sdk-trace-base";
 import { StackContextManager, WebTracerProvider } from "@opentelemetry/sdk-trace-web";
 import {
+  type BatchLogRecordProcessorBrowserConfig,
   BatchLogRecordProcessor,
   LoggerProvider,
 } from "@opentelemetry/sdk-logs";
@@ -33,6 +34,7 @@ import { logs } from "@opentelemetry/api-logs";
 import type { Logger } from "@opentelemetry/api-logs";
 
 import {
+  type BatchSpanProcessorBrowserConfig,
   type StradaOptions,
   type CaptureExceptionOptions,
   type UserContext,
@@ -54,9 +56,13 @@ import {
 export {
   type StradaOptions,
   type CaptureExceptionOptions,
+  type StradaTelemetryOptions,
   type UserContext,
   setUser,
   setTags,
+  type BatchSpanProcessorBrowserConfig,
+  type BatchLogRecordProcessorBrowserConfig,
+  type PeriodicExportingMetricReaderOptions,
   // OTel API re-exports
   trace,
   context,
@@ -378,6 +384,7 @@ export function initStrada(options: StradaOptions): void {
       new StradaSpanProcessor(() => _sessionId!, getUserId),
       new BatchSpanProcessor(
         new OTLPTraceExporter({ url: `${endpoint}/v1/traces` }),
+        options.telemetry?.traces,
       ),
     ],
   });
@@ -395,7 +402,10 @@ export function initStrada(options: StradaOptions): void {
     processors: [
       new ContextLogProcessor(
         new FilteringLogProcessor(
-          new BatchLogRecordProcessor(logExporter),
+          new BatchLogRecordProcessor(
+            logExporter,
+            options.telemetry?.logs,
+          ),
         ),
         () => _sessionId!,
         getUserId,

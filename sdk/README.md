@@ -12,6 +12,19 @@ initStrada({
   endpoint: "https://my-project-ingest.strada.sh",
   environment: "production",
   version: "1.0.0",
+  telemetry: {
+    traces: {
+      scheduledDelayMillis: 2000,
+      maxExportBatchSize: 256,
+    },
+    logs: {
+      scheduledDelayMillis: 2000,
+    },
+    metrics: {
+      exportIntervalMillis: 5000,
+      exportTimeoutMillis: 3000,
+    },
+  },
 })
 
 const tracer = trace.getTracer("app")
@@ -246,6 +259,107 @@ The collector later extracts these into the `otel_errors` table for grouping and
 - **Node.js / Bun / Deno** get the server implementation
 
 That means the same import path can configure different OTel SDKs without user changes.
+
+## Exporters, batching, and flush behavior
+
+By default the SDK uses **OTLP HTTP JSON exporters** for every signal:
+
+- **browser traces** → `OTLPTraceExporter` to `/v1/traces`
+- **browser logs** → `OTLPLogExporter` to `/v1/logs`
+- **Node traces** → `OTLPTraceExporter` to `/v1/traces`
+- **Node logs** → `OTLPLogExporter` to `/v1/logs`
+- **Node metrics** → `OTLPMetricExporter` to `/v1/metrics`
+
+You can tune batching and cadence with `telemetry` in `initStrada()`:
+
+```ts
+initStrada({
+  service: "api",
+  endpoint: "https://my-project-ingest.strada.sh",
+  telemetry: {
+    traces: {
+      scheduledDelayMillis: 1000,
+      maxExportBatchSize: 128,
+      maxQueueSize: 1024,
+      exportTimeoutMillis: 10000,
+    },
+    logs: {
+      scheduledDelayMillis: 1000,
+      maxExportBatchSize: 128,
+    },
+    metrics: {
+      exportIntervalMillis: 5000,
+      exportTimeoutMillis: 3000,
+    },
+  },
+})
+```
+
+The SDK intentionally reuses familiar OTel option names:
+
+- `telemetry.traces` uses the same shape as OTel batch span processor browser config
+- `telemetry.logs` uses the same shape as OTel batch log record processor browser config
+- `telemetry.metrics` uses the same shape as `PeriodicExportingMetricReaderOptions`, minus exporter internals
+
+### Trace and log batching defaults
+
+Spans and logs are not sent one-by-one. They go through the standard OTel batch processors.
+
+Unless you override OTel env vars, the default batch behavior is:
+
+- **scheduled delay**: `5000ms`
+- **max export batch size**: `512`
+- **max queue size**: `2048`
+- **export timeout**: `30000ms`
+
+So in normal operation, ended spans and emitted logs are usually exported within about **5 seconds**, or sooner if the batch fills up.
+
+### Node metrics cadence
+
+Node metrics use `PeriodicExportingMetricReader` with an explicit export interval of **10 seconds** in this SDK.
+
+```text
+spans/logs: batched, usually every ~5s
+metrics: periodic export every 10s
+```
+
+### Manual flush and shutdown
+
+The SDK exposes:
+
+- `flush()` → flush buffered telemetry without tearing down the SDK
+- `shutdown()` → flush and shut down the SDK/providers
+
+On **Node.js**:
+
+- `uncaughtException` captures the error, flushes logs + traces + metrics, then exits
+- `SIGTERM` / `SIGINT` call `shutdown()`
+
+- `telemetry.metrics` is currently only meaningful on runtimes where Strada configures a metric exporter, which today is Node.js
+
+On the **browser**:
+
+- `flush()` calls `forceFlush()` on the tracer and logger providers
+- `shutdown()` removes listeners, ends the current pageview, and shuts down the providers
+
+### Browser page close behavior
+
+The browser SDK relies on the **standard OTel browser batch processor behavior**.
+
+That means:
+
+- pageviews end on `visibilitychange: hidden`
+- OTel batch processors **auto flush on document hide by default**
+- you can turn that off with `telemetry.traces.disableAutoFlushOnDocumentHide` or `telemetry.logs.disableAutoFlushOnDocumentHide`
+
+The browser OTLP HTTP exporter uses `fetch` with **`keepalive: true`** when possible, which improves the chance that an export already in progress can finish during page teardown. But there is still **no hard guarantee** that telemetry buffered in memory right before tab close will be delivered.
+
+Practical rule:
+
+- if the batch timer already fired, the data is likely already on the way
+- if the user closes the tab immediately after an event, some very recent telemetry may be lost
+
+If this matters for a particular flow, call `flush()` yourself at a controlled boundary.
 
 ## Browser runtime
 
