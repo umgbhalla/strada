@@ -12,6 +12,7 @@
 
 CREATE TABLE IF NOT EXISTS otel_traces
 (
+    `ProjectId`           LowCardinality(String) CODEC(ZSTD(1)),
     `Timestamp`           DateTime64(9)          CODEC(Delta(8), ZSTD(1)),
     `TraceId`             String                 CODEC(ZSTD(1)),
     `SpanId`              String                 CODEC(ZSTD(1)),
@@ -48,7 +49,7 @@ CREATE TABLE IF NOT EXISTS otel_traces
 )
 ENGINE = MergeTree
 PARTITION BY toDate(Timestamp)
-ORDER BY (ServiceName, SpanName, toDateTime(Timestamp))
+ORDER BY (ProjectId, ServiceName, SpanName, toDateTime(Timestamp))
 SETTINGS index_granularity = 8192;
 
 -- ============================================================================
@@ -57,23 +58,25 @@ SETTINGS index_granularity = 8192;
 
 CREATE TABLE IF NOT EXISTS otel_traces_trace_id_ts
 (
+    `ProjectId`  LowCardinality(String) CODEC(ZSTD(1)),
     `TraceId`  String,
     `Start`    DateTime64(9) CODEC(Delta(8), ZSTD(1)),
     `End`      DateTime64(9) CODEC(Delta(8), ZSTD(1))
 )
 ENGINE = MergeTree
-ORDER BY (TraceId, toUnixTimestamp(Start));
+ORDER BY (ProjectId, TraceId, toUnixTimestamp(Start));
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS otel_traces_trace_id_ts_mv
 TO otel_traces_trace_id_ts
 AS
 SELECT
+    ProjectId,
     TraceId,
     min(Timestamp) AS Start,
     max(Timestamp) AS End
 FROM otel_traces
 WHERE TraceId != ''
-GROUP BY TraceId;
+GROUP BY ProjectId, TraceId;
 
 -- ============================================================================
 -- ANALYTICS: Page aggregates from browser pageview spans
@@ -230,6 +233,7 @@ GROUP BY ProjectId, Date, ServiceName, Domain, SessionId;
 
 CREATE TABLE IF NOT EXISTS otel_logs
 (
+    `ProjectId`           LowCardinality(String) CODEC(ZSTD(1)),
     `Timestamp`           DateTime64(9)          CODEC(Delta(8), ZSTD(1)),
     `TimestampTime`       DateTime DEFAULT toDateTime(Timestamp),
     `TraceId`             String                 CODEC(ZSTD(1)),
@@ -259,7 +263,7 @@ CREATE TABLE IF NOT EXISTS otel_logs
 )
 ENGINE = MergeTree
 PARTITION BY toDate(TimestampTime)
-ORDER BY (ServiceName, TimestampTime, Timestamp)
+ORDER BY (ProjectId, ServiceName, TimestampTime, Timestamp)
 SETTINGS index_granularity = 8192;
 
 -- ============================================================================
@@ -268,6 +272,7 @@ SETTINGS index_granularity = 8192;
 
 CREATE TABLE IF NOT EXISTS otel_errors
 (
+    `ProjectId`             LowCardinality(String) CODEC(ZSTD(1)),
     `Timestamp`             DateTime64(9)          CODEC(Delta(8), ZSTD(1)),
     `TraceId`               String                 CODEC(ZSTD(1)),
     `SpanId`                String                 CODEC(ZSTD(1)),
@@ -299,7 +304,7 @@ CREATE TABLE IF NOT EXISTS otel_errors
 )
 ENGINE = MergeTree
 PARTITION BY toDate(Timestamp)
-ORDER BY (ServiceName, FingerprintHash, toDateTime(Timestamp))
+ORDER BY (ProjectId, ServiceName, FingerprintHash, toDateTime(Timestamp))
 SETTINGS index_granularity = 8192;
 
 -- ============================================================================
@@ -308,6 +313,7 @@ SETTINGS index_granularity = 8192;
 
 CREATE TABLE IF NOT EXISTS otel_metrics_gauge
 (
+    `ProjectId`                   LowCardinality(String) CODEC(ZSTD(1)),
     `ResourceAttributes`          Map(LowCardinality(String), String) CODEC(ZSTD(1)),
     `ResourceSchemaUrl`           String                 CODEC(ZSTD(1)),
     `ScopeName`                   String                 CODEC(ZSTD(1)),
@@ -339,7 +345,7 @@ CREATE TABLE IF NOT EXISTS otel_metrics_gauge
 )
 ENGINE = MergeTree
 PARTITION BY toDate(TimeUnix)
-ORDER BY (ServiceName, MetricName, Attributes, toUnixTimestamp64Nano(TimeUnix))
+ORDER BY (ProjectId, ServiceName, MetricName, Attributes, toUnixTimestamp64Nano(TimeUnix))
 SETTINGS index_granularity = 8192;
 
 -- ============================================================================
@@ -348,6 +354,7 @@ SETTINGS index_granularity = 8192;
 
 CREATE TABLE IF NOT EXISTS otel_metrics_sum
 (
+    `ProjectId`                   LowCardinality(String) CODEC(ZSTD(1)),
     `ResourceAttributes`          Map(LowCardinality(String), String) CODEC(ZSTD(1)),
     `ResourceSchemaUrl`           String                 CODEC(ZSTD(1)),
     `ScopeName`                   String                 CODEC(ZSTD(1)),
@@ -381,7 +388,7 @@ CREATE TABLE IF NOT EXISTS otel_metrics_sum
 )
 ENGINE = MergeTree
 PARTITION BY toDate(TimeUnix)
-ORDER BY (ServiceName, MetricName, Attributes, toUnixTimestamp64Nano(TimeUnix))
+ORDER BY (ProjectId, ServiceName, MetricName, Attributes, toUnixTimestamp64Nano(TimeUnix))
 SETTINGS index_granularity = 8192;
 
 -- ============================================================================
@@ -390,6 +397,7 @@ SETTINGS index_granularity = 8192;
 
 CREATE TABLE IF NOT EXISTS otel_metrics_histogram
 (
+    `ProjectId`                   LowCardinality(String) CODEC(ZSTD(1)),
     `ResourceAttributes`          Map(LowCardinality(String), String) CODEC(ZSTD(1)),
     `ResourceSchemaUrl`           String                 CODEC(ZSTD(1)),
     `ScopeName`                   String                 CODEC(ZSTD(1)),
@@ -427,7 +435,7 @@ CREATE TABLE IF NOT EXISTS otel_metrics_histogram
 )
 ENGINE = MergeTree
 PARTITION BY toDate(TimeUnix)
-ORDER BY (ServiceName, MetricName, Attributes, toUnixTimestamp64Nano(TimeUnix))
+ORDER BY (ProjectId, ServiceName, MetricName, Attributes, toUnixTimestamp64Nano(TimeUnix))
 SETTINGS index_granularity = 8192;
 
 -- ============================================================================
@@ -436,6 +444,7 @@ SETTINGS index_granularity = 8192;
 
 CREATE TABLE IF NOT EXISTS otel_metrics_exponential_histogram
 (
+    `ProjectId`                   LowCardinality(String) CODEC(ZSTD(1)),
     `ResourceAttributes`          Map(LowCardinality(String), String) CODEC(ZSTD(1)),
     `ResourceSchemaUrl`           String                 CODEC(ZSTD(1)),
     `ScopeName`                   String                 CODEC(ZSTD(1)),
@@ -477,5 +486,5 @@ CREATE TABLE IF NOT EXISTS otel_metrics_exponential_histogram
 )
 ENGINE = MergeTree
 PARTITION BY toDate(TimeUnix)
-ORDER BY (ServiceName, MetricName, Attributes, toUnixTimestamp64Nano(TimeUnix))
+ORDER BY (ProjectId, ServiceName, MetricName, Attributes, toUnixTimestamp64Nano(TimeUnix))
 SETTINGS index_granularity = 8192;

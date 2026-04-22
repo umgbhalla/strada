@@ -6,8 +6,6 @@
 // A few fields have non-trivial mappings where the JSON key doesn't match the
 // OTel ClickHouse column name after case conversion. These are listed as
 // per-signal exceptions below.
-//
-// project_id is always stripped — self-hosted ClickHouse runs single-project.
 
 // ─── Signal types ───
 
@@ -56,7 +54,7 @@ const METRICS_EXCEPTIONS: Record<string, string | null> = {
 
 // ─── Shared drops ───
 // Fields stripped from all signals before INSERT.
-const ALWAYS_DROP = new Set(["project_id"]);
+const ALWAYS_DROP = new Set<string>();
 
 // ─── Signal → exceptions lookup ───
 

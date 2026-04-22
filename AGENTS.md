@@ -43,7 +43,7 @@ CLICKHOUSE_PASSWORD=secret
 
 When using ClickHouse backend, the collector remaps NDJSON keys from snake_case to PascalCase (the OTel ClickHouse standard) before INSERT. The field mapping logic lives in `otel-collector/src/field-mapping.ts`.
 
-The ClickHouse schema (`clickhouse.sql`) has **no `ProjectId` column**. Self-hosted users run a single project per database. Project isolation is only used in the hosted Tinybird deployment. The field mapping strips `project_id` from NDJSON before INSERT.
+The ClickHouse schema (`clickhouse.sql`) has `ProjectId` as the first column in every table and first in every sorting key, matching the Tinybird schema. Self-hosted users with a single project will have an empty `ProjectId` value, which is fine. Having consistent schemas between Tinybird and ClickHouse simplifies the codebase.
 
 ### Environment variables
 
@@ -53,7 +53,7 @@ The collector reads config from `process.env` (not `import { env } from 'cloudfl
 
 Column names follow the **standard OTel ClickHouse exporter schema** (PascalCase): `TraceId`, `SpanId`, `ServiceName`, `ResourceAttributes`, etc. This is NOT a Tinybird-specific convention. It comes from the official OTel collector-contrib ClickHouse exporter at https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/exporter/clickhouseexporter/internal/sqltemplates.
 
-The only Strada addition is `ProjectId` as the first column in every Tinybird table for project isolation. The self-hosted ClickHouse schema (`clickhouse.sql`) does not have this column.
+The only Strada addition is `ProjectId` as the first column in every table for project isolation. Both the Tinybird datasources and self-hosted ClickHouse schema (`clickhouse.sql`) include this column.
 
 ## SDK (`@strada.sh/sdk`)
 

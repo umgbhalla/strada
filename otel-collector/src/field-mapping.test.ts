@@ -43,6 +43,10 @@ describe("remapRow", () => {
         "TraceId": "abc123",
       }
     `);
+    // Verify project_id is preserved when present
+    const rowWithProject = { ...row, project_id: "acme" };
+    const resultWithProject = remapRow(rowWithProject, "traces");
+    expect(resultWithProject).toHaveProperty("ProjectId", "acme");
   });
 
   it("applies traces exception: start_time → Timestamp", () => {
@@ -99,11 +103,11 @@ describe("remapRow", () => {
     expect(result).not.toHaveProperty("TraceFlags");
   });
 
-  it("drops project_id for all signals", () => {
-    expect(remapRow({ project_id: "acme", trace_id: "t1" }, "traces")).not.toHaveProperty("ProjectId");
-    expect(remapRow({ project_id: "acme" }, "logs")).not.toHaveProperty("ProjectId");
-    expect(remapRow({ project_id: "acme" }, "errors")).not.toHaveProperty("ProjectId");
-    expect(remapRow({ project_id: "acme" }, "metrics_gauge")).not.toHaveProperty("ProjectId");
+  it("remaps project_id to ProjectId for all signals", () => {
+    expect(remapRow({ project_id: "acme", trace_id: "t1" }, "traces")).toHaveProperty("ProjectId", "acme");
+    expect(remapRow({ project_id: "acme" }, "logs")).toHaveProperty("ProjectId", "acme");
+    expect(remapRow({ project_id: "acme" }, "errors")).toHaveProperty("ProjectId", "acme");
+    expect(remapRow({ project_id: "acme" }, "metrics_gauge")).toHaveProperty("ProjectId", "acme");
   });
 
   it("passes through unknown keys with automatic case conversion", () => {

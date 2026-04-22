@@ -386,6 +386,7 @@ describe.sequential('collector integration with official OTel SDKs', () => {
                 "Level": "error",
                 "MechanismHandled": true,
                 "MechanismType": "generic",
+                "ProjectId": "",
                 "Release": "",
                 "ResourceAttributes": {
                   "service.name": "collector-integration-test",
@@ -415,6 +416,7 @@ describe.sequential('collector integration with official OTel SDKs', () => {
                 "Level": "error",
                 "MechanismHandled": true,
                 "MechanismType": "generic",
+                "ProjectId": "",
                 "Release": "",
                 "ResourceAttributes": {
                   "service.name": "collector-integration-test",
@@ -437,6 +439,7 @@ describe.sequential('collector integration with official OTel SDKs', () => {
                   "exception.type": "CheckoutError",
                   "order_id": "order-123",
                 },
+                "ProjectId": "",
                 "ResourceAttributes": {
                   "service.name": "collector-integration-test",
                 },
@@ -465,6 +468,7 @@ describe.sequential('collector integration with official OTel SDKs', () => {
                 "MetricDescription": "",
                 "MetricName": "queue.depth",
                 "MetricUnit": "",
+                "ProjectId": "",
                 "ResourceAttributes": {
                   "service.name": "collector-integration-test",
                 },
@@ -531,6 +535,7 @@ describe.sequential('collector integration with official OTel SDKs', () => {
                 "MetricName": "checkout.duration.ms",
                 "MetricUnit": "",
                 "Min": 245.5,
+                "ProjectId": "",
                 "ResourceAttributes": {
                   "service.name": "collector-integration-test",
                 },
@@ -560,6 +565,7 @@ describe.sequential('collector integration with official OTel SDKs', () => {
                 "MetricDescription": "",
                 "MetricName": "checkout.attempts",
                 "MetricUnit": "",
+                "ProjectId": "",
                 "ResourceAttributes": {
                   "service.name": "collector-integration-test",
                 },
@@ -596,6 +602,7 @@ describe.sequential('collector integration with official OTel SDKs', () => {
                 "LinksSpanId": [],
                 "LinksTraceId": [],
                 "LinksTraceState": [],
+                "ProjectId": "",
                 "ResourceAttributes": {
                   "service.name": "collector-integration-test",
                 },
