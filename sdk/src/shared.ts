@@ -98,6 +98,15 @@ export const ATTR = {
   BROWSER_LANGUAGE: "browser.language",
   /** Full user agent string. From navigator.userAgent. */
   USER_AGENT_ORIGINAL: "user_agent.original",
+
+  // -- Resource attributes (standard OTel semantic conventions) --
+
+  /** Logical name of the service, e.g. "api", "frontend". Standard OTel resource attribute. */
+  SERVICE_NAME: "service.name",
+  /** Version of the service/app. Maps to Release in error tracking. Standard OTel resource attribute. */
+  SERVICE_VERSION: "service.version",
+  /** Deployment environment, e.g. "production", "staging". Standard OTel resource attribute. */
+  DEPLOYMENT_ENVIRONMENT_NAME: "deployment.environment.name",
 } as const;
 
 // ---------------------------------------------------------------------------

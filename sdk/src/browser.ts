@@ -379,9 +379,9 @@ export function initStrada(options: StradaOptions): void {
   }
 
   const resource = resourceFromAttributes({
-    "service.name": options.service,
-    ...(options.version ? { "service.version": options.version } : {}),
-    ...(options.environment ? { "deployment.environment.name": options.environment } : {}),
+    [ATTR.SERVICE_NAME]: options.service,
+    ...(options.version ? { [ATTR.SERVICE_VERSION]: options.version } : {}),
+    ...(options.environment ? { [ATTR.DEPLOYMENT_ENVIRONMENT_NAME]: options.environment } : {}),
     ...browserAttrs,
   });
 
@@ -435,8 +435,11 @@ export function initStrada(options: StradaOptions): void {
   logs.setGlobalLoggerProvider(_loggerProvider);
   _logger = _loggerProvider.getLogger("strada-web");
 
-  // Try to load web auto-instrumentations (optional peer dep)
-  import("@opentelemetry/auto-instrumentations-web")
+  // Try to load web auto-instrumentations (optional peer dep).
+  // The specifier is constructed at runtime so bundlers don't resolve and
+  // inline the entire auto-instrumentations dependency tree into the bundle.
+  const autoInstPkg = ["@opentelemetry", "auto-instrumentations-web"].join("/");
+  import(autoInstPkg)
     .then((mod) => {
       if (typeof mod.getWebAutoInstrumentations === "function") {
         registerInstrumentations({

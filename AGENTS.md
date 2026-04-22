@@ -392,6 +392,7 @@ The rule is simple:
 - keep using standard OTel APIs and standard semantic attributes where they already exist
 - add a few **custom attributes** only when OTel does not standardize the concept yet
 - keep those attributes stable so they can be queried directly from SQL later
+- **always use `ATTR.*` constants** from `sdk/src/shared.ts` instead of raw strings. Never write `"session.id"` or `"service.name"` directly; use `ATTR.SESSION_ID` or `ATTR.SERVICE_NAME`. This prevents typos, makes renaming safe, and keeps all attribute names discoverable in one place. If a new attribute is needed, add it to the `ATTR` object first.
 
 Any OTel SDK can set these as normal string attributes on spans, span events, or log records.
 

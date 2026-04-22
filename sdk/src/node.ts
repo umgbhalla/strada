@@ -1,16 +1,16 @@
 /**
  * Node.js runtime entry for @strada.sh/sdk.
  *
- * Wraps @opentelemetry/sdk-node with Strada conventions: auto-instrumentation,
- * global error handlers, captureException, and user/tag context. Everything
- * flows through standard OTel; no custom transport or protocol.
+ * Wires OTel providers directly (NodeTracerProvider, MeterProvider,
+ * LoggerProvider) instead of using @opentelemetry/sdk-node which pulls in
+ * every exporter variant (gRPC, proto, zipkin, prometheus), YAML config
+ * parsing, and ~2MB of unnecessary dependencies. We only need HTTP/JSON.
  */
 
-import { NodeSDK } from "@opentelemetry/sdk-node";
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
 import { OTLPMetricExporter } from "@opentelemetry/exporter-metrics-otlp-http";
 import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-http";
-import { PeriodicExportingMetricReader } from "@opentelemetry/sdk-metrics";
+import { MeterProvider, PeriodicExportingMetricReader } from "@opentelemetry/sdk-metrics";
 import {
   type BatchLogRecordProcessorBrowserConfig,
   LoggerProvider,
@@ -19,11 +19,12 @@ import {
 import type { LogRecordProcessor } from "@opentelemetry/sdk-logs";
 import { BatchSpanProcessor } from "@opentelemetry/sdk-trace-base";
 import type { Span, SpanProcessor } from "@opentelemetry/sdk-trace-base";
+import { NodeTracerProvider } from "@opentelemetry/sdk-trace-node";
 import { registerInstrumentations } from "@opentelemetry/instrumentation";
 import { resourceFromAttributes } from "@opentelemetry/resources";
 import { logs } from "@opentelemetry/api-logs";
 import type { Logger } from "@opentelemetry/api-logs";
-import { context as otelContext, propagation } from "@opentelemetry/api";
+import { context as otelContext, metrics, propagation, trace } from "@opentelemetry/api";
 import { CompositePropagator, W3CBaggagePropagator, W3CTraceContextPropagator } from "@opentelemetry/core";
 
 import {
@@ -159,33 +160,11 @@ class BaggageLogProcessor implements LogRecordProcessor {
 // Module state
 // ---------------------------------------------------------------------------
 
-let _sdk: NodeSDK | undefined;
+let _tracerProvider: NodeTracerProvider | undefined;
+let _meterProvider: MeterProvider | undefined;
 let _loggerProvider: LoggerProvider | undefined;
 let _logger: Logger | undefined;
 let _options: StradaOptions | undefined;
-
-function isForceFlushable(
-  value: unknown,
-): value is { forceFlush: () => Promise<void> } {
-  if (typeof value !== "object" || value === null) {
-    return false;
-  }
-
-  return typeof Reflect.get(value, "forceFlush") === "function";
-}
-
-async function forceFlushSdk(): Promise<void> {
-  const sdk = _sdk;
-  if (!sdk) return;
-
-  const tracerProvider = Reflect.get(sdk, "_tracerProvider");
-  const meterProvider = Reflect.get(sdk, "_meterProvider");
-
-  await Promise.all([
-    isForceFlushable(tracerProvider) ? tracerProvider.forceFlush() : undefined,
-    isForceFlushable(meterProvider) ? meterProvider.forceFlush() : undefined,
-  ]);
-}
 
 // ---------------------------------------------------------------------------
 // Init
@@ -197,13 +176,16 @@ async function forceFlushSdk(): Promise<void> {
  * via --import).
  *
  * This sets up:
- * - OTel NodeSDK with trace, metric, and log exporters
- * - Auto-instrumentation (http, express, pg, mysql, redis, etc.)
+ * - NodeTracerProvider with BaggageSpanProcessor + BatchSpanProcessor (HTTP/JSON)
+ * - MeterProvider with PeriodicExportingMetricReader (HTTP/JSON)
+ * - LoggerProvider with BaggageLogProcessor + BatchLogRecordProcessor (HTTP/JSON)
+ * - W3C TraceContext + Baggage propagation
+ * - Auto-instrumentation (http, express, pg, mysql, redis, etc.) if installed
  * - Global uncaughtException / unhandledRejection handlers
  * - captureException() for manual error reporting
  */
 export function initStrada(options: StradaOptions): void {
-  if (_sdk) {
+  if (_tracerProvider) {
     console.warn(
       "[@strada.sh/sdk] initStrada() was already called. Ignoring duplicate init.",
     );
@@ -213,10 +195,10 @@ export function initStrada(options: StradaOptions): void {
   _options = options;
 
   const resource = resourceFromAttributes({
-    "service.name": options.service,
-    ...(options.version ? { "service.version": options.version } : {}),
+    [ATTR.SERVICE_NAME]: options.service,
+    ...(options.version ? { [ATTR.SERVICE_VERSION]: options.version } : {}),
     ...(options.environment
-      ? { "deployment.environment.name": options.environment }
+      ? { [ATTR.DEPLOYMENT_ENVIRONMENT_NAME]: options.environment }
       : {}),
   });
 
@@ -237,13 +219,9 @@ export function initStrada(options: StradaOptions): void {
   logs.setGlobalLoggerProvider(_loggerProvider);
   _logger = _loggerProvider.getLogger("strada");
 
-  // NodeSDK (traces + metrics).
-  // Configures W3C Baggage propagation alongside trace context so the backend
-  // can extract session.id and user.id from browser requests. The
-  // BaggageSpanProcessor reads these values and sets them as span attributes.
-  // When spanProcessors is provided, NodeSDK uses it instead of creating one
-  // from traceExporter, so we include both processors explicitly.
-  _sdk = new NodeSDK({
+  // Tracer provider with BaggageSpanProcessor to extract session.id and
+  // user.id from incoming W3C Baggage, plus BatchSpanProcessor for export.
+  _tracerProvider = new NodeTracerProvider({
     resource,
     spanProcessors: [
       new BaggageSpanProcessor(),
@@ -251,13 +229,11 @@ export function initStrada(options: StradaOptions): void {
         new OTLPTraceExporter({ url: `${endpoint}/v1/traces` }),
       ),
     ],
-    metricReader: new PeriodicExportingMetricReader({
-      exporter: new OTLPMetricExporter({
-        url: `${endpoint}/v1/metrics`,
-      }),
-      exportIntervalMillis: 10_000,
-    }),
-    textMapPropagator: new CompositePropagator({
+  });
+  // register() sets global tracer provider, enables AsyncLocalStorageContextManager,
+  // and configures W3C TraceContext + Baggage propagation.
+  _tracerProvider.register({
+    propagator: new CompositePropagator({
       propagators: [
         new W3CTraceContextPropagator(),
         new W3CBaggagePropagator(),
@@ -265,12 +241,27 @@ export function initStrada(options: StradaOptions): void {
     }),
   });
 
-  _sdk.start();
+  // Meter provider for metrics export via HTTP/JSON.
+  _meterProvider = new MeterProvider({
+    resource,
+    readers: [
+      new PeriodicExportingMetricReader({
+        exporter: new OTLPMetricExporter({
+          url: `${endpoint}/v1/metrics`,
+        }),
+        exportIntervalMillis: 10_000,
+      }),
+    ],
+  });
+  metrics.setGlobalMeterProvider(_meterProvider);
 
   // Try to load auto-instrumentations (optional peer dep).
-  // Dynamic import so the ESM package stays clean. registerInstrumentations()
-  // hooks into the global providers which are already registered by sdk.start().
-  import("@opentelemetry/auto-instrumentations-node")
+  // registerInstrumentations() hooks into the global providers registered above.
+  // The specifier is constructed at runtime so bundlers (esbuild, webpack, etc.)
+  // don't resolve and inline the entire auto-instrumentations dependency tree
+  // into the user's bundle. It stays a true runtime-only optional import.
+  const autoInstPkg = ["@opentelemetry", "auto-instrumentations-node"].join("/");
+  import(autoInstPkg)
     .then((mod) => {
       if (typeof mod.getNodeAutoInstrumentations === "function") {
         registerInstrumentations({
@@ -354,17 +345,24 @@ export function captureException(
  * Call this before process exit to ensure nothing is lost.
  */
 export async function flush(): Promise<void> {
-  await _loggerProvider?.forceFlush();
-  await forceFlushSdk();
+  await Promise.all([
+    _loggerProvider?.forceFlush(),
+    _tracerProvider?.forceFlush(),
+    _meterProvider?.forceFlush(),
+  ]);
 }
 
 /**
  * Shut down the SDK and flush remaining telemetry.
  */
 export async function shutdown(): Promise<void> {
-  await _sdk?.shutdown();
-  await _loggerProvider?.shutdown();
-  _sdk = undefined;
+  await Promise.all([
+    _tracerProvider?.shutdown(),
+    _meterProvider?.shutdown(),
+    _loggerProvider?.shutdown(),
+  ]);
+  _tracerProvider = undefined;
+  _meterProvider = undefined;
   _loggerProvider = undefined;
   _logger = undefined;
   _options = undefined;
