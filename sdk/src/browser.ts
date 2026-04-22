@@ -15,11 +15,12 @@
  * - Context (session.id, url.*, user.id) injected into every span and log
  */
 
-import { trace, context } from "@opentelemetry/api";
+import { trace, context, propagation } from "@opentelemetry/api";
 import type { Context as OtelContext, ContextManager, Span as ApiSpan } from "@opentelemetry/api";
 import type { Span, SpanProcessor } from "@opentelemetry/sdk-trace-base";
 import { BatchSpanProcessor } from "@opentelemetry/sdk-trace-base";
 import { StackContextManager, WebTracerProvider } from "@opentelemetry/sdk-trace-web";
+import { CompositePropagator, W3CBaggagePropagator, W3CTraceContextPropagator } from "@opentelemetry/core";
 import {
   type BatchLogRecordProcessorBrowserConfig,
   BatchLogRecordProcessor,
@@ -46,6 +47,9 @@ import {
   setTags,
   resetContext,
   resolveUserId,
+  createStradaBaggage,
+  BAGGAGE_SESSION_ID,
+  BAGGAGE_USER_ID,
   ERROR_SEVERITY,
   ERROR_SEVERITY_TEXT,
   INFO_SEVERITY,
@@ -268,10 +272,15 @@ class PageviewContextManager implements ContextManager {
   constructor(
     private readonly inner: ContextManager,
     private readonly getPageviewSpan: () => ApiSpan | undefined,
+    private readonly getBaggage: () => import("@opentelemetry/api").Baggage,
   ) {}
 
   active(): OtelContext {
-    return getBrowserWorkContext(this.inner.active(), this.getPageviewSpan());
+    let ctx = getBrowserWorkContext(this.inner.active(), this.getPageviewSpan());
+    // Always inject current baggage (session.id, user.id) so the
+    // W3CBaggagePropagator includes them in outgoing request headers.
+    ctx = propagation.setBaggage(ctx, this.getBaggage());
+    return ctx;
   }
 
   with<A extends unknown[], F extends (...args: A) => ReturnType<F>>(
@@ -388,11 +397,21 @@ export function initStrada(options: StradaOptions): void {
       ),
     ],
   });
+  // Register composite propagator for both trace context (traceparent) and
+  // baggage (session.id, user.id) so both headers are injected on every
+  // outgoing fetch/XHR request to the backend.
   _tracerProvider.register({
     contextManager: new PageviewContextManager(
       new StackContextManager(),
       () => _currentPageviewSpan,
+      () => createStradaBaggage(_sessionId!, getUserId()),
     ),
+    propagator: new CompositePropagator({
+      propagators: [
+        new W3CTraceContextPropagator(),
+        new W3CBaggagePropagator(),
+      ],
+    }),
   });
 
   // Logger provider: context injection -> filtering -> batch export

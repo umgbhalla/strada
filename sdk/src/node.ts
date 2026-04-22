@@ -16,11 +16,15 @@ import {
   LoggerProvider,
   BatchLogRecordProcessor,
 } from "@opentelemetry/sdk-logs";
+import type { LogRecordProcessor } from "@opentelemetry/sdk-logs";
 import { BatchSpanProcessor } from "@opentelemetry/sdk-trace-base";
+import type { Span, SpanProcessor } from "@opentelemetry/sdk-trace-base";
 import { registerInstrumentations } from "@opentelemetry/instrumentation";
 import { resourceFromAttributes } from "@opentelemetry/resources";
 import { logs } from "@opentelemetry/api-logs";
 import type { Logger } from "@opentelemetry/api-logs";
+import { context as otelContext, propagation } from "@opentelemetry/api";
+import { CompositePropagator, W3CBaggagePropagator, W3CTraceContextPropagator } from "@opentelemetry/core";
 
 import {
   type BatchSpanProcessorBrowserConfig,
@@ -36,6 +40,8 @@ import {
   setTags,
   resetContext,
   resolveMetricReaderOptions,
+  BAGGAGE_SESSION_ID,
+  BAGGAGE_USER_ID,
   ERROR_SEVERITY,
   ERROR_SEVERITY_TEXT,
 } from "./shared.ts";
@@ -68,6 +74,85 @@ export {
   type SpanAttributes,
   type Logger,
 } from "./shared.ts";
+
+// ---------------------------------------------------------------------------
+// Baggage-extracting span processor
+// ---------------------------------------------------------------------------
+
+/**
+ * Reads session.id and user.id from incoming W3C Baggage (propagated by the
+ * browser SDK) and sets them as span attributes. This means every backend
+ * span created within a browser-initiated request automatically carries the
+ * browser session and user context without the app developer doing anything.
+ */
+class BaggageSpanProcessor implements SpanProcessor {
+  onStart(span: Span): void {
+    const baggage = propagation.getBaggage(otelContext.active());
+    if (!baggage) return;
+
+    const sessionId = baggage.getEntry(BAGGAGE_SESSION_ID)?.value;
+    if (sessionId) {
+      span.setAttribute("session.id", sessionId);
+    }
+
+    const userId = baggage.getEntry(BAGGAGE_USER_ID)?.value;
+    if (userId) {
+      span.setAttribute("user.id", userId);
+    }
+  }
+
+  onEnd(): void {
+    // no-op
+  }
+
+  forceFlush(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  shutdown(): Promise<void> {
+    return Promise.resolve();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Baggage-extracting log processor
+// ---------------------------------------------------------------------------
+
+/**
+ * Wraps another LogRecordProcessor and injects session.id and user.id from
+ * incoming W3C Baggage into every log record. This means backend custom
+ * events (track()) and error logs within a browser-initiated request are
+ * automatically correlated to the browser session.
+ */
+class BaggageLogProcessor implements LogRecordProcessor {
+  constructor(private readonly inner: LogRecordProcessor) {}
+
+  onEmit(...args: Parameters<LogRecordProcessor["onEmit"]>): void {
+    const record = args[0];
+    const baggage = propagation.getBaggage(otelContext.active());
+    if (baggage) {
+      const sessionId = baggage.getEntry(BAGGAGE_SESSION_ID)?.value;
+      if (sessionId) {
+        record.setAttribute("session.id", sessionId);
+      }
+
+      const userId = baggage.getEntry(BAGGAGE_USER_ID)?.value;
+      if (userId) {
+        record.setAttribute("user.id", userId);
+      }
+    }
+
+    this.inner.onEmit(...args);
+  }
+
+  forceFlush(): Promise<void> {
+    return this.inner.forceFlush();
+  }
+
+  shutdown(): Promise<void> {
+    return this.inner.shutdown();
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Module state
@@ -136,41 +221,47 @@ export function initStrada(options: StradaOptions): void {
 
   const endpoint = options.endpoint.replace(/\/+$/, "");
 
-  // Log provider (used for both logs and error capture)
+  // Log provider (used for both logs and error capture).
+  // Wrapped in BaggageLogProcessor to extract session.id and user.id from
+  // incoming W3C Baggage (propagated by the browser SDK via fetch headers).
   const logExporter = new OTLPLogExporter({
     url: `${endpoint}/v1/logs`,
   });
   _loggerProvider = new LoggerProvider({
     resource,
     processors: [
-      new BatchLogRecordProcessor(
-        logExporter,
-        options.telemetry?.logs,
-      ),
+      new BaggageLogProcessor(new BatchLogRecordProcessor(logExporter)),
     ],
   });
   logs.setGlobalLoggerProvider(_loggerProvider);
   _logger = _loggerProvider.getLogger("strada");
 
-  // NodeSDK (traces + metrics)
+  // NodeSDK (traces + metrics).
+  // Configures W3C Baggage propagation alongside trace context so the backend
+  // can extract session.id and user.id from browser requests. The
+  // BaggageSpanProcessor reads these values and sets them as span attributes.
+  // When spanProcessors is provided, NodeSDK uses it instead of creating one
+  // from traceExporter, so we include both processors explicitly.
   _sdk = new NodeSDK({
     resource,
     spanProcessors: [
+      new BaggageSpanProcessor(),
       new BatchSpanProcessor(
-        new OTLPTraceExporter({
-          url: `${endpoint}/v1/traces`,
-        }),
-        options.telemetry?.traces,
+        new OTLPTraceExporter({ url: `${endpoint}/v1/traces` }),
       ),
     ],
-    metricReaders: [
-      new PeriodicExportingMetricReader({
-        exporter: new OTLPMetricExporter({
-          url: `${endpoint}/v1/metrics`,
-        }),
-        ...resolveMetricReaderOptions(options),
+    metricReader: new PeriodicExportingMetricReader({
+      exporter: new OTLPMetricExporter({
+        url: `${endpoint}/v1/metrics`,
       }),
-    ],
+      exportIntervalMillis: 10_000,
+    }),
+    textMapPropagator: new CompositePropagator({
+      propagators: [
+        new W3CTraceContextPropagator(),
+        new W3CBaggagePropagator(),
+      ],
+    }),
   });
 
   _sdk.start();

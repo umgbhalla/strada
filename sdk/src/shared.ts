@@ -18,8 +18,9 @@ import type { BatchSpanProcessorBrowserConfig } from "@opentelemetry/sdk-trace-b
 // Re-export OTel API primitives so users don't need @opentelemetry/api
 // ---------------------------------------------------------------------------
 
+import { propagation as _propagation } from "@opentelemetry/api";
 export { trace, context, metrics, propagation, diag, SpanStatusCode, SpanKind } from "@opentelemetry/api";
-export type { Tracer, Span, SpanContext, SpanOptions, SpanAttributes } from "@opentelemetry/api";
+export type { Tracer, Span, SpanContext, SpanOptions, SpanAttributes, Baggage } from "@opentelemetry/api";
 export { SeverityNumber } from "@opentelemetry/api-logs";
 export { logs } from "@opentelemetry/api-logs";
 export type { Logger } from "@opentelemetry/api-logs";
@@ -304,4 +305,33 @@ export function resolveUserId(options: StradaOptions | undefined): string | unde
   if (!options?.userId) return _user?.id;
   if (typeof options.userId === "function") return options.userId() ?? _user?.id;
   return options.userId ?? _user?.id;
+}
+
+// ---------------------------------------------------------------------------
+// Baggage propagation constants and helpers
+// ---------------------------------------------------------------------------
+// W3C Baggage is used to propagate session.id and user.id from browser to
+// backend so that server-side spans and logs can be correlated to the
+// browser session. The baggage header is injected by the W3CBaggagePropagator
+// on every outgoing fetch/XHR, and extracted by the backend OTel SDK.
+
+export const BAGGAGE_SESSION_ID = "strada.session.id";
+export const BAGGAGE_USER_ID = "strada.user.id";
+
+/**
+ * Build a Baggage object with session.id and optionally user.id.
+ * Used by the browser SDK to inject context into outgoing requests,
+ * and by tests to simulate browser-to-server propagation.
+ */
+export function createStradaBaggage(
+  sessionId: string,
+  userId?: string,
+): import("@opentelemetry/api").Baggage {
+  const entries: Record<string, { value: string }> = {
+    [BAGGAGE_SESSION_ID]: { value: sessionId },
+  };
+  if (userId) {
+    entries[BAGGAGE_USER_ID] = { value: userId };
+  }
+  return _propagation.createBaggage(entries);
 }

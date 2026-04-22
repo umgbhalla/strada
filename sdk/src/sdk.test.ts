@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { ROOT_CONTEXT, trace } from "@opentelemetry/api";
+import { ROOT_CONTEXT, trace, propagation } from "@opentelemetry/api";
 import {
   normalizeError,
   shouldIgnoreError,
@@ -11,6 +11,9 @@ import {
   resetContext,
   DEFAULT_IGNORE_ERRORS,
   DEFAULT_DENY_URLS,
+  createStradaBaggage,
+  BAGGAGE_SESSION_ID,
+  BAGGAGE_USER_ID,
 } from "./shared.ts";
 import { getBrowserWorkContext } from "./browser.ts";
 
@@ -376,5 +379,101 @@ describe("getBrowserWorkContext", () => {
         "traceId": "22222222222222222222222222222222",
       }
     `);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// createStradaBaggage
+// ---------------------------------------------------------------------------
+
+describe("createStradaBaggage", () => {
+  it("creates baggage with session.id", () => {
+    const baggage = createStradaBaggage("sess-123");
+    expect(baggage.getEntry(BAGGAGE_SESSION_ID)?.value).toBe("sess-123");
+    expect(baggage.getEntry(BAGGAGE_USER_ID)).toBeUndefined();
+  });
+
+  it("creates baggage with session.id and user.id", () => {
+    const baggage = createStradaBaggage("sess-456", "user_42");
+    expect(baggage.getEntry(BAGGAGE_SESSION_ID)?.value).toBe("sess-456");
+    expect(baggage.getEntry(BAGGAGE_USER_ID)?.value).toBe("user_42");
+  });
+
+  it("omits user.id when undefined", () => {
+    const baggage = createStradaBaggage("sess-789", undefined);
+    expect(baggage.getEntry(BAGGAGE_SESSION_ID)?.value).toBe("sess-789");
+    expect(baggage.getEntry(BAGGAGE_USER_ID)).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// baggage round-trip: inject → extract → read
+// ---------------------------------------------------------------------------
+
+describe("baggage round-trip propagation", () => {
+  it("serializes and deserializes session.id and user.id through headers", () => {
+    const { W3CBaggagePropagator } = require("@opentelemetry/core");
+    const prop = new W3CBaggagePropagator();
+
+    // Simulate browser side: create baggage and inject into headers
+    const baggage = createStradaBaggage("browser-session-abc", "user_123");
+    const ctxWithBaggage = propagation.setBaggage(ROOT_CONTEXT, baggage);
+    const headers: Record<string, string> = {};
+    prop.inject(ctxWithBaggage, headers, {
+      set(carrier: Record<string, string>, key: string, value: string) {
+        carrier[key] = value;
+      },
+    });
+
+    // Verify baggage header was set
+    expect(headers["baggage"]).toBeTruthy();
+    expect(headers["baggage"]).toContain("strada.session.id=browser-session-abc");
+    expect(headers["baggage"]).toContain("strada.user.id=user_123");
+
+    // Simulate server side: extract baggage from headers
+    const serverCtx = prop.extract(ROOT_CONTEXT, headers, {
+      get(carrier: Record<string, string>, key: string) {
+        return carrier[key];
+      },
+      keys(carrier: Record<string, string>) {
+        return Object.keys(carrier);
+      },
+    });
+
+    // Read baggage on server
+    const serverBaggage = propagation.getBaggage(serverCtx);
+    expect(serverBaggage).toBeTruthy();
+    expect(serverBaggage!.getEntry(BAGGAGE_SESSION_ID)?.value).toBe("browser-session-abc");
+    expect(serverBaggage!.getEntry(BAGGAGE_USER_ID)?.value).toBe("user_123");
+  });
+
+  it("works without user.id (anonymous session)", () => {
+    const { W3CBaggagePropagator } = require("@opentelemetry/core");
+    const prop = new W3CBaggagePropagator();
+
+    const baggage = createStradaBaggage("anon-session-xyz");
+    const ctxWithBaggage = propagation.setBaggage(ROOT_CONTEXT, baggage);
+    const headers: Record<string, string> = {};
+    prop.inject(ctxWithBaggage, headers, {
+      set(carrier: Record<string, string>, key: string, value: string) {
+        carrier[key] = value;
+      },
+    });
+
+    expect(headers["baggage"]).toContain("strada.session.id=anon-session-xyz");
+    expect(headers["baggage"]).not.toContain("strada.user.id");
+
+    const serverCtx = prop.extract(ROOT_CONTEXT, headers, {
+      get(carrier: Record<string, string>, key: string) {
+        return carrier[key];
+      },
+      keys(carrier: Record<string, string>) {
+        return Object.keys(carrier);
+      },
+    });
+
+    const serverBaggage = propagation.getBaggage(serverCtx);
+    expect(serverBaggage!.getEntry(BAGGAGE_SESSION_ID)?.value).toBe("anon-session-xyz");
+    expect(serverBaggage!.getEntry(BAGGAGE_USER_ID)).toBeUndefined();
   });
 });
