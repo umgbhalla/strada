@@ -4,7 +4,10 @@
 // callback server is easier to reason about as a small isolated module.
 
 import * as clack from "@clack/prompts";
+import { goke } from "goke";
+import type { GokeExecutionContext } from "goke";
 import picocolors from "picocolors";
+import dedent from "string-dedent";
 import { loadTinybirdResources } from "./tinybird-resources.ts";
 import { browserLogin } from "./tinybird-browser-login.ts";
 
@@ -33,11 +36,144 @@ export interface SelfhostOptions {
   baseUrl?: string;
 }
 
+export const selfhostCli = goke();
+
+selfhostCli
+  .command(
+    "selfhost",
+    dedent`
+      Set up Strada on your own Tinybird workspace.
+
+      Authenticates with Tinybird via browser OAuth, then deploys all OTel
+      datasources and materialized views to your workspace. Outputs the
+      environment variables needed to configure the otel-collector.
+
+      For non-interactive usage (CI), pass --token and --base-url directly.
+    `,
+  )
+  .option("-t, --token [token]", "Tinybird workspace admin token (skips browser login)")
+  .option("-u, --base-url [url]", "Tinybird API base URL (e.g. https://api.us-east.aws.tinybird.co)")
+  .example("# Interactive setup (opens browser)")
+  .example("strada selfhost")
+  .example("# Non-interactive with existing token")
+  .example("strada selfhost --token p.eyXXX --base-url https://api.tinybird.co")
+  .action((options, context) => selfhostAction(options, context));
+
 // ── Workspace info ──
 
 interface WorkspaceInfo {
   name: string;
   userEmail: string;
+}
+
+function getRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Expected JSON object response");
+  }
+
+  return { ...value };
+}
+
+function getOptionalString(record: Record<string, unknown>, key: string): string | undefined {
+  const value = record[key];
+  return typeof value === "string" ? value : undefined;
+}
+
+function parseWorkspaceResponse(value: unknown): WorkspaceInfo {
+  const record = getRecord(value);
+  return {
+    name: getOptionalString(record, "name") || "unknown",
+    userEmail: getOptionalString(record, "user_email") || "unknown",
+  };
+}
+
+function parseDeploymentsResponse(value: unknown): Array<{ id: string; status: string; live?: boolean }> {
+  const record = getRecord(value);
+  const deployments = record.deployments;
+
+  if (!Array.isArray(deployments)) {
+    return [];
+  }
+
+  return deployments.flatMap((deployment) => {
+    const item = getRecord(deployment);
+    const id = getOptionalString(item, "id");
+    const status = getOptionalString(item, "status");
+    const live = typeof item.live === "boolean" ? item.live : undefined;
+
+    if (!id || !status) {
+      return [];
+    }
+
+    return [{ id, status, live }];
+  });
+}
+
+function parseDeployResponse(value: unknown): DeployResponse {
+  const record = getRecord(value);
+  const result = getOptionalString(record, "result");
+
+  if (result !== "success" && result !== "failed" && result !== "no_changes") {
+    throw new Error("Unexpected deployment response");
+  }
+
+  const deploymentRecord = record.deployment ? getRecord(record.deployment) : undefined;
+  const errors = Array.isArray(record.errors)
+    ? record.errors.flatMap((error) => {
+        const item = getRecord(error);
+        const message = getOptionalString(item, "error");
+        if (!message) return [];
+        return [{ filename: getOptionalString(item, "filename"), error: message }];
+      })
+    : undefined;
+
+  const deploymentErrors = Array.isArray(deploymentRecord?.errors)
+    ? deploymentRecord.errors.flatMap((error) => {
+        const item = getRecord(error);
+        const message = getOptionalString(item, "error");
+        if (!message) return [];
+        return [{ filename: getOptionalString(item, "filename"), error: message }];
+      })
+    : undefined;
+
+  return {
+    result,
+    error: getOptionalString(record, "error"),
+    errors,
+    deployment: deploymentRecord
+      ? {
+          id: getOptionalString(deploymentRecord, "id") || "",
+          status: getOptionalString(deploymentRecord, "status") || "",
+          new_datasource_names: Array.isArray(deploymentRecord.new_datasource_names)
+            ? deploymentRecord.new_datasource_names.filter((value): value is string => typeof value === "string")
+            : undefined,
+          new_pipe_names: Array.isArray(deploymentRecord.new_pipe_names)
+            ? deploymentRecord.new_pipe_names.filter((value): value is string => typeof value === "string")
+            : undefined,
+          errors: deploymentErrors,
+        }
+      : undefined,
+  };
+}
+
+function parseDeploymentStatusResponse(value: unknown): DeploymentStatusResponse {
+  const record = getRecord(value);
+  const deployment = getRecord(record.deployment);
+  const id = getOptionalString(deployment, "id");
+  const status = getOptionalString(deployment, "status");
+
+  if (!id || !status) {
+    throw new Error("Unexpected deployment status response");
+  }
+
+  return {
+    result: getOptionalString(record, "result") || "unknown",
+    deployment: {
+      id,
+      status,
+      live: typeof deployment.live === "boolean" ? deployment.live : undefined,
+    },
+  };
 }
 
 async function fetchWorkspaceInfo(baseUrl: string, token: string): Promise<WorkspaceInfo> {
@@ -47,11 +183,7 @@ async function fetchWorkspaceInfo(baseUrl: string, token: string): Promise<Works
   if (!resp.ok) {
     throw new Error(`Failed to fetch workspace info: ${resp.status} ${resp.statusText}`);
   }
-  const data = (await resp.json()) as { name?: string; user_email?: string };
-  return {
-    name: data.name || "unknown",
-    userEmail: data.user_email || "unknown",
-  };
+  return parseWorkspaceResponse(await resp.json());
 }
 
 // ── Deploy ──
@@ -75,10 +207,7 @@ async function deployResources(
       headers: { Authorization: `Bearer ${token}` },
     });
     if (resp.ok) {
-      const body = (await resp.json()) as {
-        deployments: Array<{ id: string; status: string; live?: boolean }>;
-      };
-      for (const d of body.deployments) {
+      for (const d of parseDeploymentsResponse(await resp.json())) {
         if (!d.live && d.status !== "live") {
           await fetch(`${base}/v1/deployments/${d.id}`, {
             method: "DELETE",
@@ -107,7 +236,7 @@ async function deployResources(
     body: formData,
   });
 
-  const deployBody = (await deployResp.json()) as DeployResponse;
+  const deployBody = parseDeployResponse(await deployResp.json());
 
   if (deployBody.result === "failed") {
     const errors = deployBody.errors ?? deployBody.deployment?.errors;
@@ -134,7 +263,7 @@ async function deployResources(
     const statusResp = await fetch(`${base}/v1/deployments/${deploymentId}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    const statusBody = (await statusResp.json()) as DeploymentStatusResponse;
+    const statusBody = parseDeploymentStatusResponse(await statusResp.json());
 
     if (statusBody.deployment.status === "data_ready") {
       break;
@@ -160,7 +289,10 @@ async function deployResources(
 
 // ── Command action ──
 
-export async function selfhostAction(options: SelfhostOptions) {
+export async function selfhostAction(
+  options: SelfhostOptions,
+  { console: output, process }: GokeExecutionContext,
+) {
   clack.intro(picocolors.bold("Strada — Self-hosted Tinybird setup"));
 
   let token = options.token;
@@ -171,7 +303,7 @@ export async function selfhostAction(options: SelfhostOptions) {
     clack.log.info(`Using provided token for ${baseUrl}`);
   } else if (token && !baseUrl) {
     clack.log.error("--base-url is required when using --token");
-    process.exit(1);
+    return process.exit(1);
   } else {
     clack.log.info("Opening browser to authenticate with Tinybird...");
 
@@ -188,8 +320,13 @@ export async function selfhostAction(options: SelfhostOptions) {
       );
     } catch (err) {
       clack.log.error(err instanceof Error ? err.message : String(err));
-      process.exit(1);
+      return process.exit(1);
     }
+  }
+
+  if (!token || !baseUrl) {
+    clack.log.error("Tinybird authentication did not return a token and base URL");
+    return process.exit(1);
   }
 
   // ── Load resources ──
@@ -202,7 +339,7 @@ export async function selfhostAction(options: SelfhostOptions) {
   } catch (err) {
     spinner.stop("Failed to load resources");
     clack.log.error(err instanceof Error ? err.message : String(err));
-    process.exit(1);
+    return process.exit(1);
   }
 
   spinner.message(`Found ${resources.datasources.length} datasources, ${resources.pipes.length} pipes`);
@@ -221,27 +358,27 @@ export async function selfhostAction(options: SelfhostOptions) {
           clack.log.error(`  ${e.filename || ""}: ${e.error}`);
         }
       }
-      process.exit(1);
+      return process.exit(1);
     }
 
     spinner.stop("Deployed successfully");
   } catch (err) {
     spinner.stop("Deployment failed");
     clack.log.error(err instanceof Error ? err.message : String(err));
-    process.exit(1);
+    return process.exit(1);
   }
 
   // ── Output ──
   clack.log.success("Strada is deployed to your Tinybird workspace!");
 
-  console.log("");
-  console.log(picocolors.bold("Add these environment variables to your otel-collector:"));
-  console.log("");
-  console.log(`  ${picocolors.cyan("TINYBIRD_ENDPOINT")}=${baseUrl}`);
-  console.log(`  ${picocolors.cyan("TINYBIRD_TOKEN")}=${token}`);
-  console.log("");
-  console.log(picocolors.dim("ProjectId is always empty string for self-hosted — no row-level filtering needed."));
-  console.log(picocolors.dim("For reads, use this same workspace admin token with Tinybird /v0/sql queries."));
+  output.log("");
+  output.log(picocolors.bold("Add these environment variables to your otel-collector:"));
+  output.log("");
+  output.log(`  ${picocolors.cyan("TINYBIRD_ENDPOINT")}=${baseUrl}`);
+  output.log(`  ${picocolors.cyan("TINYBIRD_TOKEN")}=${token}`);
+  output.log("");
+  output.log(picocolors.dim("ProjectId is always empty string for self-hosted — no row-level filtering needed."));
+  output.log(picocolors.dim("For reads, use this same workspace admin token with Tinybird /v0/sql queries."));
 
   clack.outro("Done");
 }

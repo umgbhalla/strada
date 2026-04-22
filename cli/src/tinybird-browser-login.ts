@@ -1,5 +1,6 @@
-import { spawn } from "node:child_process";
-import { platform } from "node:os";
+// Tinybird browser OAuth flow for the selfhost CLI command.
+
+import { openInBrowser } from "goke";
 import dedent from "string-dedent";
 import { Spiceflow } from "spiceflow";
 
@@ -22,28 +23,37 @@ interface TokenResponse {
   user_email?: string;
 }
 
-function openBrowser(url: string): void {
-  const os = platform();
-  let command: string;
-  let args: string[];
-
-  switch (os) {
-    case "darwin":
-      command = "open";
-      args = [url];
-      break;
-    case "win32":
-      command = "cmd";
-      args = ["/c", "start", "", url];
-      break;
-    default:
-      command = "xdg-open";
-      args = [url];
-      break;
+function getRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Expected JSON object response");
   }
 
-  const child = spawn(command, args, { detached: true, stdio: "ignore" });
-  child.unref();
+  return { ...value };
+}
+
+function getRequiredString(record: Record<string, unknown>, key: string): string {
+  const value = record[key];
+  if (typeof value !== "string") {
+    throw new Error(`Missing ${key} in Tinybird auth response`);
+  }
+
+  return value;
+}
+
+function getOptionalString(record: Record<string, unknown>, key: string): string | undefined {
+  const value = record[key];
+  return typeof value === "string" ? value : undefined;
+}
+
+function parseTokenResponse(value: unknown): TokenResponse {
+  const record = getRecord(value);
+  return {
+    workspace_token: getRequiredString(record, "workspace_token"),
+    user_token: getRequiredString(record, "user_token"),
+    api_host: getRequiredString(record, "api_host"),
+    workspace_name: getOptionalString(record, "workspace_name"),
+    user_email: getOptionalString(record, "user_email"),
+  };
 }
 
 function getCallbackHtml(): string {
@@ -211,7 +221,7 @@ async function exchangeCodeForTokens(code: string): Promise<TokenResponse> {
     throw new Error(`Token exchange failed: ${response.status} ${response.statusText}`);
   }
 
-  return (await response.json()) as TokenResponse;
+  return parseTokenResponse(await response.json());
 }
 
 export async function browserLogin(): Promise<TinybirdAuthResult> {
@@ -235,16 +245,17 @@ export async function browserLogin(): Promise<TinybirdAuthResult> {
   try {
     const listeningServer = await app.listen(authServerPort, "127.0.0.1");
     closeServer = () => {
-      if ("stop" in listeningServer.server) {
-        listeningServer.server.stop();
-      } else {
-        listeningServer.server.close();
+      const server: { stop?: () => void; close?: () => void } = listeningServer.server;
+      if (typeof server.stop === "function") {
+        server.stop();
+      } else if (typeof server.close === "function") {
+        server.close();
       }
     };
 
     const authUrl = new URL("/api/cli-login", authHost);
     authUrl.searchParams.set("origin", "ts-sdk");
-    openBrowser(authUrl.toString());
+    void openInBrowser(authUrl.toString());
 
     const code = await codePromise;
     const tokens = await exchangeCodeForTokens(code);
