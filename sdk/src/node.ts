@@ -24,6 +24,7 @@ import {
   type StradaOptions,
   type CaptureExceptionOptions,
   type UserContext,
+  applyBeforeSend,
   normalizeError,
   shouldIgnoreError,
   errorToAttributes,
@@ -67,6 +68,29 @@ let _sdk: NodeSDK | undefined;
 let _loggerProvider: LoggerProvider | undefined;
 let _logger: Logger | undefined;
 let _options: StradaOptions | undefined;
+
+function isForceFlushable(
+  value: unknown,
+): value is { forceFlush: () => Promise<void> } {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  return typeof Reflect.get(value, "forceFlush") === "function";
+}
+
+async function forceFlushSdk(): Promise<void> {
+  const sdk = _sdk;
+  if (!sdk) return;
+
+  const tracerProvider = Reflect.get(sdk, "_tracerProvider");
+  const meterProvider = Reflect.get(sdk, "_meterProvider");
+
+  await Promise.all([
+    isForceFlushable(tracerProvider) ? tracerProvider.forceFlush() : undefined,
+    isForceFlushable(meterProvider) ? meterProvider.forceFlush() : undefined,
+  ]);
+}
 
 // ---------------------------------------------------------------------------
 // Init
@@ -151,16 +175,21 @@ export function initStrada(options: StradaOptions): void {
 
   // Global error handlers
   process.on("uncaughtException", (error) => {
-    captureException(error, { handled: false });
-    _loggerProvider
-      ?.forceFlush()
+    captureException(error, {
+      handled: false,
+      mechanism: "uncaughtException",
+    });
+    flush()
       .catch(() => {})
       .finally(() => process.exit(1));
   });
 
   process.on("unhandledRejection", (reason) => {
     const error = normalizeError(reason);
-    captureException(error, { handled: false });
+    captureException(error, {
+      handled: false,
+      mechanism: "unhandledRejection",
+    });
   });
 
   // Graceful shutdown
@@ -187,18 +216,17 @@ export function captureException(
   const normalized = normalizeError(error);
 
   if (_options && shouldIgnoreError(normalized, _options)) return;
-  if (_options?.beforeSend) {
-    const result = _options.beforeSend(normalized);
-    if (result === null) return;
-  }
+  const prepared = applyBeforeSend(normalized, _options?.beforeSend);
+  if (prepared === null) return;
 
-  const attributes = errorToAttributes(normalized, opts);
+  const attributes = errorToAttributes(prepared, opts);
 
   if (_logger) {
     _logger.emit({
+      eventName: "exception",
       severityNumber: ERROR_SEVERITY,
       severityText: ERROR_SEVERITY_TEXT,
-      body: normalized.message,
+      body: prepared.message,
       attributes,
     });
   } else {
@@ -214,6 +242,7 @@ export function captureException(
  */
 export async function flush(): Promise<void> {
   await _loggerProvider?.forceFlush();
+  await forceFlushSdk();
 }
 
 /**

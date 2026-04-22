@@ -1,14 +1,17 @@
 import { describe, it, expect, beforeEach } from "vitest";
+import { ROOT_CONTEXT, trace } from "@opentelemetry/api";
 import {
   normalizeError,
   shouldIgnoreError,
   errorToAttributes,
+  applyBeforeSend,
   setUser,
   setTags,
   resetContext,
   DEFAULT_IGNORE_ERRORS,
   DEFAULT_DENY_URLS,
 } from "./shared.ts";
+import { getBrowserWorkContext } from "./browser.ts";
 
 beforeEach(() => {
   resetContext();
@@ -168,9 +171,20 @@ describe("errorToAttributes", () => {
 
   it("marks unhandled errors correctly", () => {
     const err = new Error("crash");
-    const attrs = errorToAttributes(err, { handled: false });
+    const attrs = errorToAttributes(err, {
+      handled: false,
+      mechanism: "onerror",
+    });
 
     expect(attrs["exception.mechanism.type"]).toBe("onerror");
+    expect(attrs["exception.mechanism.handled"]).toBe("false");
+  });
+
+  it("uses generic as the default mechanism type", () => {
+    const err = new Error("crash");
+    const attrs = errorToAttributes(err, { handled: false });
+
+    expect(attrs["exception.mechanism.type"]).toBe("generic");
     expect(attrs["exception.mechanism.handled"]).toBe("false");
   });
 
@@ -186,10 +200,9 @@ describe("errorToAttributes", () => {
   });
 
   it("extracts fingerprint from error.fingerprint property", () => {
-    const err = new Error("checkout failed") as Error & {
-      fingerprint: string[];
-    };
-    err.fingerprint = ["checkout-failed", "processOrder"];
+    const err = Object.assign(new Error("checkout failed"), {
+      fingerprint: ["checkout-failed", "processOrder"],
+    });
     const attrs = errorToAttributes(err);
 
     expect(attrs["exception.fingerprint"]).toBe(
@@ -198,8 +211,9 @@ describe("errorToAttributes", () => {
   });
 
   it("prefers options fingerprint over error.fingerprint", () => {
-    const err = new Error("fail") as Error & { fingerprint: string[] };
-    err.fingerprint = ["from-error"];
+    const err = Object.assign(new Error("fail"), {
+      fingerprint: ["from-error"],
+    });
     const attrs = errorToAttributes(err, {
       fingerprint: ["from-options"],
     });
@@ -251,5 +265,76 @@ describe("errorToAttributes", () => {
 
     expect(attrs["user.id"]).toBeUndefined();
     expect(attrs["user.email"]).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// applyBeforeSend
+// ---------------------------------------------------------------------------
+
+describe("applyBeforeSend", () => {
+  it("returns the original error when hook is missing", () => {
+    const err = new Error("boom");
+    expect(applyBeforeSend(err, undefined)).toBe(err);
+  });
+
+  it("returns null when beforeSend drops the error", () => {
+    const err = new Error("boom");
+    expect(applyBeforeSend(err, () => null)).toBeNull();
+  });
+
+  it("returns the rewritten error when beforeSend modifies it", () => {
+    const err = new Error("boom");
+    const rewritten = new Error("rewritten");
+
+    expect(applyBeforeSend(err, () => rewritten)).toBe(rewritten);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// browser trace context
+// ---------------------------------------------------------------------------
+
+describe("getBrowserWorkContext", () => {
+  it("injects the pageview span when no active span exists", () => {
+    const pageviewSpan = trace.wrapSpanContext({
+      traceId: "11111111111111111111111111111111",
+      spanId: "1111111111111111",
+      traceFlags: 1,
+    });
+
+    const ctx = getBrowserWorkContext(ROOT_CONTEXT, pageviewSpan);
+
+    expect(trace.getSpan(ctx)?.spanContext()).toMatchInlineSnapshot(`
+      {
+        "spanId": "1111111111111111",
+        "traceFlags": 1,
+        "traceId": "11111111111111111111111111111111",
+      }
+    `);
+  });
+
+  it("preserves an existing active span instead of overwriting it", () => {
+    const activeSpan = trace.wrapSpanContext({
+      traceId: "22222222222222222222222222222222",
+      spanId: "2222222222222222",
+      traceFlags: 1,
+    });
+    const pageviewSpan = trace.wrapSpanContext({
+      traceId: "33333333333333333333333333333333",
+      spanId: "3333333333333333",
+      traceFlags: 1,
+    });
+
+    const activeContext = trace.setSpan(ROOT_CONTEXT, activeSpan);
+    const ctx = getBrowserWorkContext(activeContext, pageviewSpan);
+
+    expect(trace.getSpan(ctx)?.spanContext()).toMatchInlineSnapshot(`
+      {
+        "spanId": "2222222222222222",
+        "traceFlags": 1,
+        "traceId": "22222222222222222222222222222222",
+      }
+    `);
   });
 });

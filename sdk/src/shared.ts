@@ -53,6 +53,8 @@ export interface StradaOptions {
 export interface CaptureExceptionOptions {
   /** Was this error caught by user code (true) or a global handler (false)? */
   handled?: boolean;
+  /** How the exception was captured, e.g. onerror or unhandledrejection */
+  mechanism?: string;
   /** Extra tags attached to the error */
   tags?: Record<string, string>;
   /**
@@ -132,9 +134,10 @@ export function normalizeError(value: unknown): Error {
   if (value instanceof Error) return value;
   if (typeof value === "string") return new Error(value);
   if (typeof value === "object" && value !== null) {
+    const message = Reflect.get(value, "message");
     const msg =
-      "message" in value && typeof value.message === "string"
-        ? value.message
+      typeof message === "string"
+        ? message
         : JSON.stringify(value);
     return new Error(msg);
   }
@@ -200,21 +203,19 @@ export function errorToAttributes(
   error: Error,
   opts?: CaptureExceptionOptions,
 ): Record<string, string> {
+  const fingerprintValue = Reflect.get(error, "fingerprint");
   const attributes: Record<string, string> = {
     "exception.type": error.name || "Error",
     "exception.message": error.message || "",
     "exception.stacktrace": error.stack ?? "",
-    "exception.mechanism.type":
-      opts?.handled === false ? "onerror" : "generic",
+    "exception.mechanism.type": opts?.mechanism ?? "generic",
     "exception.mechanism.handled": String(opts?.handled ?? true),
   };
 
   // Custom fingerprint from options or from error.fingerprint property
   const fingerprint =
     opts?.fingerprint ??
-    (Array.isArray((error as Error & { fingerprint?: unknown }).fingerprint)
-      ? (error as Error & { fingerprint: string[] }).fingerprint
-      : undefined);
+    (Array.isArray(fingerprintValue) ? fingerprintValue : undefined);
   if (fingerprint) {
     attributes["exception.fingerprint"] = JSON.stringify(fingerprint);
   }
@@ -233,6 +234,19 @@ export function errorToAttributes(
   }
 
   return attributes;
+}
+
+/**
+ * Apply user beforeSend hook semantics consistently across runtimes.
+ * Returning null drops the error. Returning a different Error rewrites it.
+ */
+export function applyBeforeSend(
+  error: Error,
+  beforeSend: StradaOptions["beforeSend"] | undefined,
+): Error | null {
+  if (!beforeSend) return error;
+  const result = beforeSend(error);
+  return result ?? null;
 }
 
 /**

@@ -8,17 +8,16 @@ Strada supports web analytics via standard OpenTelemetry. The browser SDK sends 
 
 ```
 otel_traces                              otel_logs
-+-- session trace (TraceId = session)    +-- log: "button_click"  (TraceId links to session)
-|   +-- span: pageview "/"              +-- log: "form_submit"   (TraceId links to session)
-|   |   +-- span: fetch GET /api/user   +-- log: "purchase"      (TraceId links to session)
-|   +-- span: pageview "/pricing"
-|   +-- span: pageview "/dashboard"
++-- span: pageview "/"                  +-- log: "button_click"
+|   +-- span: fetch GET /api/user        +-- log: "form_submit"
++-- span: pageview "/pricing"           +-- log: "purchase"
++-- span: pageview "/dashboard"
 ```
 
-- **Session** = one `TraceId`, stored in `sessionStorage` (per-tab, survives page refreshes, cleared on tab close)
+- **Session** = one `session.id`, stored in `sessionStorage` (per-tab, survives page refreshes, cleared on tab close)
 - **Pageview** = a span that starts on navigation and ends when the user navigates away or closes the tab
-- **Custom event** = a log record in `otel_logs` with `EventName` set to the event name, correlated to the session via `TraceId`/`SpanId`
-- **Auto-instrumented events** (fetch, XHR, clicks) = standard OTel child spans in `otel_traces`, automatically nested
+- **Custom event** = a log record in `otel_logs` with `event.name` set to the event name, correlated to the current pageview when one is active
+- **Auto-instrumented events** (fetch, XHR, clicks) = standard OTel spans in `otel_traces`, usually parented to the current pageview span when no other span is active
 
 Dashboard widgets each query a single table (MVs for pageview analytics, `otel_logs` for custom events). No joins needed. For advanced use cases like user timelines or mixed funnels, `UNION ALL` combines both tables.
 
@@ -170,7 +169,7 @@ These come from `@opentelemetry/opentelemetry-browser-detector` automatically. N
 
 ### Custom event log record
 
-Custom events are **log records** in `otel_logs`, not spans. They are correlated to the active pageview span via `TraceId` and `SpanId` (set automatically by OTel context propagation).
+Custom events are **log records** in `otel_logs`, not spans. They are correlated to the active pageview span via `TraceId` and `SpanId` while that pageview is open.
 
 ```json
 {
@@ -198,7 +197,7 @@ Custom events are **log records** in `otel_logs`, not spans. They are correlated
 }
 ```
 
-- `TraceId` matches the session's trace; `SpanId` points to the active pageview span
+- `TraceId` and `SpanId` point to the active pageview span when the event is emitted during an open pageview
 - `event.name` is the structured event name for filtering/grouping
 - `custom.*` prefix isolates user-defined properties from standard OTel attributes
 - `session.id`, `url.path`, `user.id` are injected automatically by the SDK's log processor
@@ -306,7 +305,7 @@ strada.identify('user_123', {
 })
 ```
 
-`strada.track()` emits a log record via the OTel Logs API (the recommended path since OTel is deprecating `span.addEvent()`). The log record lands in `otel_logs` with `EventName` set to the event name. Context (`session.id`, `url.full`, `user.id`, `TraceId`, `SpanId`) is injected automatically from the active pageview span via OTel context propagation. Developers only pass event-specific properties.
+`strada.track()` emits a log record via the OTel Logs API. The log record lands in `otel_logs` with `event.name` set to the event name. Context (`session.id`, `url.full`, `user.id`) is injected automatically. If a pageview span is currently open, `TraceId` and `SpanId` are attached too. Browser auto-instrumented spans also inherit that pageview as parent unless some other span is already active. Developers only pass event-specific properties.
 
 Under the hood:
 
@@ -326,7 +325,7 @@ logger.emit({
 })
 ```
 
-The log record is automatically correlated with the active pageview span via `TraceId` and `SpanId`. Custom events are queried from `otel_logs`, not `otel_traces`. Each dashboard widget runs its own query against one table, so no joins needed.
+The log record is automatically correlated with the active pageview span via `TraceId` and `SpanId` when one is active. Custom events are queried from `otel_logs`, not `otel_traces`. Each dashboard widget runs its own query against one table, so no joins needed.
 
 ### Backend custom events
 
@@ -354,12 +353,11 @@ app.post('/api/checkout', async (req, res) => {
 })
 ```
 
-The log record lands in `otel_logs` with `ServiceName = "my-api"` (the backend service name). The `user.id` attribute ties it to the same user as browser events. If the browser sends the `traceparent` header (which OTel's fetch instrumentation does automatically), the backend log also shares the same `TraceId` as the browser session:
+The log record lands in `otel_logs` with `ServiceName = "my-api"` (the backend service name). The `user.id` attribute ties it to the same user as browser events. If the browser sends the `traceparent` header, the backend log shares the same request trace as the incoming browser request:
 
 ```
-Browser session (TraceId = abc123)
-+-- pageview /checkout
-|   +-- fetch POST /api/checkout  (traceparent: abc123)
+Browser request trace (TraceId = abc123)
++-- fetch POST /api/checkout  (traceparent: abc123)
         |
         v
 Backend (TraceId = abc123)

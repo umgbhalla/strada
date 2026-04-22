@@ -11,15 +11,15 @@
  * Analytics model (from docs/browser-analytics.md):
  * - Pageviews = spans in otel_traces (SpanName = 'pageview')
  * - Custom events = log records in otel_logs (event.name attribute)
- * - Session = one TraceId per tab, stored in sessionStorage
+ * - Session = one session.id per tab, stored in sessionStorage
  * - Context (session.id, url.*, user.id) injected into every span and log
  */
 
 import { trace, context } from "@opentelemetry/api";
-import type { Span as ApiSpan } from "@opentelemetry/api";
+import type { Context as OtelContext, ContextManager, Span as ApiSpan } from "@opentelemetry/api";
 import type { Span, SpanProcessor } from "@opentelemetry/sdk-trace-base";
 import { BatchSpanProcessor } from "@opentelemetry/sdk-trace-base";
-import { WebTracerProvider } from "@opentelemetry/sdk-trace-web";
+import { StackContextManager, WebTracerProvider } from "@opentelemetry/sdk-trace-web";
 import {
   BatchLogRecordProcessor,
   LoggerProvider,
@@ -36,6 +36,7 @@ import {
   type StradaOptions,
   type CaptureExceptionOptions,
   type UserContext,
+  applyBeforeSend,
   normalizeError,
   shouldIgnoreError,
   errorToAttributes,
@@ -151,11 +152,10 @@ class StradaSpanProcessor implements SpanProcessor {
 
     // Current page URL info
     if (typeof window !== "undefined") {
-      span.setAttribute("url.path", window.location.pathname);
-      span.setAttribute("url.query", window.location.search);
-      span.setAttribute("url.full", window.location.href);
-      if (document.referrer) {
-        span.setAttribute("http.request.header.referer", document.referrer);
+      for (const [key, value] of Object.entries(getPageAttributes())) {
+        if (value) {
+          span.setAttribute(key, value);
+        }
       }
     }
 
@@ -235,6 +235,63 @@ let _rejectionListener: ((event: PromiseRejectionEvent) => void) | undefined;
 let _visibilityListener: (() => void) | undefined;
 let _navigateListener: ((event: NavigateEvent) => void) | undefined;
 
+function getPageAttributes(
+  url: URL = new URL(window.location.href),
+  referrer: string = document.referrer,
+): Record<string, string> {
+  return {
+    "url.path": url.pathname,
+    "url.query": url.search,
+    "url.full": url.href,
+    ...(referrer ? { "http.request.header.referer": referrer } : {}),
+  };
+}
+
+export function getBrowserWorkContext(
+  activeContext: OtelContext,
+  pageviewSpan: ApiSpan | undefined,
+): OtelContext {
+  if (!pageviewSpan || trace.getSpan(activeContext)) {
+    return activeContext;
+  }
+
+  return trace.setSpan(activeContext, pageviewSpan);
+}
+
+class PageviewContextManager implements ContextManager {
+  constructor(
+    private readonly inner: ContextManager,
+    private readonly getPageviewSpan: () => ApiSpan | undefined,
+  ) {}
+
+  active(): OtelContext {
+    return getBrowserWorkContext(this.inner.active(), this.getPageviewSpan());
+  }
+
+  with<A extends unknown[], F extends (...args: A) => ReturnType<F>>(
+    activeContext: OtelContext,
+    fn: F,
+    thisArg?: ThisParameterType<F>,
+    ...args: A
+  ): ReturnType<F> {
+    return this.inner.with(activeContext, fn, thisArg, ...args);
+  }
+
+  bind<T>(activeContext: OtelContext, target: T): T {
+    return this.inner.bind(activeContext, target);
+  }
+
+  enable(): this {
+    this.inner.enable();
+    return this;
+  }
+
+  disable(): this {
+    this.inner.disable();
+    return this;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Init
 // ---------------------------------------------------------------------------
@@ -268,13 +325,34 @@ export function initStrada(options: StradaOptions): void {
   // instead of requiring an external package.
   const browserAttrs: Record<string, string | boolean | string[]> = {};
   if (typeof navigator !== "undefined") {
-    const uaData = (navigator as Navigator & {
-      userAgentData?: { platform: string; brands: { brand: string; version: string }[]; mobile: boolean };
-    }).userAgentData;
+    const uaData = Reflect.get(navigator, "userAgentData");
     if (uaData) {
-      browserAttrs["browser.platform"] = uaData.platform;
-      browserAttrs["browser.brands"] = uaData.brands.map((b) => `${b.brand} ${b.version}`);
-      browserAttrs["browser.mobile"] = uaData.mobile;
+      const platform = Reflect.get(uaData, "platform");
+      const brands = Reflect.get(uaData, "brands");
+      const mobile = Reflect.get(uaData, "mobile");
+
+      if (typeof platform === "string") {
+        browserAttrs["browser.platform"] = platform;
+      }
+      if (Array.isArray(brands)) {
+        const normalizedBrands = brands
+          .map((brand) => {
+            const name = Reflect.get(brand, "brand");
+            const version = Reflect.get(brand, "version");
+            if (typeof name !== "string" || typeof version !== "string") {
+              return undefined;
+            }
+
+            return `${name} ${version}`;
+          })
+          .filter((brand): brand is string => Boolean(brand));
+        if (normalizedBrands.length > 0) {
+          browserAttrs["browser.brands"] = normalizedBrands;
+        }
+      }
+      if (typeof mobile === "boolean") {
+        browserAttrs["browser.mobile"] = mobile;
+      }
     }
     if (navigator.userAgent) {
       browserAttrs["user_agent.original"] = navigator.userAgent;
@@ -303,7 +381,12 @@ export function initStrada(options: StradaOptions): void {
       ),
     ],
   });
-  _tracerProvider.register();
+  _tracerProvider.register({
+    contextManager: new PageviewContextManager(
+      new StackContextManager(),
+      () => _currentPageviewSpan,
+    ),
+  });
 
   // Logger provider: context injection -> filtering -> batch export
   const logExporter = new OTLPLogExporter({ url: `${endpoint}/v1/logs` });
@@ -338,21 +421,27 @@ export function initStrada(options: StradaOptions): void {
     });
 
   // Start first pageview span
-  startPageSpan(window.location.pathname);
+  startPageSpan();
 
   // Global error handlers
   _errorListener = (event: ErrorEvent) => {
     const error = event.error;
     if (error instanceof Error) {
-      captureException(error, { handled: false });
+      captureException(error, { handled: false, mechanism: "onerror" });
     } else if (typeof event.message === "string" && event.message) {
-      captureException(new Error(event.message), { handled: false });
+      captureException(new Error(event.message), {
+        handled: false,
+        mechanism: "onerror",
+      });
     }
   };
 
   _rejectionListener = (event: PromiseRejectionEvent) => {
     const error = normalizeError(event.reason);
-    captureException(error, { handled: false });
+    captureException(error, {
+      handled: false,
+      mechanism: "unhandledrejection",
+    });
   };
 
   window.addEventListener("error", _errorListener);
@@ -362,6 +451,11 @@ export function initStrada(options: StradaOptions): void {
   _visibilityListener = () => {
     if (document.visibilityState === "hidden") {
       endCurrentPageSpan();
+      return;
+    }
+
+    if (document.visibilityState === "visible" && !_currentPageviewSpan) {
+      startPageSpan();
     }
   };
   document.addEventListener("visibilitychange", _visibilityListener);
@@ -370,7 +464,7 @@ export function initStrada(options: StradaOptions): void {
   // Fires on every client-side navigation (pushState, replaceState, back/forward)
   // regardless of framework (Next.js, React Router, Vue Router, etc.).
   // Baseline across Chrome, Edge, Firefox, Safari since Jan 2026.
-  if (typeof navigation !== "undefined" && "addEventListener" in navigation) {
+  if (typeof navigation !== "undefined") {
     _navigateListener = (event: NavigateEvent) => {
       // Skip cross-origin navigations, downloads, form submissions
       if (!event.canIntercept) return;
@@ -384,10 +478,10 @@ export function initStrada(options: StradaOptions): void {
       if (newPath === currentPath) return;
 
       endCurrentPageSpan();
-      startPageSpan(dest.pathname, {
+      startPageSpan(dest, {
         "navigation.type": event.navigationType, // "push" | "replace" | "traverse"
         "navigation.user_initiated": event.userInitiated,
-      });
+      }, window.location.href);
     };
     navigation.addEventListener("navigate", _navigateListener);
   }
@@ -402,23 +496,22 @@ export function initStrada(options: StradaOptions): void {
  * Called automatically on initStrada() for the initial page, and on
  * SPA navigations detected via the Navigation API.
  *
- * @param path - Override pathname (defaults to window.location.pathname)
+ * @param url - Override URL (defaults to window.location.href)
  * @param extraAttributes - Additional attributes for the span (e.g. navigation.type)
  */
 export function startPageSpan(
-  path?: string,
+  url: string | URL = window.location.href,
   extraAttributes?: Record<string, string | boolean>,
+  referrer?: string,
 ): void {
   endCurrentPageSpan();
 
+  const pageUrl = typeof url === "string" ? new URL(url, window.location.href) : url;
   const tracer = trace.getTracer("strada-web");
   _currentPageviewSpan = tracer.startSpan("pageview", {
     attributes: {
       "session.id": _sessionId ?? "",
-      "url.path": path ?? window.location.pathname,
-      "url.query": window.location.search,
-      "url.full": window.location.href,
-      ...(document.referrer ? { "http.request.header.referer": document.referrer } : {}),
+      ...getPageAttributes(pageUrl, referrer),
       ...extraAttributes,
     },
   });
@@ -480,6 +573,7 @@ export function track(
     : context.active();
 
   _logger.emit({
+    eventName: name,
     severityNumber: INFO_SEVERITY,
     severityText: INFO_SEVERITY_TEXT,
     body: name,
@@ -504,12 +598,10 @@ export function captureException(
   const normalized = normalizeError(error);
 
   if (_options && shouldIgnoreError(normalized, _options)) return;
-  if (_options?.beforeSend) {
-    const result = _options.beforeSend(normalized);
-    if (result === null) return;
-  }
+  const prepared = applyBeforeSend(normalized, _options?.beforeSend);
+  if (prepared === null) return;
 
-  const attributes = errorToAttributes(normalized, opts);
+  const attributes = errorToAttributes(prepared, opts);
 
   if (_logger) {
     // Emit within pageview span context for trace correlation
@@ -518,9 +610,10 @@ export function captureException(
       : context.active();
 
     _logger.emit({
+      eventName: "exception",
       severityNumber: ERROR_SEVERITY,
       severityText: ERROR_SEVERITY_TEXT,
-      body: normalized.message,
+      body: prepared.message,
       attributes,
       context: ctx,
     });
