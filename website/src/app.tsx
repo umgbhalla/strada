@@ -1,16 +1,27 @@
 // Strada website entry point. Thin API-first website for CLI and collector.
 // Google social login, device flow for CLI, project management, query bridge.
 
-import { Spiceflow, redirect } from 'spiceflow'
-import type { SpiceflowRegister } from 'spiceflow/react'
+import './globals.css'
+import type { ReactNode } from 'react'
+import { getActionRequest, json, parseFormData, Spiceflow, redirect } from 'spiceflow'
+import { Head, router } from 'spiceflow/react'
 import { z } from 'zod'
 import * as orm from 'drizzle-orm'
 import * as schema from 'db/src/schema.ts'
 import { ulid } from 'ulid'
+import { Button } from './components/ui/button.tsx'
+import { DeviceActionButtons } from './components/device-action-buttons.tsx'
 import {
   getDb, getAuth, getSession, requireSession, requireOrgMember,
   hashToken, generateProjectToken,
 } from './db.ts'
+
+const loginQuerySchema = z.object({ callbackURL: z.string().optional() })
+
+const devicePageQuerySchema = z.object({
+  user_code: z.string().optional(),
+  status: z.enum(['approved', 'denied']).optional(),
+})
 
 const createOrgRequestSchema = z.object({ name: z.string().min(1) })
 
@@ -40,18 +51,11 @@ const createProjectTokenRequestSchema = z.object({
 })
 
 const queryProjectRequestSchema = z.object({ sql: z.string().min(1) })
+const deviceUserCodeSchema = z.object({ userCode: z.string().min(1) })
 
-async function parseJsonBody<TSchema extends z.ZodTypeAny>(
-  request: Request,
-  bodySchema: TSchema,
-): Promise<z.infer<TSchema>> {
-  return bodySchema.parse(await request.json())
-}
-
-function buildGoogleSignInHref(callbackURL: string) {
-  const url = new URL('/login/google', 'https://strada.sh')
-  url.searchParams.set('callbackURL', callbackURL)
-  return `${url.pathname}${url.search}`
+function safeRedirectPath(value: string | undefined) {
+  if (!value || !value.startsWith('/') || value.startsWith('//')) return '/'
+  return value
 }
 
 async function createGoogleSignInRedirect(request: Request, callbackURL: string) {
@@ -62,10 +66,7 @@ async function createGoogleSignInRedirect(request: Request, callbackURL: string)
     returnHeaders: true,
   })
   if (!response?.url) {
-    throw new Response(JSON.stringify({ error: 'failed to start google sign-in' }), {
-      status: 500,
-      headers: { 'content-type': 'application/json' },
-    })
+    throw json({ error: 'failed to start google sign-in' }, { status: 500 })
   }
 
   const redirectResponse = new Response(null, {
@@ -92,17 +93,69 @@ async function createOrgForUser(userId: string, name: string) {
   return { id: orgId, name, databaseId: dbId, role: 'admin' as const }
 }
 
+function AuthPage({
+  title,
+  description,
+  children,
+}: {
+  title: string
+  description: string
+  children: ReactNode
+}) {
+  return (
+    <main className="flex min-h-screen items-center justify-center px-6 py-16">
+      <Head>
+        <Head.Title>{`${title} | Strada`}</Head.Title>
+        <Head.Meta name="description" content={description} />
+      </Head>
+      <section className="flex w-full max-w-md flex-col gap-6 rounded-xl border bg-card p-8 text-card-foreground shadow-sm">
+        {children}
+      </section>
+    </main>
+  )
+}
+
 export const app = new Spiceflow()
 
   // ── BetterAuth middleware ──────────────────────────────────────
   .use(async ({ request }, next) => {
-    const url = new URL(request.url)
-    if (url.pathname.startsWith('/api/auth')) {
+    if (request.parsedUrl.pathname.startsWith('/api/auth')) {
       const auth = getAuth()
       const res = await auth.handler(request)
       if (res.ok || res.status !== 404) return res
     }
     return next()
+  })
+
+  .layout('/*', async ({ children }) => {
+    return (
+      <html lang="en" className="h-full">
+        <Head>
+          <Head.Meta charSet="UTF-8" />
+          <Head.Meta name="viewport" content="width=device-width, initial-scale=1.0" />
+          <Head.Title>Strada</Head.Title>
+          <Head.Meta
+            name="description"
+            content="OpenTelemetry-native observability with traces, logs, metrics, and error tracking."
+          />
+        </Head>
+        <body>
+          {children ?? (
+            <AuthPage
+              description="The page you requested does not exist."
+              title="Page not found"
+            >
+              <div className="flex flex-col gap-2 text-center">
+                <h1 className="text-2xl font-semibold tracking-tight">Page not found</h1>
+                <p className="text-sm text-muted-foreground">
+                  Check the URL or go back to the app.
+                </p>
+              </div>
+            </AuthPage>
+          )}
+        </body>
+      </html>
+    )
   })
 
   // ── Root ──────────────────────────────────────────────────────
@@ -111,136 +164,154 @@ export const app = new Spiceflow()
   })
 
   // ── Login page (minimal, for device flow approval) ────────────
-  .page('/login', async ({ request }) => {
-    const session = await getSession(request)
-    if (session) return redirect('/')
-    const url = new URL(request.url)
-    const callbackURL = url.searchParams.get('callbackURL') || '/'
-    return (
-      <html lang="en">
-        <body style={{ fontFamily: 'system-ui', maxWidth: 400, margin: '100px auto', textAlign: 'center' }}>
-          <h1>Strada</h1>
-          <p>Sign in to manage your observability projects</p>
-          <a href={buildGoogleSignInHref(callbackURL)} style={{
-            display: 'inline-block', padding: '12px 24px',
-            background: '#000', color: '#fff', borderRadius: 8,
-            textDecoration: 'none', fontWeight: 600,
-          }}>
-            Sign in with Google
-          </a>
-        </body>
-      </html>
-    )
-  })
-
-  .get('/login/google', async ({ request }) => {
-    const url = new URL(request.url)
-    const callbackURL = url.searchParams.get('callbackURL') || '/'
-    return createGoogleSignInRedirect(request, callbackURL)
-  })
-
-  // ── Device flow verification page ─────────────────────────────
-  .page('/device', async ({ request }) => {
-    const url = new URL(request.url)
-    const userCode = url.searchParams.get('user_code') ?? ''
-    const status = url.searchParams.get('status') ?? ''
-    const auth = getAuth()
-
-    if (!userCode) {
+  .page({
+    path: '/login',
+    query: loginQuerySchema,
+    handler: async ({ request, query }) => {
+      const session = await getSession(request)
+      if (session) throw redirect('/')
+      const callbackURL = safeRedirectPath(query.callbackURL)
       return (
-        <html lang="en">
-          <body style={{ fontFamily: 'system-ui', maxWidth: 400, margin: '100px auto', textAlign: 'center' }}>
-            <h1>Strada CLI Login</h1>
-            <p>Open this page from the CLI login flow with a valid device code.</p>
-          </body>
-        </html>
+        <AuthPage
+          description="Sign in to manage observability projects and approve CLI logins."
+          title="Sign in"
+        >
+          <div className="flex flex-col gap-2 text-center">
+            <h1 className="text-3xl font-semibold tracking-tight">Strada</h1>
+            <p className="text-sm text-muted-foreground">
+              Sign in to manage your observability projects.
+            </p>
+          </div>
+          <Button asChild className="w-full" size="lg">
+            <a href={router.href('/login/google', { callbackURL })}>Sign in with Google</a>
+          </Button>
+        </AuthPage>
       )
-    }
-
-    const device = await auth.api.deviceVerify({ query: { user_code: userCode } }).catch(() => null)
-    if (!device) {
-      return (
-        <html lang="en">
-          <body style={{ fontFamily: 'system-ui', maxWidth: 400, margin: '100px auto', textAlign: 'center' }}>
-            <h1>Strada CLI Login</h1>
-            <p>That device code is invalid or expired.</p>
-          </body>
-        </html>
-      )
-    }
-
-    const session = await getSession(request)
-    if (!session) return redirect(`/login?callbackURL=${encodeURIComponent(url.pathname + url.search)}`)
-
-    return (
-      <html lang="en">
-        <body style={{ fontFamily: 'system-ui', maxWidth: 400, margin: '100px auto', textAlign: 'center' }}>
-          <h1>Strada CLI Login</h1>
-          {status === 'approved'
-            ? (
-                <>
-                  <p>The CLI was approved successfully.</p>
-                  <p style={{ color: '#666', fontSize: 14 }}>You can close this page and return to the terminal.</p>
-                </>
-              )
-            : status === 'denied'
-              ? (
-                  <>
-                    <p>The CLI login was denied.</p>
-                    <p style={{ color: '#666', fontSize: 14 }}>You can close this page and start the login flow again.</p>
-                  </>
-                )
-              : (
-                  <>
-                    <p>A CLI is requesting access to your account.</p>
-                    <p>Code: <strong>{userCode}</strong></p>
-                    <p style={{ color: '#666', fontSize: 14 }}>
-                      Current status: {device.status}. Approve to let the CLI finish logging in.
-                    </p>
-                    <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginTop: 24 }}>
-                      <form method="post" action="/device/approve">
-                        <input type="hidden" name="userCode" value={userCode} />
-                        <button type="submit" style={{ padding: '12px 24px', background: '#000', color: '#fff', borderRadius: 8, border: 'none', fontWeight: 600, cursor: 'pointer' }}>
-                          Approve CLI
-                        </button>
-                      </form>
-                      <form method="post" action="/device/deny">
-                        <input type="hidden" name="userCode" value={userCode} />
-                        <button type="submit" style={{ padding: '12px 24px', background: '#fff', color: '#000', borderRadius: 8, border: '1px solid #ccc', fontWeight: 600, cursor: 'pointer' }}>
-                          Deny
-                        </button>
-                      </form>
-                    </div>
-                  </>
-                )}
-        </body>
-      </html>
-    )
-  })
-
-  .route({
-    method: 'POST',
-    path: '/device/approve',
-    async handler({ request }) {
-      await requireSession(request)
-      const formData = await request.formData()
-      const userCode = String(formData.get('userCode') || '')
-      const auth = getAuth()
-      await auth.api.deviceApprove({ body: { userCode }, headers: request.headers })
-      return redirect(`/device?user_code=${encodeURIComponent(userCode)}&status=approved`)
     },
   })
 
   .route({
-    method: 'POST',
-    path: '/device/deny',
-    async handler({ request }) {
-      await requireSession(request)
-      const formData = await request.formData()
-      const userCode = String(formData.get('userCode') || '')
+    method: 'GET',
+    path: '/login/google',
+    query: loginQuerySchema,
+    async handler({ request, query }) {
+      return createGoogleSignInRedirect(request, safeRedirectPath(query.callbackURL))
+    },
+  })
+
+  // ── Device flow verification page ─────────────────────────────
+  .page({
+    path: '/device',
+    query: devicePageQuerySchema,
+    handler: async ({ request, query }) => {
+      const userCode = query.user_code ?? ''
+      const status = query.status
       const auth = getAuth()
-      await auth.api.deviceDeny({ body: { userCode }, headers: request.headers })
-      return redirect(`/device?user_code=${encodeURIComponent(userCode)}&status=denied`)
+
+      if (!userCode) {
+        return (
+          <AuthPage
+            description="Open this page from the CLI login flow with a valid device code."
+            title="CLI login"
+          >
+            <div className="flex flex-col gap-2 text-center">
+              <h1 className="text-2xl font-semibold tracking-tight">Strada CLI Login</h1>
+              <p className="text-sm text-muted-foreground">
+                Open this page from the CLI login flow with a valid device code.
+              </p>
+            </div>
+          </AuthPage>
+        )
+      }
+
+      const device = await auth.api.deviceVerify({ query: { user_code: userCode } }).catch(() => null)
+      if (!device) {
+        return (
+          <AuthPage
+            description="That CLI device code is invalid or expired."
+            title="Invalid device code"
+          >
+            <div className="flex flex-col gap-2 text-center">
+              <h1 className="text-2xl font-semibold tracking-tight">Invalid device code</h1>
+              <p className="text-sm text-muted-foreground">
+                That device code is invalid or expired.
+              </p>
+            </div>
+          </AuthPage>
+        )
+      }
+
+      const session = await getSession(request)
+      if (!session) {
+        throw redirect(
+          router.href('/login', {
+            callbackURL: `${request.parsedUrl.pathname}${request.parsedUrl.search}`,
+          }),
+        )
+      }
+
+      async function approveDevice(formData: FormData) {
+        'use server'
+        const actionRequest = getActionRequest()
+        await requireSession(actionRequest)
+        const { userCode: parsedUserCode } = parseFormData(deviceUserCodeSchema, formData)
+        const actionAuth = getAuth()
+        await actionAuth.api.deviceApprove({ body: { userCode: parsedUserCode }, headers: actionRequest.headers })
+        throw redirect(router.href('/device', { user_code: parsedUserCode, status: 'approved' }))
+      }
+
+      async function denyDevice(formData: FormData) {
+        'use server'
+        const actionRequest = getActionRequest()
+        await requireSession(actionRequest)
+        const { userCode: parsedUserCode } = parseFormData(deviceUserCodeSchema, formData)
+        const actionAuth = getAuth()
+        await actionAuth.api.deviceDeny({ body: { userCode: parsedUserCode }, headers: actionRequest.headers })
+        throw redirect(router.href('/device', { user_code: parsedUserCode, status: 'denied' }))
+      }
+
+      return (
+        <AuthPage
+          description="Approve or deny the current Strada CLI login request."
+          title="CLI login"
+        >
+          <div className="flex flex-col gap-2 text-center">
+            <h1 className="text-2xl font-semibold tracking-tight">Strada CLI Login</h1>
+            {status === 'approved'
+              ? (
+                  <>
+                    <p className="text-sm text-foreground">The CLI was approved successfully.</p>
+                    <p className="text-sm text-muted-foreground">
+                      You can close this page and return to the terminal.
+                    </p>
+                  </>
+                )
+              : status === 'denied'
+                ? (
+                    <>
+                      <p className="text-sm text-foreground">The CLI login was denied.</p>
+                      <p className="text-sm text-muted-foreground">
+                        You can close this page and start the login flow again.
+                      </p>
+                    </>
+                  )
+                : (
+                    <>
+                      <p className="text-sm text-foreground">
+                        A CLI is requesting access to your account.
+                      </p>
+                      <p className="rounded-lg border bg-muted px-3 py-2 font-mono text-lg tracking-[0.24em] uppercase">
+                        {userCode}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        Current status: {device.status}. Approve to let the CLI finish logging in.
+                      </p>
+                    </>
+                  )}
+          </div>
+          {status == null && <DeviceActionButtons approveAction={approveDevice} denyAction={denyDevice} userCode={userCode} />}
+        </AuthPage>
+      )
     },
   })
 
@@ -251,7 +322,7 @@ export const app = new Spiceflow()
     request: createOrgRequestSchema,
     async handler({ request }) {
       const session = await requireSession(request)
-      const body = await parseJsonBody(request, createOrgRequestSchema)
+      const body = await request.json()
       const org = await createOrgForUser(session.userId, body.name)
       return { id: org.id, name: org.name, databaseId: org.databaseId }
     },
@@ -312,15 +383,13 @@ export const app = new Spiceflow()
       const session = await requireSession(request)
       await requireOrgMember(session.userId, params.orgId)
       const db = getDb()
-      const body = await parseJsonBody(request, updateDatabaseRequestSchema)
+      const body = await request.json()
 
       const existing = await db.query.database.findFirst({
         where: { orgId: params.orgId },
       })
       if (!existing) {
-        throw new Response(JSON.stringify({ error: 'no database config for this org' }), {
-          status: 404, headers: { 'content-type': 'application/json' },
-        })
+        throw json({ error: 'no database config for this org' }, { status: 404 })
       }
 
       if (body.backend === 'tinybird') {
@@ -366,9 +435,7 @@ export const app = new Spiceflow()
       where: { orgId: params.orgId },
     })
     if (!row) {
-      throw new Response(JSON.stringify({ error: 'no database config' }), {
-        status: 404, headers: { 'content-type': 'application/json' },
-      })
+      throw json({ error: 'no database config' }, { status: 404 })
     }
     // Redact admin token, only show read token
     return {
@@ -393,15 +460,13 @@ export const app = new Spiceflow()
       const session = await requireSession(request)
       await requireOrgMember(session.userId, params.orgId)
       const db = getDb()
-      const body = await parseJsonBody(request, createProjectRequestSchema)
+      const body = await request.json()
 
       const dbRow = await db.query.database.findFirst({
         where: { orgId: params.orgId },
       })
       if (!dbRow) {
-        throw new Response(JSON.stringify({ error: 'configure database first' }), {
-          status: 400, headers: { 'content-type': 'application/json' },
-        })
+        throw json({ error: 'configure database first' }, { status: 400 })
       }
 
       const [proj] = await db.insert(schema.project)
@@ -446,9 +511,7 @@ export const app = new Spiceflow()
         where: { id: params.id },
       })
       if (!proj) {
-        throw new Response(JSON.stringify({ error: 'project not found' }), {
-          status: 404, headers: { 'content-type': 'application/json' },
-        })
+        throw json({ error: 'project not found' }, { status: 404 })
       }
       await requireOrgMember(session.userId, proj.orgId)
       await db.delete(schema.project).where(orm.eq(schema.project.id, params.id))
@@ -468,13 +531,11 @@ export const app = new Spiceflow()
         where: { id: params.projectId },
       })
       if (!proj) {
-        throw new Response(JSON.stringify({ error: 'project not found' }), {
-          status: 404, headers: { 'content-type': 'application/json' },
-        })
+        throw json({ error: 'project not found' }, { status: 404 })
       }
       await requireOrgMember(session.userId, proj.orgId)
 
-      const body = await parseJsonBody(request, createProjectTokenRequestSchema)
+      const body = await request.json()
       const { fullKey, prefix } = generateProjectToken()
       const hashed = await hashToken(fullKey)
 
@@ -500,9 +561,7 @@ export const app = new Spiceflow()
       where: { id: params.projectId },
     })
     if (!proj) {
-      throw new Response(JSON.stringify({ error: 'project not found' }), {
-        status: 404, headers: { 'content-type': 'application/json' },
-      })
+      throw json({ error: 'project not found' }, { status: 404 })
     }
     await requireOrgMember(session.userId, proj.orgId)
 
@@ -532,9 +591,7 @@ export const app = new Spiceflow()
         with: { project: true },
       })
       if (!token) {
-        throw new Response(JSON.stringify({ error: 'token not found' }), {
-          status: 404, headers: { 'content-type': 'application/json' },
-        })
+        throw json({ error: 'token not found' }, { status: 404 })
       }
       await requireOrgMember(session.userId, token.project!.orgId)
       await db.delete(schema.projectToken).where(orm.eq(schema.projectToken.id, params.id))
@@ -556,50 +613,41 @@ export const app = new Spiceflow()
         with: { database: true },
       })
       if (!proj) {
-        throw new Response(JSON.stringify({ error: 'project not found' }), {
-          status: 404, headers: { 'content-type': 'application/json' },
-        })
+        throw json({ error: 'project not found' }, { status: 404 })
       }
       await requireOrgMember(session.userId, proj.orgId)
 
       const dbConfig = proj.database
       if (!dbConfig) {
-        throw new Response(JSON.stringify({ error: 'no database configured' }), {
-          status: 400, headers: { 'content-type': 'application/json' },
-        })
+        throw json({ error: 'no database configured' }, { status: 400 })
       }
 
-      const body = await parseJsonBody(request, queryProjectRequestSchema)
+      const body = await request.json()
 
       if (dbConfig.backend === 'tinybird') {
         if (!dbConfig.tinybirdEndpoint || !dbConfig.tinybirdReadToken) {
-          throw new Response(JSON.stringify({ error: 'tinybird not configured' }), {
-            status: 400, headers: { 'content-type': 'application/json' },
-          })
+          throw json({ error: 'tinybird not configured' }, { status: 400 })
         }
+        const sql = body.sql.includes('FORMAT ') ? body.sql : `${body.sql} FORMAT JSON`
         const url = `${dbConfig.tinybirdEndpoint}/v0/sql`
         const res = await fetch(url, {
           method: 'POST',
           headers: {
-            'Content-Type': 'text/plain',
+            'Content-Type': 'application/json',
             Authorization: `Bearer ${dbConfig.tinybirdReadToken}`,
           },
-          body: body.sql,
+          body: JSON.stringify({ q: sql }),
         })
         if (!res.ok) {
           const text = await res.text()
-          throw new Response(JSON.stringify({ error: text }), {
-            status: res.status, headers: { 'content-type': 'application/json' },
-          })
+          throw json({ error: text }, { status: res.status })
         }
         return res.json()
       }
 
       if (dbConfig.backend === 'clickhouse') {
         if (!dbConfig.clickhouseUrl) {
-          throw new Response(JSON.stringify({ error: 'clickhouse not configured' }), {
-            status: 400, headers: { 'content-type': 'application/json' },
-          })
+          throw json({ error: 'clickhouse not configured' }, { status: 400 })
         }
         const endpoint = `${dbConfig.clickhouseUrl}/?database=${encodeURIComponent(dbConfig.clickhouseDatabase || 'default')}&query=${encodeURIComponent(body.sql + ' FORMAT JSON')}`
         const res = await fetch(endpoint, {
@@ -610,27 +658,23 @@ export const app = new Spiceflow()
         })
         if (!res.ok) {
           const text = await res.text()
-          throw new Response(JSON.stringify({ error: text }), {
-            status: res.status, headers: { 'content-type': 'application/json' },
-          })
+          throw json({ error: text }, { status: res.status })
         }
         return res.json()
       }
 
-      throw new Response(JSON.stringify({ error: 'unknown backend' }), {
-        status: 500, headers: { 'content-type': 'application/json' },
-      })
+      throw json({ error: 'unknown backend' }, { status: 500 })
     },
   })
 
 export type App = typeof app
+
+const handleFetch: ExportedHandlerFetchHandler<Env> = (request) => app.handle(request)
 
 declare module 'spiceflow/react' {
   interface SpiceflowRegister { app: typeof app }
 }
 
 export default {
-  async fetch(request: Request): Promise<Response> {
-    return app.handle(request)
-  },
+  fetch: handleFetch,
 } satisfies ExportedHandler<Env>

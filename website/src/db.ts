@@ -10,7 +10,7 @@ import * as schema from 'db/src/schema.ts'
 import { betterAuth } from 'better-auth'
 import { deviceAuthorization, bearer } from 'better-auth/plugins'
 import { drizzleAdapter } from '@better-auth/drizzle-adapter/relations-v2'
-import { redirect } from 'spiceflow'
+import { json } from 'spiceflow'
 
 // ── Drizzle client via D1 ───────────────────────────────────────────
 
@@ -77,10 +77,7 @@ export async function getSession(request: Request): Promise<Session | null> {
 export async function requireSession(request: Request): Promise<Session> {
   const session = await getSession(request)
   if (!session) {
-    throw new Response(JSON.stringify({ error: 'unauthorized' }), {
-      status: 401,
-      headers: { 'content-type': 'application/json' },
-    })
+    throw json({ error: 'unauthorized' }, { status: 401 })
   }
   return session
 }
@@ -91,10 +88,7 @@ export async function requireOrgMember(userId: string, orgId: string) {
     where: { orgId, userId },
   })
   if (!member) {
-    throw new Response(JSON.stringify({ error: 'forbidden' }), {
-      status: 403,
-      headers: { 'content-type': 'application/json' },
-    })
+    throw json({ error: 'forbidden' }, { status: 403 })
   }
   return member
 }

@@ -23,13 +23,19 @@
     "deploy:prod": "doppler run -p website -c production -- vite build && wrangler deploy"
   },
   "dependencies": {
+    "@tailwindcss/vite": "^4.2.2",
     "@better-auth/drizzle-adapter": "https://pkg.pr.new/better-auth/better-auth/@better-auth/drizzle-adapter@6913",
     "better-auth": "latest",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
     "db": "workspace:^",
     "drizzle-orm": "1.0.0-beta.21",
+    "radix-ui": "latest",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "spiceflow": "1.19.0-rsc.3",
+    "tailwind-merge": "^3.5.0",
+    "tailwindcss": "^4.2.2",
     "ulid": "latest",
     "zod": "latest"
   },
