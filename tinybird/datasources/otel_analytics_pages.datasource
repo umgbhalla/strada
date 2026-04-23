@@ -17,6 +17,6 @@ SCHEMA >
 
 ENGINE "AggregatingMergeTree"
 ENGINE_PARTITION_KEY "Date"
-ENGINE_SORTING_KEY "ProjectId, ServiceName, Domain, Date, Device, Browser, Country, Pathname"
+ENGINE_SORTING_KEY "ProjectId, ServiceName, Domain, Date, Device, Browser, Country, Language, Pathname, Referrer"
 ENGINE_TTL "Date + INTERVAL 90 DAY"
 ENGINE_SETTINGS index_granularity=8192
