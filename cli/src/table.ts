@@ -13,6 +13,17 @@
 
 import { bold, dim, gray } from "./colors.ts";
 
+/** Strip ANSI escape codes to get the visible character count */
+function stripAnsi(s: string): string {
+  // eslint-disable-next-line no-control-regex
+  return s.replace(/\x1b\[[0-9;]*m/g, "");
+}
+
+/** Visible width of a string, ignoring ANSI escape codes */
+function visibleLength(s: string): number {
+  return stripAnsi(s).length;
+}
+
 export interface TableColumn {
   /** Object key to read from each row */
   key: string;
@@ -34,26 +45,32 @@ export interface TableOptions {
 }
 
 function truncate(s: string, max: number): string {
-  if (s.length <= max) return s;
-  return s.slice(0, max - 1) + "…";
+  const visible = stripAnsi(s);
+  if (visible.length <= max) return s;
+  // Truncate the visible content, not the raw string with ANSI codes
+  return visible.slice(0, max - 1) + "…";
 }
 
 function pad(s: string, width: number, align: "left" | "right"): string {
-  if (align === "right") return s.padStart(width);
-  return s.padEnd(width);
+  const visible = visibleLength(s);
+  const diff = width - visible;
+  if (diff <= 0) return s;
+  const spaces = " ".repeat(diff);
+  return align === "right" ? spaces + s : s + spaces;
 }
 
 export function formatTable(opts: TableOptions): string {
   const { columns, rows, gap = 2 } = opts;
   const spacer = " ".repeat(gap);
 
-  // Compute column widths from header + all cell values
+  // Compute column widths from header + all cell values (ANSI-aware)
   const widths = columns.map((col) => {
     let max = col.label.length;
     for (const row of rows) {
       const raw = row[col.key] ?? "";
       const val = col.maxWidth ? truncate(raw, col.maxWidth) : raw;
-      if (val.length > max) max = val.length;
+      const w = visibleLength(val);
+      if (w > max) max = w;
     }
     return max;
   });
