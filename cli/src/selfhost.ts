@@ -174,6 +174,23 @@ export async function selfhostAction(
 
   clack.log.success(`Authenticated as ${cyan(workspace.user_email)} in workspace ${cyan(workspace.name)}`);
 
+  clack.log.warn(
+    `Strada will create OTel datasources in "${workspace.name}".\n` +
+    `  Use a fresh, dedicated Tinybird workspace — do NOT point this at an existing workspace\n` +
+    `  with unrelated data or different schemas. Deploying to the wrong workspace can corrupt\n` +
+    `  or overwrite existing datasources.`,
+  );
+
+  if (process.stdin.isTTY) {
+    const confirmed = await clack.confirm({
+      message: `Deploy Strada OTel tables into workspace "${workspace.name}"?`,
+    });
+    if (clack.isCancel(confirmed) || !confirmed) {
+      clack.outro("Cancelled. Create a new dedicated Tinybird workspace and re-run strada selfhost.");
+      return proc.exit(0);
+    }
+  }
+
   const spinner = clack.spinner();
   spinner.start("Loading Tinybird resource files...");
 
