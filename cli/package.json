@@ -45,6 +45,7 @@
   "scripts": {
     "build": "rm -rf dist *.tsbuildinfo && tsc && chmod +x dist/bin.js",
     "prepublishOnly": "pnpm run build",
+    "link-local": "tsx scripts/install-local.ts",
     "cli": "tsx src/bin",
     "typecheck": "tsc -b"
   },
