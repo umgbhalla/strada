@@ -251,52 +251,6 @@ describe("extractErrorsFromLogs", () => {
     expect(row.tags["exception.type"]).toBeUndefined();
   });
 
-  it("extracts Cloudflare uncaught exception logs from outcome markers", () => {
-    const input: ExportLogsServiceRequest = {
-      resourceLogs: [
-        {
-          resource: {
-            attributes: [
-              { key: "cloud.platform", value: { stringValue: "cloudflare.workers" } },
-              { key: "service.name", value: { stringValue: "edge-api" } },
-            ],
-          },
-          scopeLogs: [
-            {
-              logRecords: [
-                {
-                  timeUnixNano: "1544712660123456789",
-                  severityText: "ERROR",
-                  body: { stringValue: "Worker threw a JavaScript exception" },
-                  traceId: "trace-cloudflare-log",
-                  spanId: "span-cloudflare-log",
-                  attributes: [
-                    { key: "$workers.outcome", value: { stringValue: "exception" } },
-                    { key: "$metadata.error", value: { stringValue: "Worker threw a JavaScript exception" } },
-                    { key: "cloudflare.ray_id", value: { stringValue: "ray-123" } },
-                    { key: "url.path", value: { stringValue: "/api/users" } },
-                  ],
-                },
-              ],
-            },
-          ],
-        },
-      ],
-    };
-
-    const ndjson = extractErrorsFromLogs(input, "acme");
-    const row = JSON.parse(ndjson.trim());
-
-    expect(row.service_name).toBe("edge-api");
-    expect(row.exception_type).toBe("CloudflareWorkerException");
-    expect(row.exception_message).toBe("Worker threw a JavaScript exception");
-    expect(row.trace_id).toBe("trace-cloudflare-log");
-    expect(row.mechanism_type).toBe("cloudflare.log.outcome");
-    expect(row.mechanism_handled).toBe(false);
-    expect(row.tags["$workers.outcome"]).toBe("exception");
-    expect(row.tags["$metadata.error"]).toBe("Worker threw a JavaScript exception");
-  });
-
   it("uses SDK-provided fingerprint when available", () => {
     const input: ExportLogsServiceRequest = {
       resourceLogs: [

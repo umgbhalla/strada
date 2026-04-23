@@ -38,24 +38,8 @@ export function extractErrorsFromLogs(body: ExportLogsServiceRequest, projectId:
       for (const log of sl.logRecords ?? []) {
         const attrs = convertAttributes(log.attributes);
 
-        let exceptionType = attrs[ATTR["exception.type"]] ?? "";
-        let exceptionMessage = attrs[ATTR["exception.message"]] ?? "";
-
-        if (!exceptionType && !exceptionMessage) {
-          const cloudflareException = getCloudflareLogException({
-            attrs,
-            resourceAttrs,
-            body: anyValueToString(log.body),
-          });
-          if (cloudflareException) {
-            exceptionType = cloudflareException.type;
-            exceptionMessage = cloudflareException.message;
-            attrs[ATTR["exception.type"]] = exceptionType;
-            attrs[ATTR["exception.message"]] = exceptionMessage;
-            attrs[ATTR["exception.mechanism.type"]] = "cloudflare.log.outcome";
-            attrs[ATTR["exception.mechanism.handled"]] = "false";
-          }
-        }
+        const exceptionType = attrs[ATTR["exception.type"]] ?? "";
+        const exceptionMessage = attrs[ATTR["exception.message"]] ?? "";
 
         // Skip if no exception data
         if (!exceptionType && !exceptionMessage) continue;
@@ -289,36 +273,6 @@ function getResourceAttr(kvs: KeyValue[] | undefined, key: string): string {
   if (!kvs) return "";
   const attr = kvs.find((kv) => kv.key === key);
   return attr ? anyValueToString(attr.value) : "";
-}
-
-function getCloudflareLogException({
-  attrs,
-  resourceAttrs,
-  body,
-}: {
-  attrs: Record<string, string>;
-  resourceAttrs: Record<string, string>;
-  body: string;
-}): { type: string; message: string } | null {
-  if (resourceAttrs["cloud.platform"] !== CLOUDFLARE_WORKERS_PLATFORM) return null;
-
-  const outcome =
-    attrs["$workers.outcome"] ||
-    attrs["workers.outcome"] ||
-    attrs["cloudflare.outcome"] ||
-    "";
-  if (outcome !== CLOUDFLARE_EXCEPTION_OUTCOME) return null;
-
-  const message =
-    attrs["$metadata.error"] ||
-    attrs["metadata.error"] ||
-    body ||
-    "Worker invocation failed with cloudflare outcome=exception";
-
-  return {
-    type: CLOUDFLARE_WORKER_EXCEPTION_TYPE,
-    message,
-  };
 }
 
 function getCloudflareTraceException({

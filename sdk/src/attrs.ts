@@ -54,6 +54,19 @@ export const ATTR = {
   /** Severity level string for the error, e.g. "error", "warning", "fatal". */
   "exception.level": "exception.level",
 
+  // -- Cloudflare Workers runtime attrs (for manual capture in Workers) --
+
+  /** Cloudflare worker invocation outcome. Runtime traces use values like "ok" and "exception". */
+  "cloudflare.outcome": "cloudflare.outcome",
+  /** Cloudflare Worker script name. Usually the same logical service as service.name. */
+  "cloudflare.script_name": "cloudflare.script_name",
+  /** Serverless function name. In Workers this matches the configured service/script name. */
+  "faas.name": "faas.name",
+  /** Telemetry SDK implementation name. */
+  "telemetry.sdk.name": "telemetry.sdk.name",
+  /** Telemetry SDK language/runtime. */
+  "telemetry.sdk.language": "telemetry.sdk.language",
+
   // -- SPA navigation (set on pageview spans during client-side navigation) --
 
   /** How the navigation was triggered: "push", "replace", "traverse". From Navigation API. */

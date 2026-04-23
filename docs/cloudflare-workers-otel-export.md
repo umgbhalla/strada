@@ -80,10 +80,13 @@ Look at:
 
 - `cloudflare.outcome`
 - `http.response.status_code`
-- logs with exception fields if present:
-  - `exception.type`
-  - `exception.message`
-  - `exception.stacktrace`
+- `cloudflare.ray_id`
+- logs for surrounding context, especially:
+  - request log bodies like `GET https://.../route`
+  - app `console.error()` output
+  - framework-generated error log lines such as `Spiceflow unhandled error: Error: ...`
+
+Validated note: in real Cloudflare destination exports, **runtime crashes were reliably marked on traces**, while logs did **not** include standard `exception.*` fields.
 
 Important documented outcomes include:
 
@@ -107,6 +110,39 @@ So for Strada, the relevant ingest paths are:
 
 - `https://<project>-ingest.strada.sh/v1/traces`
 - `https://<project>-ingest.strada.sh/v1/logs`
+
+## Validated behavior from a real Cloudflare Worker
+
+Strada now includes a real validation worker at `example-app-cloudflare/` used to test actual Cloudflare destination export.
+
+The collector had to support **gzip-compressed OTLP** first, because Cloudflare destinations send:
+
+- `content-encoding: gzip`
+
+Without gzip decompression, the collector failed before any Cloudflare-specific behavior could be inspected.
+
+### Route matrix used for validation
+
+| Route | What it does | What Cloudflare exported | What matters for Strada |
+|---|---|---|---|
+| `/ok` | healthy request | request trace + request log + app log | baseline shape |
+| `/caught` | error caught and converted into HTTP 500 | request trace + request log + app log | **not** a runtime crash |
+| `/throw` | thrown inside Spiceflow route | request trace + request log + framework error log | `cloudflare.outcome` stayed `ok` |
+| `/throw-async` | async throw inside Spiceflow route | request trace + request log + framework error log | `cloudflare.outcome` stayed `ok` |
+| `/crash-runtime` | throw before `app.handle()` in worker `fetch()` | request trace with `cloudflare.outcome = exception` + request log + app log | **real runtime crash marker** |
+
+### Key validated findings
+
+- **Framework-handled route errors are not Cloudflare runtime crashes.**
+- **Real Worker runtime crashes are marked by `cloudflare.outcome = exception` on the root span.**
+- A real runtime crash also returned the Cloudflare runtime error page body `error code: 1101` to the client.
+- Real destination-exported logs did **not** include:
+  - `exception.type`
+  - `exception.message`
+  - `exception.stacktrace`
+  - `$workers.outcome`
+  - `$metadata.error`
+- The most reliable signal for materializing Cloudflare runtime crashes into `otel_errors` is the **trace root span fallback**, not logs.
 
 ## Example `wrangler.jsonc`
 
@@ -184,7 +220,7 @@ This example is representative of the **shape** Strada should expect when Cloudf
 
 ## Example logs payload
 
-This example is representative of the **shape** Strada should expect from OTLP logs. Cloudflare documents that logs include `console.log()` output and system-generated logs. The exact Cloudflare uncaught-exception field set is not fully documented.
+This example reflects the **validated shape** seen from a real Cloudflare destination export. For runtime crashes, the exported OTLP logs contained request logs and app/framework log lines, but **not** standard `exception.*` attributes.
 
 ```json
 {
@@ -203,11 +239,9 @@ This example is representative of the **shape** Strada should expect from OTLP l
             {
               "timeUnixNano": "1713890000100000000",
               "severityText": "ERROR",
-              "body": { "stringValue": "uncaught exception" },
+              "body": { "stringValue": "Spiceflow unhandled error: Error: uncaught cloudflare validation error" },
               "attributes": [
-                { "key": "cloudflare.ray_id", "value": { "stringValue": "87d3abc123" } },
-                { "key": "exception.type", "value": { "stringValue": "TypeError" } },
-                { "key": "exception.message", "value": { "stringValue": "Cannot read properties of undefined" } }
+                { "key": "cloudflare.ray_id", "value": { "stringValue": "87d3abc123" } }
               ]
             }
           ]
@@ -354,7 +388,7 @@ ORDER BY toFloat64OrZero(SpanAttributes['cloudflare.d1.response.sql_duration_ms'
 LIMIT 100
 ```
 
-### Logs with exception fields
+### Logs with runtime-crash context
 
 ```sql
 SELECT
@@ -362,9 +396,28 @@ SELECT
   ServiceName,
   SeverityText,
   Body,
+  TraceId,
+  LogAttributes['cloudflare.ray_id'] AS ray_id
+FROM otel_logs
+WHERE ResourceAttributes['cloud.platform'] = 'cloudflare.workers'
+  AND TraceId = '<trace-id-from-failing-root-span>'
+ORDER BY Timestamp DESC
+LIMIT 100
+```
+
+### Logs with standard exception fields if present
+
+Some app code or SDKs may still emit normal `exception.*` fields. Query them separately when needed:
+
+```sql
+SELECT
+  Timestamp,
+  ServiceName,
+  SeverityText,
+  Body,
+  TraceId,
   LogAttributes['exception.type'] AS exception_type,
-  LogAttributes['exception.message'] AS exception_message,
-  TraceId
+  LogAttributes['exception.message'] AS exception_message
 FROM otel_logs
 WHERE ResourceAttributes['cloud.platform'] = 'cloudflare.workers'
   AND (
@@ -1655,7 +1708,7 @@ Cloudflare also documents that logs include:
 - system-generated logs
 - uncaught exceptions in Workers logs products
 
-But Cloudflare does **not** document a full OTLP exported log schema for uncaught exceptions with concrete examples of fields like:
+Validation against a real Worker export confirmed that destination OTLP logs did **not** expose a structured uncaught-exception payload with fields like:
 
 - `exception.type`
 - `exception.message`
@@ -1664,7 +1717,7 @@ But Cloudflare does **not** document a full OTLP exported log schema for uncaugh
 So agents should use this rule:
 
 - **for failures, trust traces first** via `cloudflare.outcome`
-- **for detailed error grouping, inspect logs second** and look for standard `exception.*` fields
+- **for detailed error grouping, inspect logs second** for surrounding context, but do not assume `exception.*` exists
 
 ## Recommended mental model for agents
 

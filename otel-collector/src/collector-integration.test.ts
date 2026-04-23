@@ -846,7 +846,7 @@ describe.sequential('collector integration with official OTel SDKs', () => {
 
       await waitFor(() => inserts.some((insert) => insert.table === 'otel_traces'), 8_000)
       await waitFor(() => inserts.some((insert) => insert.table === 'otel_logs'), 8_000)
-      await waitFor(() => inserts.filter((insert) => insert.table === 'otel_errors').flatMap((insert) => insert.rows).length === 2, 8_000)
+      await waitFor(() => inserts.filter((insert) => insert.table === 'otel_errors').flatMap((insert) => insert.rows).length === 1, 8_000)
 
       const traceRows = inserts.find((insert) => insert.table === 'otel_traces')?.rows ?? []
       const logRows = inserts.find((insert) => insert.table === 'otel_logs')?.rows ?? []
@@ -854,7 +854,7 @@ describe.sequential('collector integration with official OTel SDKs', () => {
 
       expect(traceRows).toHaveLength(1)
       expect(logRows).toHaveLength(1)
-      expect(errorRows).toHaveLength(2)
+      expect(errorRows).toHaveLength(1)
     } finally {
       process.env.TINYBIRD_ENDPOINT = originalEnv.TINYBIRD_ENDPOINT
       process.env.TINYBIRD_TOKEN = originalEnv.TINYBIRD_TOKEN

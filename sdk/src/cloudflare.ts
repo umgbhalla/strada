@@ -303,6 +303,10 @@ export function initStrada(options: StradaOptions): void {
       : {}),
     "cloud.provider": "cloudflare",
     "cloud.platform": "cloudflare.workers",
+    [ATTR["faas.name"]]: options.service,
+    [ATTR["cloudflare.script_name"]]: options.service,
+    [ATTR["telemetry.sdk.name"]]: "strada",
+    [ATTR["telemetry.sdk.language"]]: "javascript",
   });
 
   const endpoint = resolveEndpoint(options);
@@ -369,6 +373,7 @@ export function captureException(
   if (prepared === null) return;
 
   const attributes = errorToAttributes(prepared, opts);
+  attributes[ATTR["cloudflare.outcome"]] = "exception";
 
   if (_logger) {
     _logger.emit({
