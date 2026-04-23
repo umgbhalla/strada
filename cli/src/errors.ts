@@ -1,0 +1,355 @@
+// Error listing and detail CLI commands. Groups errors by fingerprint and
+// displays a frequency-sorted table, or shows a detailed view of a single
+// error group with stacktrace and recent events.
+
+import { goke } from "goke";
+import { bold, cyan, dim, red, yellow, gray, green, white } from "./colors.ts";
+import { getApiClient } from "./api-client.ts";
+import { ensureDefaultOrg, resolveProjectId } from "./projects.ts";
+import { printTable, formatCount, timeAgo } from "./table.ts";
+import { parseDuration } from "./parse-duration.ts";
+
+export const errorsCli = goke();
+
+/** Run a SQL query against a project. Shared by all errors subcommands. */
+async function queryProject(projectId: string, sql: string) {
+  const { safeFetch } = getApiClient();
+  const res = await safeFetch(`/api/projects/${projectId}/query`, {
+    method: "POST",
+    body: { sql },
+  });
+  if (res instanceof Error) throw res;
+  return res as { data?: Record<string, string>[]; rows?: number };
+}
+
+// ── errors list ───────────────────────────────────────────────────
+
+errorsCli
+  .command("errors list", "List error groups sorted by frequency")
+  .option("-p, --project <slugs>", "Project slug(s), comma-separated (run `strada projects list` to see slugs)")
+  .option("-s, --service [name]", "Filter by service name")
+  .option("--since [duration]", "Time range, e.g. 1h, 24h, 7d (default: 24h)")
+  .option("-n, --limit [count]", "Max number of error groups (default: 20)")
+  .option("--unhandled", "Show only unhandled errors")
+  .action(async (options, { console: output, process: proc }) => {
+    if (!options.project) {
+      output.log("Missing required option: --project <slug>");
+      output.log(dim("Run `strada projects list` to see available project slugs."));
+      return proc.exit(1);
+    }
+
+    const org = await ensureDefaultOrg();
+    const slugs = options.project.split(",").map((s: string) => s.trim()).filter(Boolean);
+    const projects = await Promise.all(slugs.map((s: string) => resolveProjectId(org.id, s)));
+
+    const since = parseDuration(options.since || "24h");
+    const limit = Number(options.limit) || 20;
+
+    // Build WHERE clauses
+    const conditions = [`Timestamp >= now() - INTERVAL ${since}`];
+    if (options.service) {
+      conditions.push(`ServiceName = '${options.service}'`);
+    }
+    if (options.unhandled) {
+      conditions.push(`MechanismHandled = false`);
+    }
+
+    const sql = `
+SELECT
+    FingerprintHash,
+    anyLast(ExceptionType) AS last_type,
+    anyLast(ExceptionMessage) AS last_message,
+    anyLast(Level) AS last_level,
+    count() AS event_count,
+    min(Timestamp) AS first_seen,
+    max(Timestamp) AS last_seen,
+    countIf(MechanismHandled = false) AS unhandled_count
+FROM otel_errors
+WHERE ${conditions.join("\n  AND ")}
+GROUP BY FingerprintHash
+ORDER BY event_count DESC
+LIMIT ${limit}
+`.trim();
+
+    // Query all projects and merge results
+    const allRows: Record<string, string>[] = [];
+    for (const project of projects) {
+      const data = await queryProject(project.id, sql);
+      for (const row of data.data ?? []) {
+        allRows.push(row);
+      }
+    }
+
+    if (allRows.length === 0) {
+      const slugLabel = slugs.join(", ");
+      output.log(dim(`No errors found in ${cyan(slugLabel)} (last ${options.since || "24h"})`));
+      return;
+    }
+
+    // Header
+    const sinceLabel = options.since || "24h";
+    const slugLabel = slugs.join(", ");
+    output.log("");
+    output.log(bold(`Errors in ${cyan(slugLabel)}`) + dim(` (last ${sinceLabel})`));
+    if (options.service) output.log(dim(`  service: ${options.service}`));
+    output.log("");
+
+    // Format rows for table
+    const tableRows = allRows.map((r) => {
+      const count = Number(r.event_count ?? 0);
+      const unhandled = Number(r.unhandled_count ?? 0);
+      const level = r.last_level ?? "error";
+      const levelColor = level === "fatal" ? red : level === "warning" ? yellow : red;
+
+      return {
+        count: formatCount(count),
+        unhandled: unhandled > 0 ? formatCount(unhandled) : dim("0"),
+        level: levelColor(level),
+        type: r.last_type || gray("(none)"),
+        message: r.last_message || gray("(no message)"),
+        last_seen: timeAgo(r.last_seen ?? ""),
+      };
+    });
+
+    printTable(output, {
+      columns: [
+        { key: "count", label: "COUNT", align: "right", color: bold },
+        { key: "unhandled", label: "UNHANDLED", align: "right" },
+        { key: "level", label: "LEVEL" },
+        { key: "type", label: "TYPE", color: cyan },
+        { key: "message", label: "MESSAGE", maxWidth: 50 },
+        { key: "last_seen", label: "LAST SEEN", color: dim },
+      ],
+      rows: tableRows,
+    });
+
+    // Summary line
+    const totalEvents = allRows.reduce((sum, r) => sum + Number(r.event_count ?? 0), 0);
+    output.log("");
+    output.log(dim(`  ${allRows.length} issues, ${formatCount(totalEvents)} total events`));
+    output.log("");
+  });
+
+// ── errors view ───────────────────────────────────────────────────
+
+errorsCli
+  .command("errors view <fingerprint>", "Show details for a single error group by fingerprint hash")
+  .option("-p, --project <slug>", "Project slug (run `strada projects list` to see slugs)")
+  .option("-n, --events [count]", "Number of recent events to show (default: 5)")
+  .option("--json", "Output raw JSON")
+  .action(async (fingerprint, options, { console: output, process: proc }) => {
+    if (!options.project) {
+      output.log("Missing required option: --project <slug>");
+      output.log(dim("Run `strada projects list` to see available project slugs."));
+      return proc.exit(1);
+    }
+
+    const org = await ensureDefaultOrg();
+    const project = await resolveProjectId(org.id, options.project);
+    const eventsLimit = Number(options.events) || 5;
+
+    // Query 1: Issue summary (aggregated)
+    const summarySql = `
+SELECT
+    anyLast(ExceptionType) AS last_type,
+    anyLast(ExceptionMessage) AS last_message,
+    anyLast(Level) AS last_level,
+    anyLast(MechanismType) AS last_mechanism,
+    anyLast(MechanismHandled) AS last_handled,
+    count() AS event_count,
+    countIf(MechanismHandled = false) AS unhandled_count,
+    min(Timestamp) AS first_seen,
+    max(Timestamp) AS last_seen,
+    groupUniqArray(ServiceName) AS services,
+    groupUniqArray(Release) AS releases,
+    groupUniqArray(Environment) AS environments
+FROM otel_errors
+WHERE FingerprintHash = '${fingerprint}'
+`.trim();
+
+    // Query 2: Recent events with stacktrace
+    const eventsSql = `
+SELECT
+    Timestamp,
+    ExceptionType,
+    ExceptionMessage,
+    ExceptionStacktrace,
+    ExceptionFrames,
+    MechanismType,
+    MechanismHandled,
+    Level,
+    Release,
+    Environment,
+    ServiceName,
+    TraceId,
+    SpanId,
+    Tags
+FROM otel_errors
+WHERE FingerprintHash = '${fingerprint}'
+ORDER BY Timestamp DESC
+LIMIT ${eventsLimit}
+`.trim();
+
+    const [summaryRes, eventsRes] = await Promise.all([
+      queryProject(project.id, summarySql),
+      queryProject(project.id, eventsSql),
+    ]);
+
+    const summary = summaryRes.data?.[0];
+    const events = eventsRes.data ?? [];
+
+    if (!summary || Number(summary.event_count) === 0) {
+      output.log(dim(`No error found with fingerprint ${cyan(fingerprint)}`));
+      return proc.exit(1);
+    }
+
+    if (options.json) {
+      output.log(JSON.stringify({ summary, events }, null, 2));
+      return;
+    }
+
+    // ── Render summary ──
+    const type = summary.last_type || "(unknown)";
+    const message = summary.last_message || "(no message)";
+    const level = summary.last_level || "error";
+    const levelColor = level === "fatal" ? red : level === "warning" ? yellow : red;
+    const handled = summary.last_handled === "true" || summary.last_handled === "1";
+    const mechanism = summary.last_mechanism || "generic";
+
+    output.log("");
+    output.log(bold(red(`${type}: ${message}`)));
+    output.log("");
+    output.log(`  ${dim("Fingerprint")}   ${cyan(fingerprint)}`);
+    output.log(`  ${dim("Level")}         ${levelColor(level)}`);
+    output.log(`  ${dim("Events")}        ${bold(formatCount(Number(summary.event_count)))} total${Number(summary.unhandled_count) > 0 ? ` (${red(formatCount(Number(summary.unhandled_count)))} unhandled)` : ""}`);
+    output.log(`  ${dim("First seen")}    ${summary.first_seen ?? ""} ${dim(`(${timeAgo(summary.first_seen ?? "")})`)}`);
+    output.log(`  ${dim("Last seen")}     ${summary.last_seen ?? ""} ${dim(`(${timeAgo(summary.last_seen ?? "")})`)}`);
+    output.log(`  ${dim("Mechanism")}     ${mechanism} ${handled ? green("(handled)") : red("(unhandled)")}`);
+
+    // Services, releases, environments (parse ClickHouse array format)
+    const services = parseClickHouseArray(summary.services);
+    const releases = parseClickHouseArray(summary.releases).filter(Boolean);
+    const environments = parseClickHouseArray(summary.environments).filter(Boolean);
+
+    if (services.length > 0) {
+      output.log(`  ${dim("Services")}      ${services.join(", ")}`);
+    }
+    if (releases.length > 0) {
+      output.log(`  ${dim("Releases")}      ${releases.join(", ")}`);
+    }
+    if (environments.length > 0) {
+      output.log(`  ${dim("Environments")}  ${environments.join(", ")}`);
+    }
+
+    // ── Render stacktrace from latest event ──
+    const latestEvent = events[0];
+    if (latestEvent) {
+      output.log("");
+      output.log(bold("  Stacktrace") + dim(" (latest event):"));
+      output.log("");
+
+      const rendered = renderStacktrace(latestEvent.ExceptionFrames, latestEvent.ExceptionStacktrace);
+      for (const line of rendered) {
+        output.log(line);
+      }
+    }
+
+    // ── Render recent events table ──
+    if (events.length > 0) {
+      output.log("");
+      output.log(bold("  Recent events:"));
+      output.log("");
+
+      const eventRows = events.map((e) => ({
+        timestamp: e.Timestamp?.replace("T", " ").replace(/\.\d+Z?$/, "") || "",
+        service: e.ServiceName || "",
+        release: e.Release || dim("—"),
+        env: e.Environment || dim("—"),
+        trace: e.TraceId ? e.TraceId.slice(0, 12) + "…" : dim("—"),
+      }));
+
+      printTable(output, {
+        columns: [
+          { key: "timestamp", label: "TIMESTAMP" },
+          { key: "service", label: "SERVICE", color: cyan },
+          { key: "release", label: "RELEASE" },
+          { key: "env", label: "ENV" },
+          { key: "trace", label: "TRACE ID", color: dim },
+        ],
+        rows: eventRows,
+      });
+    }
+
+    output.log("");
+  });
+
+// ── Stacktrace rendering ──────────────────────────────────────────
+
+interface StackFrame {
+  filename?: string;
+  function?: string;
+  lineno?: number;
+  colno?: number;
+  abs_path?: string;
+  in_app?: boolean;
+}
+
+function renderStacktrace(framesJson?: string, rawStacktrace?: string): string[] {
+  // Try structured frames first
+  if (framesJson) {
+    try {
+      const frames: StackFrame[] = JSON.parse(framesJson);
+      if (frames.length > 0) {
+        return renderStructuredFrames(frames);
+      }
+    } catch {
+      // Invalid JSON, fall through to raw
+    }
+  }
+
+  // Fall back to raw stacktrace string
+  if (rawStacktrace) {
+    return rawStacktrace.split("\n").map((line) => `    ${dim(line)}`);
+  }
+
+  return [dim("    (no stacktrace available)")];
+}
+
+function renderStructuredFrames(frames: StackFrame[]): string[] {
+  const lines: string[] = [];
+  // Frames are typically bottom-to-top; reverse for most-recent-first display
+  const ordered = [...frames].reverse();
+
+  for (const frame of ordered) {
+    const fn = frame.function || "<anonymous>";
+    const file = frame.filename || frame.abs_path || "<unknown>";
+    const loc = frame.lineno != null
+      ? frame.colno != null ? `${file}:${frame.lineno}:${frame.colno}` : `${file}:${frame.lineno}`
+      : file;
+
+    if (frame.in_app) {
+      lines.push(`    ${white("at")} ${bold(fn)} ${cyan(`(${loc})`)}  ${dim("← in-app")}`);
+    } else {
+      lines.push(`    ${dim(`at ${fn} (${loc})`)}`);
+    }
+  }
+
+  return lines;
+}
+
+/** Parse ClickHouse array string like "['a','b']" into JS array */
+function parseClickHouseArray(value?: string): string[] {
+  if (!value) return [];
+  // Handle both JSON arrays and ClickHouse array format
+  try {
+    const parsed = JSON.parse(value);
+    if (Array.isArray(parsed)) return parsed;
+  } catch {
+    // Try ClickHouse format: ['val1','val2']
+    const match = value.match(/^\[(.+)\]$/);
+    if (match) {
+      return match[1]!.split(",").map((s) => s.trim().replace(/^'|'$/g, ""));
+    }
+  }
+  return [];
+}

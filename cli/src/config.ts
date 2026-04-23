@@ -7,11 +7,18 @@ import os from "node:os";
 const CONFIG_DIR = path.join(os.homedir(), ".strada");
 const CONFIG_FILE = path.join(CONFIG_DIR, "config.json");
 
+export interface CachedProject {
+  id: string;
+  slug: string;
+}
+
 export interface CliConfig {
   /** BetterAuth session token (bearer token from device flow) */
   sessionToken?: string;
   /** Website base URL */
   baseUrl?: string;
+  /** Cached project slug→id mappings, refreshed on cache miss */
+  projects?: CachedProject[];
 }
 
 export function loadConfig(): CliConfig {
@@ -26,6 +33,12 @@ export function loadConfig(): CliConfig {
 export function saveConfig(config: CliConfig): void {
   fs.mkdirSync(CONFIG_DIR, { recursive: true });
   fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2) + "\n");
+}
+
+/** Merge partial fields into the existing config without overwriting other keys. */
+export function updateConfig(partial: Partial<CliConfig>): void {
+  const existing = loadConfig();
+  saveConfig({ ...existing, ...partial });
 }
 
 export function getSessionToken(): string | undefined {

@@ -5,11 +5,13 @@ import packageJson from "../package.json" with { type: "json" };
 import { selfhostCli } from "./selfhost.ts";
 import { loginCli } from "./login.ts";
 import { projectsCli } from "./projects.ts";
+import { errorsCli } from "./errors.ts";
 
 export const cli = goke("strada")
   .use(selfhostCli)
   .use(loginCli)
-  .use(projectsCli);
+  .use(projectsCli)
+  .use(errorsCli);
 
 cli.help();
 cli.version(packageJson.version);

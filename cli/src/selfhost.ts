@@ -5,13 +5,13 @@
 import * as clack from "@clack/prompts";
 import { goke } from "goke";
 import type { GokeExecutionContext } from "goke";
-import picocolors from "picocolors";
+import { bold, cyan } from "./colors.ts";
 import dedent from "string-dedent";
 import { browserLogin } from "./tinybird-browser-login.ts";
 import { loadTinybirdResources } from "./tinybird-resources.ts";
 import { TinybirdClient } from "./tinybird.ts";
 import { requireAuth } from "./config.ts";
-import { createApiClient } from "./api-client.ts";
+import { getApiClient } from "./api-client.ts";
 import { ensureDefaultOrg } from "./projects.ts";
 
 export interface SelfhostOptions {
@@ -116,7 +116,7 @@ export async function selfhostAction(
   options: SelfhostOptions,
   { console: output, process: proc }: GokeExecutionContext,
 ) {
-  clack.intro(picocolors.bold("Strada — Self-hosted Tinybird setup"));
+  clack.intro(bold("Strada — Self-hosted Tinybird setup"));
 
   // Require Strada login first
   let stradaAuth: { sessionToken: string; baseUrl: string };
@@ -127,16 +127,14 @@ export async function selfhostAction(
     return proc.exit(1);
   }
 
-  const { safeFetch, authHeaders } = createApiClient(stradaAuth.baseUrl, stradaAuth.sessionToken);
-
   // Create a default personal org on first use so `strada login` -> `strada selfhost`
   // works end to end without a manual org bootstrap step.
-  const org = await ensureDefaultOrg(safeFetch, authHeaders).catch((error) => error as Error);
+  const org = await ensureDefaultOrg().catch((error) => error as Error);
   if (org instanceof Error) {
     clack.log.error(org.message);
     return proc.exit(1);
   }
-  clack.log.info(`Using organization: ${picocolors.cyan(org.name)}`);
+  clack.log.info(`Using organization: ${cyan(org.name)}`);
 
   // Authenticate with Tinybird
   const auth = await (async () => {
@@ -174,7 +172,7 @@ export async function selfhostAction(
     return proc.exit(1);
   }
 
-  clack.log.success(`Authenticated as ${picocolors.cyan(workspace.user_email)} in workspace ${picocolors.cyan(workspace.name)}`);
+  clack.log.success(`Authenticated as ${cyan(workspace.user_email)} in workspace ${cyan(workspace.name)}`);
 
   const spinner = clack.spinner();
   spinner.start("Loading Tinybird resource files...");
@@ -224,15 +222,15 @@ export async function selfhostAction(
   const saveSpinner = clack.spinner();
   saveSpinner.start("Saving database config to Strada...");
 
+  const { safeFetch } = getApiClient();
   const saveRes = await safeFetch(`/api/orgs/${org.id}/database`, {
     method: "PUT",
-    headers: { ...authHeaders, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      backend: "tinybird",
+    body: {
+      backend: "tinybird" as const,
       tinybirdEndpoint: auth.baseUrl,
       tinybirdAdminToken: adminToken.token,
       tinybirdReadToken: readToken.token,
-    }),
+    },
   });
   if (saveRes instanceof Error) {
     saveSpinner.stop("Failed to save config");
@@ -244,8 +242,8 @@ export async function selfhostAction(
   clack.log.success("Strada is deployed to your Tinybird workspace and config is saved!");
 
   output.log("");
-  output.log(picocolors.bold("Next steps:"));
-  output.log(`  1. Create a project: ${picocolors.cyan("strada projects create my-app")}`);
+  output.log(bold("Next steps:"));
+  output.log(`  1. Create a project: ${cyan("strada projects create my-app")}`);
   output.log(`  2. Configure your SDK with the project's ingest endpoint`);
   output.log("");
 

@@ -4,7 +4,7 @@
 import * as clack from "@clack/prompts";
 import { goke } from "goke";
 import type { GokeExecutionContext } from "goke";
-import picocolors from "picocolors";
+import { bold, cyan } from "./colors.ts";
 import { openInBrowser } from "goke";
 import { loadConfig, saveConfig, getBaseUrl } from "./config.ts";
 
@@ -30,7 +30,7 @@ async function loginAction(
   { process: proc }: GokeExecutionContext,
 ) {
   const baseUrl = options.url || getBaseUrl();
-  clack.intro(picocolors.bold("Strada — Login"));
+  clack.intro(bold("Strada — Login"));
 
   // Step 1: Request a device code from the website
   clack.log.info("Requesting device code...");
@@ -58,7 +58,7 @@ async function loginAction(
   const verificationUrl = deviceData.verification_uri_complete ||
     `${baseUrl}${deviceData.verification_uri}?user_code=${deviceData.user_code}`;
 
-  clack.log.info(`Your code: ${picocolors.bold(picocolors.cyan(deviceData.user_code))}`);
+  clack.log.info(`Your code: ${bold(cyan(deviceData.user_code))}`);
   clack.log.info(`Opening browser to approve...`);
   void openInBrowser(verificationUrl);
 
@@ -88,7 +88,7 @@ async function loginAction(
       if (token) {
         spinner.stop("Approved!");
         saveConfig({ sessionToken: token, baseUrl });
-        clack.log.success(`Logged in to ${picocolors.cyan(baseUrl)}`);
+        clack.log.success(`Logged in to ${cyan(baseUrl)}`);
         clack.outro("Done");
         return;
       }
