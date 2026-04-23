@@ -12,6 +12,8 @@ import * as schema from 'db/src/schema.ts'
 import { ulid } from 'ulid'
 import { Button } from './components/ui/button.tsx'
 import { DeviceActionButtons } from './components/device-action-buttons.tsx'
+import { deployTinybirdResources, getDeploymentManagedReadToken, TinybirdClient } from 'strada/src/tinybird'
+import { bundledTinybirdResources } from './tinybird-bundled-resources.ts'
 import {
   getDb, getAuth, getSession, requireSession, requireOrgMember,
   hashToken, generateProjectToken, getOrCreateProjectJwt,
@@ -500,6 +502,68 @@ export const app = new Spiceflow()
       clickhouseUser: row.clickhouseUser,
       hasClickhousePassword: !!row.clickhousePassword,
     }
+  })
+
+  // ── API: Migrate Tinybird database schema ─────────────────────
+  .route({
+    method: 'POST',
+    path: '/api/orgs/:orgId/database/migrate',
+    async handler({ request, params }) {
+      const session = await requireSession(request)
+      await requireOrgMember(session.userId, params.orgId)
+      const db = getDb()
+      const existing = await db.query.database.findFirst({
+        where: { orgId: params.orgId },
+      })
+      if (!existing) {
+        throw json({ error: 'no database config for this org' }, { status: 404 })
+      }
+      if (existing.backend !== 'tinybird') {
+        throw json({ error: 'selfhost migrate only supports Tinybird backends' }, { status: 400 })
+      }
+      if (!existing.tinybirdEndpoint || !existing.tinybirdAdminToken) {
+        throw json({ error: 'missing Tinybird endpoint or admin token for this org' }, { status: 400 })
+      }
+
+      const client = new TinybirdClient({
+        baseUrl: existing.tinybirdEndpoint,
+        token: existing.tinybirdAdminToken,
+      })
+
+      const deployment = await deployTinybirdResources({
+        client,
+        datasources: [...bundledTinybirdResources.datasources],
+        pipes: [...bundledTinybirdResources.pipes],
+      })
+      if (deployment instanceof Error) {
+        throw json({ error: deployment.message }, { status: 502 })
+      }
+
+      const readToken = await getDeploymentManagedReadToken(client)
+      if (readToken instanceof Error) {
+        throw json({ error: readToken.message }, { status: 502 })
+      }
+
+      const updatedAt = Date.now()
+      await db.batch([
+        db.update(schema.database)
+          .set({
+            tinybirdReadToken: readToken.token,
+            updatedAt,
+          })
+          .where(orm.eq(schema.database.id, existing.id)),
+        db.update(schema.project)
+          .set({ tinybirdJwt: null, tinybirdJwtDatasources: null, updatedAt })
+          .where(orm.eq(schema.project.orgId, params.orgId)),
+      ])
+
+      return {
+        ok: true,
+        result: deployment.result,
+        backend: existing.backend,
+        tinybirdEndpoint: existing.tinybirdEndpoint,
+      }
+    },
   })
 
   // ── API: Create project ───────────────────────────────────────

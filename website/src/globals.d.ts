@@ -4,3 +4,13 @@ declare module '*.css' {
   const content: string
   export default content
 }
+
+declare module '*.datasource?raw' {
+  const content: string
+  export default content
+}
+
+declare module '*.pipe?raw' {
+  const content: string
+  export default content
+}

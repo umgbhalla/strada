@@ -395,12 +395,11 @@ function parseTokensListResponse({ value }: { value: unknown }) {
     const tokenRecord = expectObject({ value: item, operation: "list tokens token item" })
     if (tokenRecord instanceof Error) return tokenRecord
 
-    const token = expectString({ record: tokenRecord, key: "token", operation: "list tokens token.token" })
-    if (token instanceof Error) return token
     const name = expectString({ record: tokenRecord, key: "name", operation: "list tokens token.name" })
     if (name instanceof Error) return name
     const scopes = parseScopes({ record: tokenRecord, key: "scopes", operation: "list tokens token.scopes" })
     if (scopes instanceof Error) return scopes
+    const token = optionalString({ record: tokenRecord, key: "token" }) || ''
 
     tokens.push({
       token,

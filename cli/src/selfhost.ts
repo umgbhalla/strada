@@ -1,6 +1,6 @@
-// Self-hosted Tinybird setup command.
-// Requires `strada login` first. After deploying Tinybird resources,
-// saves the tokens to the Strada database via the website API.
+// Self-hosted Tinybird commands.
+// `strada selfhost` bootstraps a workspace and saves its config.
+// `strada selfhost migrate` updates the saved workspace to the latest schema.
 
 import * as clack from "@clack/prompts";
 import { goke } from "goke";
@@ -62,10 +62,12 @@ selfhostCli
     dedent`
       Update the Tinybird schema for the current organization's saved self-hosted workspace.
 
-      Requires \
-
-      `,
+      Requires \`strada login\` first. Uses the Tinybird workspace already saved
+      in Strada for the current org. This is for updating an existing Strada
+      Tinybird workspace to the latest schema, not for first-time setup.
+    `,
   )
+  .example("strada selfhost migrate")
   .action(async (_options, context) => selfhostMigrateAction(context));
 
 export async function selfhostAction(
@@ -160,14 +162,14 @@ export async function selfhostAction(
   spinner.message(`Found ${resources.datasources.length} datasources, ${resources.pipes.length} pipes`);
   spinner.message("Deploying to Tinybird...");
 
-  const deployment = await deployResources({ client, datasources: resources.datasources, pipes: resources.pipes });
+  const deployment = await deployTinybirdResources({ client, datasources: resources.datasources, pipes: resources.pipes });
   if (deployment instanceof Error) {
     spinner.stop("Deployment failed");
     clack.log.error(deployment.message);
     return proc.exit(1);
   }
 
-  spinner.stop("Deployed successfully");
+  spinner.stop(deployment.result === "no_changes" ? "No schema changes to deploy" : "Deployed successfully");
 
   const tokenSpinner = clack.spinner();
   tokenSpinner.start("Creating tokens...");
@@ -219,6 +221,52 @@ export async function selfhostAction(
   output.log(bold("Next steps:"));
   output.log(`  1. Create a project: ${cyan("strada projects create my-app")}`);
   output.log(`  2. Configure your SDK with the project's ingest endpoint`);
+  output.log("");
+
+  clack.outro("Done");
+}
+
+export async function selfhostMigrateAction(
+  { console: output, process: proc }: GokeExecutionContext,
+) {
+  clack.intro(bold("Strada — Self-hosted Tinybird schema migration"));
+
+  try {
+    requireAuth();
+  } catch (e) {
+    clack.log.error((e as Error).message);
+    return proc.exit(1);
+  }
+
+  const org = await ensureDefaultOrg().catch((error) => error as Error);
+  if (org instanceof Error) {
+    clack.log.error(org.message);
+    return proc.exit(1);
+  }
+  clack.log.info(`Using organization: ${cyan(org.name)}`);
+
+  const spinner = clack.spinner();
+  spinner.start("Migrating Tinybird schema...");
+
+  const { safeFetch } = getApiClient();
+  const result = await safeFetch("/api/orgs/:orgId/database/migrate", {
+    method: "POST",
+    params: { orgId: org.id },
+  });
+
+  if (result instanceof Error) {
+    spinner.stop("Migration failed");
+    clack.log.error(result.message);
+    return proc.exit(1);
+  }
+
+  spinner.stop(result.result === "no_changes" ? "Schema already up to date" : "Schema migrated");
+
+  output.log("");
+  output.log(bold("Migration summary:"));
+  output.log(`  Result: ${cyan(result.result)}`);
+  output.log(`  Backend: ${cyan(result.backend)}`);
+  output.log(`  Endpoint: ${cyan(result.tinybirdEndpoint)}`);
   output.log("");
 
   clack.outro("Done");
