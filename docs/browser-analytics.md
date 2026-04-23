@@ -572,22 +572,31 @@ ORDER BY day
 
 ### Bounce rate + avg session duration over time
 
+`LatestHit` and `FirstHit` are `SimpleAggregateFunction(max/min, DateTime64(9))` columns. ClickHouse can't subtract SAF types directly. Convert to milliseconds first via `toUnixTimestamp64Milli`, then diff and divide.
+
 ```sql
 WITH
   toDate({date_from:String}) AS current_start,
   toDate({date_to:String}) AS current_end
 SELECT
-  Date AS day,
-  uniq(SessionId) AS sessions,
-  countMerge(Hits) AS total_pageviews,
-  sumIf(1, LatestHit = FirstHit) / uniq(SessionId) AS bounce_rate,
-  avg(LatestHit - FirstHit) AS avg_session_duration_sec
-FROM otel_analytics_sessions
-WHERE
-  ServiceName = {service:String}
-  AND Domain = {domain:String}
-  AND Date >= current_start
-  AND Date <= current_end
+  day,
+  count() AS sessions,
+  sumIf(1, latest_ms = first_ms) / greatest(count(), 1) AS bounce_rate,
+  avg(latest_ms - first_ms) / 1000 AS avg_session_duration_sec
+FROM (
+  SELECT
+    Date AS day,
+    SessionId,
+    toUnixTimestamp64Milli(max(LatestHit)) AS latest_ms,
+    toUnixTimestamp64Milli(min(FirstHit)) AS first_ms
+  FROM otel_analytics_sessions
+  WHERE
+    ServiceName = {service:String}
+    AND Domain = {domain:String}
+    AND Date >= current_start
+    AND Date <= current_end
+  GROUP BY day, SessionId
+)
 GROUP BY day
 ORDER BY day
 ```
@@ -613,19 +622,27 @@ WHERE
 
 ```sql
 -- Session-based KPIs (bounce rate, avg duration)
+-- Must convert SimpleAggregateFunction columns to millis before subtraction.
 WITH
   toDate({date_from:String}) AS current_start,
   toDate({date_to:String}) AS current_end
 SELECT
-  uniq(SessionId) AS total_sessions,
-  sumIf(1, LatestHit = FirstHit) / uniq(SessionId) AS bounce_rate,
-  avg(LatestHit - FirstHit) AS avg_session_duration_sec
-FROM otel_analytics_sessions
-WHERE
-  ServiceName = {service:String}
-  AND Domain = {domain:String}
-  AND Date >= current_start
-  AND Date <= current_end
+  count() AS total_sessions,
+  sumIf(1, latest_ms = first_ms) / greatest(count(), 1) AS bounce_rate,
+  avg(latest_ms - first_ms) / 1000 AS avg_session_duration_sec
+FROM (
+  SELECT
+    SessionId,
+    toUnixTimestamp64Milli(max(LatestHit)) AS latest_ms,
+    toUnixTimestamp64Milli(min(FirstHit)) AS first_ms
+  FROM otel_analytics_sessions
+  WHERE
+    ServiceName = {service:String}
+    AND Domain = {domain:String}
+    AND Date >= current_start
+    AND Date <= current_end
+  GROUP BY SessionId
+)
 ```
 
 ### Top pages

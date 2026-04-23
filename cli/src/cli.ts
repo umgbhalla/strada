@@ -6,6 +6,7 @@ import { selfhostCli } from "./selfhost.ts";
 import { loginCli } from "./login.ts";
 import { projectsCli } from "./projects.ts";
 import { errorsCli } from "./errors.ts";
+import { analyticsCli } from "./analytics.ts";
 import { queryCli } from "./query.ts";
 
 export const cli = goke("strada")
@@ -13,6 +14,7 @@ export const cli = goke("strada")
   .use(loginCli)
   .use(projectsCli)
   .use(errorsCli)
+  .use(analyticsCli)
   .use(queryCli);
 
 cli.help();
