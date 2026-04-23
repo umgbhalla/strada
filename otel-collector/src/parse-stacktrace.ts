@@ -324,7 +324,9 @@ export function isInAppFrame(filename: string | undefined, language: Language = 
   }
 
   if (language === "python") {
-    if (filename.includes("/lib/python")) return false;
+    // Match real Python stdlib paths like /usr/lib/python3.11/, /usr/local/lib/python3.11/,
+    // /opt/homebrew/.../lib/python3.11/ but NOT app paths like /app/lib/python_utils/
+    if (/\/(?:usr\/(?:local\/)?|opt\/homebrew\/.*\/)?lib\/python\d+(?:\.\d+)?\//.test(filename)) return false;
     if (filename.includes(".venv/")) return false;
     if (filename.includes("/virtualenvs/")) return false;
   }

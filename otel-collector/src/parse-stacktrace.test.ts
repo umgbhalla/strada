@@ -260,6 +260,11 @@ describe("isInAppFrame", () => {
     it("includes app Python files", () => {
       expect(isInAppFrame("/app/src/main.py", "python")).toBe(true);
     });
+
+    it("does not false-positive on app paths containing lib/python", () => {
+      expect(isInAppFrame("/app/lib/python_utils/main.py", "python")).toBe(true);
+      expect(isInAppFrame("/app/lib/python/helpers.py", "python")).toBe(true);
+    });
   });
 
   describe("Go-specific exclusions", () => {
