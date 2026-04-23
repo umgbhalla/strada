@@ -287,7 +287,8 @@ function buildErrorRow(params: BuildErrorRowParams): OtelErrorRow {
     fingerprint = computeDefaultFingerprint(exceptionType, exceptionMessage, structuredFrames);
   }
 
-  const fingerprintHash = hashFingerprint(fingerprint);
+  // Prefix projectId so the same fingerprint in different projects hashes differently
+  const fingerprintHash = hashFingerprint([projectId, ...fingerprint]);
 
   // Level: use custom attribute or derive from severity
   const level = attrs["exception.level"] || severityText?.toLowerCase() || "error";

@@ -99,6 +99,43 @@ describe("hashFingerprint", () => {
   });
 });
 
+describe("project-scoped fingerprint_hash", () => {
+  it("same fingerprint in different projects produces different hashes", () => {
+    const makeInput = (): ExportLogsServiceRequest => ({
+      resourceLogs: [
+        {
+          scopeLogs: [
+            {
+              logRecords: [
+                {
+                  timeUnixNano: "1000000000",
+                  attributes: [
+                    { key: "exception.type", value: { stringValue: "DbError" } },
+                    { key: "exception.message", value: { stringValue: "connection timeout" } },
+                    { key: "exception.fingerprint", value: { stringValue: '["db-timeout"]' } },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+
+    const row1 = JSON.parse(extractErrorsFromLogs(makeInput(), "project-aaa").trim());
+    const row2 = JSON.parse(extractErrorsFromLogs(makeInput(), "project-bbb").trim());
+
+    // stored fingerprint is identical (user-facing, no project prefix)
+    expect(row1.fingerprint).toEqual(["db-timeout"]);
+    expect(row2.fingerprint).toEqual(["db-timeout"]);
+
+    // but the hash differs because projectId is prefixed before hashing
+    expect(row1.fingerprint_hash).not.toBe(row2.fingerprint_hash);
+    expect(row1.fingerprint_hash).toMatch(/^[0-9a-f]{32}$/);
+    expect(row2.fingerprint_hash).toMatch(/^[0-9a-f]{32}$/);
+  });
+});
+
 describe("extractErrorsFromLogs", () => {
   it("returns empty string when no exceptions in logs", () => {
     const input: ExportLogsServiceRequest = {
