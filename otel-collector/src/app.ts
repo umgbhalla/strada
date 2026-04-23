@@ -16,6 +16,44 @@ import type {
   ExportMetricsServiceRequest,
 } from "./otlp-types.ts";
 
+async function parseOtlpRequest<T>(request: Request): Promise<T> {
+  const contentEncoding = request.headers.get("content-encoding");
+  if (!contentEncoding || contentEncoding.toLowerCase() === "identity") {
+    return (await request.json()) as T;
+  }
+
+  // Cloudflare Workers destinations send OTLP payloads with gzip compression.
+  // Decode here so the collector accepts the real export shape instead of only
+  // local SDK traffic, which often arrives uncompressed.
+  let stream = request.body;
+  if (!stream) {
+    throw new Response(JSON.stringify({ error: "missing request body" }), {
+      status: 400,
+      headers: { "content-type": "application/json" },
+    });
+  }
+
+  const encodings = contentEncoding.split(",").map((part) => part.trim().toLowerCase()).filter(Boolean).reverse();
+  for (const encoding of encodings) {
+    if (encoding === "gzip" || encoding === "x-gzip") {
+      stream = stream.pipeThrough(new DecompressionStream("gzip"));
+      continue;
+    }
+    if (encoding === "deflate") {
+      stream = stream.pipeThrough(new DecompressionStream("deflate"));
+      continue;
+    }
+
+    throw new Response(JSON.stringify({ error: `unsupported content-encoding: ${encoding}` }), {
+      status: 415,
+      headers: { "content-type": "application/json" },
+    });
+  }
+
+  const text = await new Response(stream).text();
+  return JSON.parse(text) as T;
+}
+
 async function resolveOrFail({
   db,
   projectId,
@@ -53,7 +91,7 @@ export function createCollectorApp({ db }: { db: D1Database }) {
       const projectId = getProjectId(request);
       const config = await resolveOrFail({ db, projectId });
 
-      const body = (await request.json()) as ExportTraceServiceRequest;
+      const body = await parseOtlpRequest<ExportTraceServiceRequest>(request);
       const backend = createBackend(config);
       const country = request.headers.get("cf-ipcountry") ?? undefined;
       const userAgent = request.headers.get("user-agent") ?? undefined;
@@ -74,7 +112,7 @@ export function createCollectorApp({ db }: { db: D1Database }) {
       const projectId = getProjectId(request);
       const config = await resolveOrFail({ db, projectId });
 
-      const body = (await request.json()) as ExportLogsServiceRequest;
+      const body = await parseOtlpRequest<ExportLogsServiceRequest>(request);
       const backend = createBackend(config);
 
       const ndjson = transformLogs(body, projectId);
@@ -93,7 +131,7 @@ export function createCollectorApp({ db }: { db: D1Database }) {
       const projectId = getProjectId(request);
       const config = await resolveOrFail({ db, projectId });
 
-      const body = (await request.json()) as ExportMetricsServiceRequest;
+      const body = await parseOtlpRequest<ExportMetricsServiceRequest>(request);
       const backend = createBackend(config);
       const payloads = transformMetrics(body, projectId, {
         gauge: datasources.gauge,

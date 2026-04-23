@@ -1,0 +1,17 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "strada-example-app-cloudflare",
+  "compatibility_date": "2026-04-14",
+  "compatibility_flags": ["nodejs_compat"],
+  "main": "spiceflow/cloudflare-entrypoint",
+  "observability": {
+    "traces": {
+      "enabled": true,
+      "destinations": ["strada-example-app-cloudflare-traces"]
+    },
+    "logs": {
+      "enabled": true,
+      "destinations": ["strada-example-app-cloudflare"]
+    }
+  }
+}

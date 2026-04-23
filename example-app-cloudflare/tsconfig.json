@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "composite": true,
+    "declaration": true,
+    "declarationMap": true,
+    "emitDeclarationOnly": true,
+    "outDir": "dist",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "target": "ESNext",
+    "lib": ["ESNext", "DOM"],
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "useUnknownInCatchVariables": false,
+    "skipLibCheck": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "moduleDetection": "force",
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true,
+    "types": []
+  },
+  "include": ["src", "worker-configuration.d.ts"]
+}

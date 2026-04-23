@@ -8,6 +8,7 @@ import {
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
+import { gzipSync } from 'node:zlib'
 import { describe, expect, it } from 'vitest'
 import { SpanStatusCode } from '@opentelemetry/api'
 import { SeverityNumber } from '@opentelemetry/api-logs'
@@ -706,4 +707,162 @@ describe.sequential('collector integration with official OTel SDKs', () => {
       process.env.CLICKHOUSE_PASSWORD = originalEnv.CLICKHOUSE_PASSWORD
     }
   }, 20_000)
+
+  it('accepts gzip-compressed OTLP traces and logs like Cloudflare destinations', async () => {
+    const projectId = 'TEST-PROJECT'
+    const inserts: CapturedInsert[] = []
+
+    const fakeBackend = await startServer(
+      parsePortFromEnv('OTEL_COLLECTOR_FAKE_BACKEND_PORT'),
+      async (req, res) => {
+        const body = await readBody(req)
+        const base = `http://${req.headers.host ?? '127.0.0.1'}`
+        const url = new URL(req.url ?? '/', base)
+        const query = url.searchParams.get('query') ?? ''
+        const rows = body
+          .split('\n')
+          .filter((line) => line.trim().length > 0)
+          .map((line) => JSON.parse(line) as Record<string, unknown>)
+
+        inserts.push({
+          query,
+          table: extractTable(query),
+          rows,
+        })
+
+        res.statusCode = 200
+        res.end('OK')
+      },
+    )
+
+    const originalEnv = {
+      TINYBIRD_ENDPOINT: process.env.TINYBIRD_ENDPOINT,
+      TINYBIRD_TOKEN: process.env.TINYBIRD_TOKEN,
+      CLICKHOUSE_URL: process.env.CLICKHOUSE_URL,
+      CLICKHOUSE_DATABASE: process.env.CLICKHOUSE_DATABASE,
+      CLICKHOUSE_USER: process.env.CLICKHOUSE_USER,
+      CLICKHOUSE_PASSWORD: process.env.CLICKHOUSE_PASSWORD,
+    }
+
+    try {
+      delete process.env.TINYBIRD_ENDPOINT
+      delete process.env.TINYBIRD_TOKEN
+      process.env.CLICKHOUSE_URL = fakeBackend.baseUrl
+      process.env.CLICKHOUSE_DATABASE = 'default'
+      process.env.CLICKHOUSE_USER = 'default'
+      process.env.CLICKHOUSE_PASSWORD = ''
+
+      const app = createCollectorApp({
+        db: createFakeD1({ projectId, clickhouseUrl: fakeBackend.baseUrl }),
+      })
+
+      const tracePayload = {
+        resourceSpans: [
+          {
+            resource: {
+              attributes: [
+                { key: 'service.name', value: { stringValue: 'cloudflare-example' } },
+                { key: 'cloud.platform', value: { stringValue: 'cloudflare.workers' } },
+              ],
+            },
+            scopeSpans: [
+              {
+                spans: [
+                  {
+                    traceId: '0123456789abcdef0123456789abcdef',
+                    spanId: '0123456789abcdef',
+                    parentSpanId: '',
+                    name: 'fetch',
+                    startTimeUnixNano: '1713890000000000000',
+                    endTimeUnixNano: '1713890000100000000',
+                    status: { code: 2, message: 'Worker threw a JavaScript exception' },
+                    attributes: [
+                      { key: 'cloudflare.outcome', value: { stringValue: 'exception' } },
+                      { key: 'cloudflare.handler_type', value: { stringValue: 'fetch' } },
+                      { key: 'url.path', value: { stringValue: '/throw' } },
+                    ],
+                    events: [],
+                    links: [],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      }
+
+      const logPayload = {
+        resourceLogs: [
+          {
+            resource: {
+              attributes: [
+                { key: 'service.name', value: { stringValue: 'cloudflare-example' } },
+                { key: 'cloud.platform', value: { stringValue: 'cloudflare.workers' } },
+              ],
+            },
+            scopeLogs: [
+              {
+                logRecords: [
+                  {
+                    timeUnixNano: '1713890000100000000',
+                    severityText: 'ERROR',
+                    body: { stringValue: 'Worker threw a JavaScript exception' },
+                    traceId: '0123456789abcdef0123456789abcdef',
+                    spanId: '0123456789abcdef',
+                    attributes: [
+                      { key: '$workers.outcome', value: { stringValue: 'exception' } },
+                      { key: '$metadata.error', value: { stringValue: 'Worker threw a JavaScript exception' } },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      }
+
+      const traceResponse = await app.handle(new Request(`https://${projectId.toLowerCase()}-ingest.strada.sh/v1/traces`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'content-encoding': 'gzip',
+          'cf-ipcountry': 'US',
+          'user-agent': 'Go-http-client/2.0',
+        },
+        body: gzipSync(JSON.stringify(tracePayload)),
+      }))
+
+      const logResponse = await app.handle(new Request(`https://${projectId.toLowerCase()}-ingest.strada.sh/v1/logs`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'content-encoding': 'gzip',
+        },
+        body: gzipSync(JSON.stringify(logPayload)),
+      }))
+
+      expect(traceResponse.status).toBe(200)
+      expect(logResponse.status).toBe(200)
+
+      await waitFor(() => inserts.some((insert) => insert.table === 'otel_traces'), 8_000)
+      await waitFor(() => inserts.some((insert) => insert.table === 'otel_logs'), 8_000)
+      await waitFor(() => inserts.filter((insert) => insert.table === 'otel_errors').flatMap((insert) => insert.rows).length === 2, 8_000)
+
+      const traceRows = inserts.find((insert) => insert.table === 'otel_traces')?.rows ?? []
+      const logRows = inserts.find((insert) => insert.table === 'otel_logs')?.rows ?? []
+      const errorRows = inserts.filter((insert) => insert.table === 'otel_errors').flatMap((insert) => insert.rows)
+
+      expect(traceRows).toHaveLength(1)
+      expect(logRows).toHaveLength(1)
+      expect(errorRows).toHaveLength(2)
+    } finally {
+      process.env.TINYBIRD_ENDPOINT = originalEnv.TINYBIRD_ENDPOINT
+      process.env.TINYBIRD_TOKEN = originalEnv.TINYBIRD_TOKEN
+      process.env.CLICKHOUSE_URL = originalEnv.CLICKHOUSE_URL
+      process.env.CLICKHOUSE_DATABASE = originalEnv.CLICKHOUSE_DATABASE
+      process.env.CLICKHOUSE_USER = originalEnv.CLICKHOUSE_USER
+      process.env.CLICKHOUSE_PASSWORD = originalEnv.CLICKHOUSE_PASSWORD
+      await closeServer(fakeBackend.server)
+    }
+  })
 })
