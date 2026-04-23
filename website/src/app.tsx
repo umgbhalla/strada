@@ -54,7 +54,7 @@ const queryProjectRequestSchema = z.object({ sql: z.string().min(1) })
 const deviceUserCodeSchema = z.object({ userCode: z.string().min(1) })
 
 /** ClickHouse FORMAT JSON response shape, shared by Tinybird and direct ClickHouse. */
-interface QueryResponse {
+export interface QueryResponse {
   data: Record<string, unknown>[]
   rows: number
   meta?: { name: string; type: string }[]
@@ -380,11 +380,10 @@ export const app = new Spiceflow()
       where: { userId: session.userId },
       with: { org: true },
     })
-    return {
-      orgs: members.filter((m) => m.org != null).map((m) => ({
-        id: m.org!.id, name: m.org!.name, role: m.role,
-      })),
-    }
+    const orgs = members.flatMap((m) =>
+      m.org ? [{ id: m.org.id, name: m.org.name, role: m.role }] : [],
+    )
+    return { orgs }
   })
 
   // ── API: Configure database ───────────────────────────────────
@@ -489,14 +488,16 @@ export const app = new Spiceflow()
         throw json({ error: 'configure database first' }, { status: 400 })
       }
 
-      const [proj] = await db.insert(schema.project)
+      const rows = await db.insert(schema.project)
         .values({ slug: body.slug, orgId: params.orgId, databaseId: dbRow.id })
         .returning()
+      const proj = rows[0]
+      if (!proj) throw json({ error: 'insert failed' }, { status: 500 })
 
       return {
-        id: proj!.id,
-        slug: proj!.slug,
-        ingestEndpoint: `https://${proj!.id}-ingest.strada.sh`,
+        id: proj.id,
+        slug: proj.slug,
+        ingestEndpoint: `https://${proj.id}-ingest.strada.sh`,
       }
     },
   })
@@ -610,10 +611,10 @@ export const app = new Spiceflow()
         where: { id: params.id },
         with: { project: true },
       })
-      if (!token) {
+      if (!token?.project) {
         throw json({ error: 'token not found' }, { status: 404 })
       }
-      await requireOrgMember(session.userId, token.project!.orgId)
+      await requireOrgMember(session.userId, token.project.orgId)
       await db.delete(schema.projectToken).where(orm.eq(schema.projectToken.id, params.id))
       return { ok: true }
     },

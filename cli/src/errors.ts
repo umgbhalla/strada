@@ -12,7 +12,7 @@ import { parseDuration } from "./parse-duration.ts";
 export const errorsCli = goke();
 
 /** Run a SQL query against a project. Shared by all errors subcommands. */
-export async function queryProject(projectId: string, sql: string) {
+async function queryProject(projectId: string, sql: string) {
   const { safeFetch } = getApiClient();
   const res = await safeFetch("/api/projects/:projectId/query", {
     method: "POST",
