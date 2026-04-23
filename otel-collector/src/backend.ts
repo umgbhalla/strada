@@ -58,6 +58,23 @@ export class TinybirdBackend implements Backend {
 
     if (!response.ok) {
       logBackendError({ backend: "Tinybird", table, response });
+      return;
+    }
+
+    const responseBody = await response.json().catch(() => null) as null | {
+      successful_rows?: number;
+      quarantined_rows?: number;
+      error?: string;
+    };
+
+    if (!responseBody) {
+      return;
+    }
+
+    if ((responseBody.quarantined_rows || 0) > 0 || (responseBody.successful_rows || 0) === 0) {
+      console.error(
+        `Tinybird ingest warning for table "${table}": ${JSON.stringify(responseBody)}`,
+      );
     }
   }
 }
