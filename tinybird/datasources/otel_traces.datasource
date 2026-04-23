@@ -11,6 +11,7 @@ SCHEMA >
     `SpanId` String `json:$.span_id` CODEC(ZSTD(1)),
     `ParentSpanId` String `json:$.parent_span_id` CODEC(ZSTD(1)),
     `TraceState` String `json:$.trace_state` CODEC(ZSTD(1)),
+    `TraceFlags` UInt8 `json:$.trace_flags` CODEC(ZSTD(1)),
     `SpanName` LowCardinality(String) `json:$.span_name` CODEC(ZSTD(1)),
     `SpanKind` LowCardinality(String) `json:$.span_kind` CODEC(ZSTD(1)),
     `ServiceName` LowCardinality(String) `json:$.service_name` CODEC(ZSTD(1)),
