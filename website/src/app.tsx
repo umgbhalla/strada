@@ -53,6 +53,11 @@ const createProjectTokenRequestSchema = z.object({
 const queryProjectRequestSchema = z.object({ sql: z.string().min(1) })
 const deviceUserCodeSchema = z.object({ userCode: z.string().min(1) })
 
+function ensureJsonFormat(sql: string) {
+  const normalized = sql.trim().replace(/;+\s*$/, '').trimEnd()
+  return /\bFORMAT\s+\w+\s*$/i.test(normalized) ? normalized : `${normalized} FORMAT JSON`
+}
+
 function safeRedirectPath(value: string | undefined) {
   if (!value || !value.startsWith('/') || value.startsWith('//')) return '/'
   return value
@@ -422,6 +427,13 @@ export const app = new Spiceflow()
           .where(orm.eq(schema.database.id, existing.id))
       }
 
+      // Invalidate cached project JWTs when database config changes.
+      // JWTs are signed with the admin token, so changing the token,
+      // endpoint, or backend makes all existing JWTs invalid.
+      await db.update(schema.project)
+        .set({ tinybirdJwt: null, tinybirdJwtDatasources: null, updatedAt: Date.now() })
+        .where(orm.eq(schema.project.orgId, params.orgId))
+
       return { ok: true }
     },
   })
@@ -643,29 +655,39 @@ export const app = new Spiceflow()
         if (!dbConfig.tinybirdEndpoint || !dbConfig.tinybirdAdminToken) {
           throw json({ error: 'tinybird not configured' }, { status: 400 })
         }
-        // Get or create a per-project JWT with DATASOURCES:READ scopes filtered
-        // to this project's ProjectId. Tinybird enforces the filter server-side,
-        // so SQL queries never need WHERE ProjectId = '...'.
-        const jwt = await getOrCreateProjectJwt({
+        const sql = ensureJsonFormat(body.sql)
+        const url = `${dbConfig.tinybirdEndpoint}/v0/sql`
+
+        async function queryWithJwt(jwt: string) {
+          return fetch(url, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${jwt}`,
+            },
+            body: JSON.stringify({ q: sql }),
+          })
+        }
+
+        const jwtCtx = {
           projectId: params.projectId,
-          tinybirdEndpoint: dbConfig.tinybirdEndpoint,
-          tinybirdAdminToken: dbConfig.tinybirdAdminToken,
+          tinybirdEndpoint: dbConfig.tinybirdEndpoint!,
+          tinybirdAdminToken: dbConfig.tinybirdAdminToken!,
           tinybirdJwt: proj.tinybirdJwt,
           tinybirdJwtDatasources: proj.tinybirdJwtDatasources,
-        })
-        const sql = body.sql.includes('FORMAT ') ? body.sql : `${body.sql} FORMAT JSON`
-        const url = `${dbConfig.tinybirdEndpoint}/v0/sql`
-        const res = await fetch(url, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${jwt}`,
-          },
-          body: JSON.stringify({ q: sql }),
-        })
+        }
+
+        let jwt = await getOrCreateProjectJwt(jwtCtx)
+        let res = await queryWithJwt(jwt)
+
+        // If 403, the JWT may be stale (admin token rotated, workspace changed).
+        // Force-regenerate once and retry before giving up.
+        if (res.status === 403) {
+          jwt = await getOrCreateProjectJwt({ ...jwtCtx, tinybirdJwt: null, tinybirdJwtDatasources: null })
+          res = await queryWithJwt(jwt)
+        }
+
         if (!res.ok) {
-          // Forward Tinybird error as-is so clients get readable messages
-          // (e.g. "mutation not allowed" when using a read-only token)
           const text = redact(await res.text())
           let parsed: unknown
           try { parsed = JSON.parse(text) } catch { parsed = null }
@@ -678,7 +700,7 @@ export const app = new Spiceflow()
         if (!dbConfig.clickhouseUrl) {
           throw json({ error: 'clickhouse not configured' }, { status: 400 })
         }
-        const endpoint = `${dbConfig.clickhouseUrl}/?database=${encodeURIComponent(dbConfig.clickhouseDatabase || 'default')}&query=${encodeURIComponent(body.sql + ' FORMAT JSON')}`
+        const endpoint = `${dbConfig.clickhouseUrl}/?database=${encodeURIComponent(dbConfig.clickhouseDatabase || 'default')}&query=${encodeURIComponent(ensureJsonFormat(body.sql))}`
         const res = await fetch(endpoint, {
           headers: {
             'X-ClickHouse-User': dbConfig.clickhouseUser || 'default',
