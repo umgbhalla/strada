@@ -264,6 +264,49 @@ app.use(async (req, res, next) => {
 
 That makes `user.id` show up in both **server spans** and **server logs** for the current request.
 
+## Browser pageview tracking
+
+The browser SDK automatically tracks pageviews as OTel **spans** in `otel_traces`. No setup needed beyond `initStrada()`.
+
+```ts
+import { initStrada } from "@strada.sh/sdk"
+
+initStrada({
+  projectId: "01JTHG5M7XPQR8KNCZ0W4D",
+  service: "frontend",
+})
+// A pageview span starts immediately. Auto-instrumented fetch/XHR
+// spans become children of it. Everything is sent to otel_traces.
+```
+
+**How it works:**
+
+- On `initStrada()`, a span named `"pageview"` starts for the current URL
+- Every span gets `session.id`, `url.path`, `url.query`, `url.full`, `user.id` injected automatically
+- Auto-instrumented `fetch` and `XHR` spans are parented to the active pageview span
+- On SPA navigation (detected via the Navigation API), the old span ends and a new one starts
+- On tab close (`visibilitychange: hidden`), the current span ends and flushes
+
+**The pageview span shape:**
+
+```json
+{
+  "name": "pageview",
+  "attributes": {
+    "session.id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+    "url.path": "/pricing",
+    "url.query": "?plan=pro",
+    "url.full": "https://app.example.com/pricing",
+    "http.request.header.referer": "https://google.com",
+    "user.id": "user_123"
+  }
+}
+```
+
+SPA navigation is auto-detected across all frameworks (Next.js, React Router, Vue Router, SvelteKit) via the [Navigation API](https://developer.mozilla.org/en-US/docs/Web/API/Navigation_API). Each navigation ends the current pageview and starts a new one with `navigation.type` (`"push"`, `"replace"`, `"traverse"`) and `navigation.user_initiated` attributes.
+
+Two **materialized views** in ClickHouse/Tinybird pre-aggregate pageview spans at ingest time into compact tables (`otel_analytics_pages`, `otel_analytics_sessions`) for fast dashboard queries (top pages, browsers, countries, bounce rate, session duration). See `docs/browser-analytics.md` for the full schema and queries.
+
 ## Browser custom events
 
 In the browser runtime, Strada also exposes `track()` for product analytics style events.
@@ -283,6 +326,17 @@ track("signup_started", {
 ```
 
 These events are emitted as **log records**, not spans. Later you can query them from `otel_logs` using `event.name`.
+
+Custom properties are automatically prefixed with `custom.` so they don't collide with standard OTel attributes:
+
+```ts
+track("purchase", {
+  plan: "pro",     // stored as custom.plan
+  amount: 49,      // stored as custom.amount
+})
+```
+
+The log record is automatically correlated to the active pageview span via `TraceId`/`SpanId`. Context attributes (`session.id`, `url.path`, `user.id`) are injected automatically. You only pass event-specific properties.
 
 ## What it sends
 

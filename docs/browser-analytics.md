@@ -274,7 +274,7 @@ Each navigation span carries two extra attributes:
 If you need to manually trigger a pageview cycle (e.g. for custom routing logic not using the History API), the lower-level API is still available:
 
 ```typescript
-import { startPageSpan, endCurrentPageSpan } from '@strada.sh/sdk/browser'
+import { startPageSpan, endCurrentPageSpan } from '@strada.sh/sdk'
 
 // on route change
 endCurrentPageSpan()
@@ -286,13 +286,18 @@ startPageSpan(newPath)
 ## Custom events API
 
 ```typescript
-import { strada } from '@strada/browser'
+import { initStrada, track } from '@strada.sh/sdk'
+
+initStrada({
+  projectId: '01JTHG5M7XPQR8KNCZ0W4D',
+  service: 'frontend',
+})
 
 // Simple event
-strada.track('button_click')
+track('button_click')
 
 // Event with properties
-strada.track('form_submit', {
+track('form_submit', {
   form: 'signup',
   plan: 'pro',
   variant: 'hero-cta',
@@ -302,7 +307,7 @@ strada.track('form_submit', {
 document.cookie = `strada_uid=${encodeURIComponent('user_123')}; Path=/; SameSite=Lax; Secure`
 
 // Later events automatically include user.id.
-strada.track('billing_opened', {
+track('billing_opened', {
   plan: 'pro',
 })
 ```
@@ -390,16 +395,13 @@ No schema changes needed. The `otel_logs` table already has `TraceId`, `SpanId`,
 ## SDK initialization
 
 ```typescript
-import { initStrada } from '@strada/browser'
+import { initStrada } from '@strada.sh/sdk'
 
 initStrada({
-  endpoint: 'https://acme-ingest.strada.sh',
+  projectId: '01JTHG5M7XPQR8KNCZ0W4D',  // get one with `strada projects create`
   service: 'my-app',
   version: '1.4.2',
-
-  // optional
-  userId: () => window.__user?.id,       // dynamic user ID resolver
-  debug: false,
+  environment: 'production',
 })
 ```
 
@@ -428,7 +430,7 @@ ClickHouse AggregatingMergeTree sorting keys determine which rows merge together
 
 | MV | Powers | Sorting key |
 |---|---|---|
-| `otel_analytics_pages` | Top pages, browsers, devices, countries, languages, referrers, pageview histogram | `ProjectId, ServiceName, Domain, Date, Pathname` |
+| `otel_analytics_pages` | Top pages, browsers, devices, countries, languages, referrers, pageview histogram | `ProjectId, ServiceName, Domain, Date, Device, Browser, Country, Language, Pathname, Referrer` |
 | `otel_analytics_sessions` | Bounce rate, avg session duration, unique visitors, realtime visitors | `ProjectId, ServiceName, Domain, Date, SessionId` |
 
 ### `otel_analytics_pages`
@@ -451,7 +453,7 @@ Visits          AggregateFunction(uniq, String)    -- uniqState(session_id)
 Hits            AggregateFunction(count, UInt64)   -- countState()
 ```
 
-**Sorting key:** `ProjectId, ServiceName, Domain, Date, Device, Browser, Country, Pathname`
+**Sorting key:** `ProjectId, ServiceName, Domain, Date, Device, Browser, Country, Language, Pathname, Referrer`
 
 `Domain` is early in the sorting key because multi-domain projects (e.g. `acme.com` + `docs.acme.com`) always filter by domain first. Extracted from `url.full` using `domainWithoutWWW()` in the MV pipe, so the SDK doesn't need to set it explicitly.
 
