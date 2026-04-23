@@ -6,11 +6,12 @@
   "description": "Strada website and API. Auth, project management, query bridge to Tinybird/ClickHouse.",
   "exports": {
     "./package.json": "./package.json",
-    "./src/*": "./src/*"
+    "./src/*": "./src/*",
+    "./dist/*": "./dist/*"
   },
   "scripts": {
     "dev": "pnpm db:migrate:local && vite dev",
-    "build": "vite build",
+    "build": "tsc -p tsconfig.json && vite build",
     "typecheck": "tsc --noEmit",
     "types": "wrangler types",
     "db:migrate:local": "wrangler d1 migrations apply DB --local",
