@@ -12,7 +12,7 @@ import { parseDuration } from "./parse-duration.ts";
 export const errorsCli = goke();
 
 /** Run a SQL query against a project. Shared by all errors subcommands. */
-async function queryProject(projectId: string, sql: string) {
+export async function queryProject(projectId: string, sql: string) {
   const { safeFetch } = getApiClient();
   const res = await safeFetch("/api/projects/:projectId/query", {
     method: "POST",
@@ -20,8 +20,7 @@ async function queryProject(projectId: string, sql: string) {
     body: { sql },
   });
   if (res instanceof Error) throw res;
-  // Response rows have mixed types: strings for most fields, arrays for groupUniqArray
-  return res as { data?: Record<string, unknown>[]; rows?: number };
+  return res;
 }
 
 /** Safely read a field as string from a query result row */

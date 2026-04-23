@@ -53,6 +53,14 @@ const createProjectTokenRequestSchema = z.object({
 const queryProjectRequestSchema = z.object({ sql: z.string().min(1) })
 const deviceUserCodeSchema = z.object({ userCode: z.string().min(1) })
 
+/** ClickHouse FORMAT JSON response shape, shared by Tinybird and direct ClickHouse. */
+interface QueryResponse {
+  data: Record<string, unknown>[]
+  rows: number
+  meta?: { name: string; type: string }[]
+  statistics?: { elapsed: number; rows_read: number; bytes_read: number }
+}
+
 function ensureJsonFormat(sql: string) {
   const normalized = sql.trim().replace(/;+\s*$/, '').trimEnd()
   return /\bFORMAT\s+\w+\s*$/i.test(normalized) ? normalized : `${normalized} FORMAT JSON`
@@ -693,7 +701,7 @@ export const app = new Spiceflow()
           try { parsed = JSON.parse(text) } catch { parsed = null }
           throw json(parsed ?? { error: text }, { status: res.status })
         }
-        return res.json()
+        return await res.json() as QueryResponse
       }
 
       if (dbConfig.backend === 'clickhouse') {
@@ -714,7 +722,7 @@ export const app = new Spiceflow()
           try { parsed = JSON.parse(text) } catch { parsed = null }
           throw json(parsed ?? { error: text }, { status: res.status })
         }
-        return res.json()
+        return await res.json() as QueryResponse
       }
 
       throw json({ error: 'unknown backend' }, { status: 500 })
