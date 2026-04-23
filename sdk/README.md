@@ -5,17 +5,13 @@
 Import from `@strada.sh/sdk` in every runtime. The package uses export conditions so browsers get the browser runtime, Cloudflare Workers get the Workers runtime, and servers get the Node runtime.
 
 ```ts
-import { initStrada, captureException, trace } from "@strada.sh/sdk"
+import { initStrada, captureException } from "@strada.sh/sdk"
 
 initStrada({
   service: "api",
-  endpoint: "https://my-project-ingest.strada.sh",
+  projectId: "01JTHG5M7XPQR8KNCZ0W4D", // TODO: replace with your project id, get one with `strada projects create`
   environment: "production",
   version: "1.0.0",
-})
-
-process.on("SIGTERM", () => {
-  shutdown().finally(() => process.exit(0))
 })
 
 try {
@@ -35,7 +31,7 @@ After `initStrada()`, the global OTel providers are configured. You can use stan
 import { initStrada, trace, logs, metrics, SeverityNumber } from "@strada.sh/sdk"
 
 initStrada({
-  projectId: "my-project",
+  projectId: "01JTHG5M7XPQR8KNCZ0W4D",
   service: "worker",
 })
 
@@ -63,7 +59,7 @@ Use the standard OTel tracing API after `initStrada()`.
 import { initStrada, trace, SpanStatusCode } from "@strada.sh/sdk"
 
 initStrada({
-  projectId: "my-project",
+  projectId: "01JTHG5M7XPQR8KNCZ0W4D",
   service: "api",
 })
 
@@ -97,7 +93,7 @@ try {
 import { initStrada, trace, context } from "@strada.sh/sdk"
 
 initStrada({
-  projectId: "my-project",
+  projectId: "01JTHG5M7XPQR8KNCZ0W4D",
   service: "api",
 })
 
@@ -130,7 +126,7 @@ Important: **`console.log()` and other console methods are not sent by default**
 import { initStrada, logs, SeverityNumber } from "@strada.sh/sdk"
 
 initStrada({
-  projectId: "my-project",
+  projectId: "01JTHG5M7XPQR8KNCZ0W4D",
   service: "frontend",
 })
 
@@ -153,7 +149,7 @@ logger.emit({
 import { initStrada, logs, SeverityNumber } from "@strada.sh/sdk"
 
 initStrada({
-  projectId: "my-project",
+  projectId: "01JTHG5M7XPQR8KNCZ0W4D",
   service: "api",
 })
 
@@ -184,7 +180,7 @@ For analytics-style events, prefer `track()` in the browser:
 import { initStrada, track } from "@strada.sh/sdk"
 
 initStrada({
-  projectId: "my-project",
+  projectId: "01JTHG5M7XPQR8KNCZ0W4D",
   service: "frontend",
 })
 
@@ -200,7 +196,7 @@ For errors, prefer `captureException()` when you want Strada's error conventions
 import { initStrada, captureException } from "@strada.sh/sdk"
 
 initStrada({
-  projectId: "my-project",
+  projectId: "01JTHG5M7XPQR8KNCZ0W4D",
   service: "api",
 })
 
@@ -220,7 +216,7 @@ The SDK reads the user ID from a **cookie** (`strada_uid` by default). Set this 
 
 ```ts
 initStrada({
-  projectId: "my-project",
+  projectId: "01JTHG5M7XPQR8KNCZ0W4D",
   service: "frontend",
 })
 
@@ -276,7 +272,7 @@ In the browser runtime, Strada also exposes `track()` for product analytics styl
 import { initStrada, track } from "@strada.sh/sdk"
 
 initStrada({
-  projectId: "my-project",
+  projectId: "01JTHG5M7XPQR8KNCZ0W4D",
   service: "frontend",
 })
 
@@ -477,7 +473,7 @@ You can tune batching and cadence with `telemetry` in `initStrada()`:
 
 ```ts
 initStrada({
-  projectId: "my-project",
+  projectId: "01JTHG5M7XPQR8KNCZ0W4D",
   service: "api",
   telemetry: {
     traces: {
@@ -679,7 +675,7 @@ import { registerInstrumentations } from "@opentelemetry/instrumentation"
 import { initStrada } from "@strada.sh/sdk"
 
 initStrada({
-  projectId: "my-project",
+  projectId: "01JTHG5M7XPQR8KNCZ0W4D",
   service: "api",
 })
 
@@ -705,7 +701,7 @@ import { registerInstrumentations } from "@opentelemetry/instrumentation"
 import { initStrada } from "@strada.sh/sdk"
 
 initStrada({
-  projectId: "my-project",
+  projectId: "01JTHG5M7XPQR8KNCZ0W4D",
   service: "frontend",
 })
 
