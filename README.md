@@ -161,9 +161,9 @@ Strada is **100% OpenTelemetry**. The SDK is a thin wrapper around the official 
                      ▼
   Strada SDK ────────────────► thin config wrapper ────────────────► OpenTelemetry SDK
                                                                           │
-                                         TracerProvider ──► LoggerProvider │ MeterProvider
-                                                                          │
-                                                                          │ OTLP HTTP/JSON
+                                    TracerProvider ──► LoggerProvider ──► MeterProvider
+                                                                           │
+                                                                           │ OTLP HTTP/JSON
                                                                           ▼
                                                                    Strada Collector
                                                                    (Cloudflare Worker)
