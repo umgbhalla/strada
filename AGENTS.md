@@ -132,6 +132,10 @@ Project identity comes from the **hostname**: `{projectId}-ingest.strada.sh`. Th
 
 Both the website and otel-collector workers bind to the same D1 database (`strada-db`). The website uses drizzle-orm/d1 for full ORM access. The collector uses raw D1 SQL (no drizzle dependency) for lightweight config resolution.
 
+### IMPORTANT: Never include primary keys in UPDATE SET clauses on D1
+
+When SQLite/D1 sees `UPDATE user SET id = ?, name = ? WHERE id = ?`, it checks all foreign key constraints referencing that `id`, even if the value isn't changing. If the user has 1000 sessions, that's 1000+ extra row reads billed by D1. Always use explicit field lists in `.set({})` and never pass the full object. See the drizzle skill for details.
+
 ### Config resolution in the collector
 
 The collector uses `import { env } from 'cloudflare:workers'` for the D1 binding. On each request it resolves project config with a single SQL JOIN query (`resolve-config.ts`). No env vars for Tinybird/ClickHouse credentials.
