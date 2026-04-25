@@ -15,13 +15,11 @@
     "typecheck": "tsc --noEmit",
     "types": "wrangler types",
     "db:migrate:local": "wrangler d1 migrations apply DB --local",
-    "db:migrate:prod": "wrangler d1 migrations apply DB --remote",
-    "db:migrate:preview": "wrangler d1 migrations apply DB --remote --env preview",
-    "secrets": "sigillo run --env preview --mount .env.preview --mount-format env -- wrangler secret bulk --env preview .env.preview && sigillo run --env prod --mount .env.prod --mount-format env -- wrangler secret bulk --env=\"\" .env.prod",
-    "secrets:preview": "doppler run -p website -c preview --mount .env.preview --mount-format env -- wrangler secret bulk --env preview .env.preview",
-    "secrets:prod": "doppler run -p website -c production --mount .env.prod --mount-format env -- wrangler secret bulk --env=\"\" .env.prod",
-    "deploy": "pnpm db:migrate:preview && CLOUDFLARE_ENV=preview doppler run -p website -c preview -- vite build && wrangler deploy --env preview",
-    "deploy:prod": "pnpm db:migrate:prod && doppler run -p website -c production -- vite build && wrangler deploy"
+    "db:migrate:prod": "echo \"D1 pre-migration timestamp: $(date +%s)\" && wrangler d1 migrations apply DB --remote",
+    "db:migrate:preview": "echo \"D1 pre-migration timestamp: $(date +%s)\" && wrangler d1 migrations apply DB --remote --env preview",
+    "secrets": "sigillo run -c preview --mount .env.preview --mount-format env -- wrangler secret bulk --env preview .env.preview && sigillo run -c prod --mount .env.prod --mount-format env -- wrangler secret bulk --env=\"\" .env.prod",
+    "deploy": "pnpm db:migrate:preview && CLOUDFLARE_ENV=preview sigillo run -c preview -- vite build && wrangler deploy --env preview",
+    "deploy:prod": "pnpm db:migrate:prod && sigillo run -c prod -- vite build && wrangler deploy"
   },
   "dependencies": {
     "@better-auth/drizzle-adapter": "https://pkg.pr.new/better-auth/better-auth/@better-auth/drizzle-adapter@6913",
@@ -34,7 +32,7 @@
     "radix-ui": "latest",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
-    "spiceflow": "1.19.0-rsc.6",
+    "spiceflow": "1.19.0-rsc.3",
     "strada": "workspace:^",
     "string-dedent": "^3.0.2",
     "tailwind-merge": "^3.5.0",
