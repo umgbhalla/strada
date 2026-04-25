@@ -50,6 +50,26 @@ pnpm update -r spiceflow
 
 Do not pass `--latest`; `pnpm update` without it respects the existing version range and resolves to the highest matching version across all packages.
 
+## Deployments
+
+**Always deploy preview first, then production.** Never go straight to production.
+
+```bash
+# 1. Deploy preview (runs migration + build + deploy)
+pnpm --dir website deploy
+pnpm --dir otel-collector deploy
+
+# 2. Verify preview works (load the page, check /api/health, test ingest)
+
+# 3. Deploy production (runs migration + build + deploy)
+pnpm --dir website deploy:prod
+pnpm --dir otel-collector deploy:prod
+```
+
+If the preview migration or deploy fails, **stop**. Do not continue to production.
+
+The website `deploy` and `deploy:prod` scripts run the D1 migration before building and deploying. If migration fails, the `&&` chain stops and the deploy never happens.
+
 ## Architecture
 
 Four packages in a pnpm monorepo, sharing a single D1 database:
