@@ -17,6 +17,7 @@
 export {
   initStrada,
   captureException,
+  track,
   getLogger,
   flush,
   shutdown,
