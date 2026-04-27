@@ -50,7 +50,7 @@ importers:
         version: 6.9.0
       spiceflow:
         specifier: 1.19.0-rsc.7
-        version: 1.19.0-rsc.7(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(vite@8.0.10(@types/node@25.5.0)(esbuild@0.28.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))(zod@4.3.6)
+        version: 1.19.0-rsc.7(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(vite@8.0.10(@types/node@25.5.0)(esbuild@0.28.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))(zod@4.3.6)
       string-dedent:
         specifier: ^3.0.2
         version: 3.0.2
@@ -177,7 +177,7 @@ importers:
         version: link:../sdk
       spiceflow:
         specifier: 1.19.0-rsc.7
-        version: 1.19.0-rsc.7(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(vite@8.0.10(@types/node@25.5.0)(esbuild@0.28.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))(zod@4.3.6)
+        version: 1.19.0-rsc.7(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(vite@8.0.10(@types/node@25.5.0)(esbuild@0.28.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))(zod@4.3.6)
     devDependencies:
       '@opentelemetry/api':
         specifier: ^1.9.1
@@ -310,6 +310,9 @@ importers:
         specifier: ^8.0.8
         version: 8.0.8(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3)
     devDependencies:
+      '@types/node':
+        specifier: ^25.6.0
+        version: 25.6.0
       '@vitejs/plugin-react':
         specifier: ^6.0.1
         version: 6.0.1(vite@8.0.8(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))
@@ -8855,25 +8858,6 @@ snapshots:
       cross-spawn: 7.0.6
       signal-exit: 4.1.0
 
-  spiceflow@1.19.0-rsc.7(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(vite@8.0.10(@types/node@25.5.0)(esbuild@0.28.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))(zod@4.3.6):
-    dependencies:
-      '@vitejs/plugin-rsc': 0.5.21(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(vite@8.0.10(@types/node@25.5.0)(esbuild@0.28.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))
-      errore: 0.14.1
-      eventsource-parser: 3.0.8
-      history: 5.3.0
-      isbot: 4.4.0
-      its-fine: 2.0.0(@types/react@19.2.14)(react@19.2.5)
-      nf3: 0.3.16
-      openapi-types: 12.1.3
-      react: 19.2.5
-      react-dom: 19.2.5(react@19.2.5)
-      superjson: 2.2.6
-      zod: 4.3.6
-    transitivePeerDependencies:
-      - '@types/react'
-      - react-server-dom-webpack
-      - vite
-
   spiceflow@1.19.0-rsc.7(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(vite@8.0.10(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))(zod@4.3.6):
     dependencies:
       '@vitejs/plugin-rsc': 0.5.21(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(vite@8.0.10(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))
@@ -8896,6 +8880,25 @@ snapshots:
   spiceflow@1.19.0-rsc.7(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(vite@8.0.8(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))(zod@4.3.6):
     dependencies:
       '@vitejs/plugin-rsc': 0.5.21(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(vite@8.0.8(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))
+      errore: 0.14.1
+      eventsource-parser: 3.0.8
+      history: 5.3.0
+      isbot: 4.4.0
+      its-fine: 2.0.0(@types/react@19.2.14)(react@19.2.5)
+      nf3: 0.3.16
+      openapi-types: 12.1.3
+      react: 19.2.5
+      react-dom: 19.2.5(react@19.2.5)
+      superjson: 2.2.6
+      zod: 4.3.6
+    transitivePeerDependencies:
+      - '@types/react'
+      - react-server-dom-webpack
+      - vite
+
+  spiceflow@1.19.0-rsc.7(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(vite@8.0.10(@types/node@25.5.0)(esbuild@0.28.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))(zod@4.3.6):
+    dependencies:
+      '@vitejs/plugin-rsc': 0.5.21(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(vite@8.0.10(@types/node@25.5.0)(esbuild@0.28.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))
       errore: 0.14.1
       eventsource-parser: 3.0.8
       history: 5.3.0
