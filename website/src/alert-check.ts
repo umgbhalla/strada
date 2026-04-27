@@ -398,7 +398,7 @@ async function executeQuery(ctx: {
       const text = await res.text()
       throw new Error(`Tinybird query failed: ${res.status} ${text}`)
     }
-    return await res.json() as QueryResult
+    return await res.json()
   }
 
   if (dbConfig.backend === 'clickhouse') {
@@ -416,7 +416,7 @@ async function executeQuery(ctx: {
       const text = await res.text()
       throw new Error(`ClickHouse query failed: ${res.status} ${text}`)
     }
-    return await res.json() as QueryResult
+    return await res.json()
   }
 
   throw new Error('unknown backend')

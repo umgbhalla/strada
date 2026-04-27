@@ -172,7 +172,7 @@ async function queryIssueState(ctx: QueryTinybirdCtx): Promise<QueryResponse> {
       const text = await res.text()
       throw json({ error: `issue state query failed: ${text}` }, { status: res.status })
     }
-    return await res.json() as QueryResponse
+    return await res.json()
   }
   if (dbConfig.backend === 'clickhouse') {
     if (!dbConfig.clickhouseUrl) {
@@ -189,7 +189,7 @@ async function queryIssueState(ctx: QueryTinybirdCtx): Promise<QueryResponse> {
       const text = await res.text()
       throw json({ error: `issue state query failed: ${text}` }, { status: res.status })
     }
-    return await res.json() as QueryResponse
+    return await res.json()
   }
   throw json({ error: 'unknown backend' }, { status: 500 })
 }
@@ -760,7 +760,7 @@ export const api = new Spiceflow()
             const contentType = res.headers.get('content-type') ?? 'text/plain'
             return { raw, contentType } satisfies QueryResponse
           }
-          return await res.json() as QueryResponse
+          return await res.json()
         }
 
         if (dbConfig.backend === 'clickhouse') {
@@ -786,7 +786,7 @@ export const api = new Spiceflow()
             const contentType = res.headers.get('content-type') ?? 'text/plain'
             return { raw, contentType } satisfies QueryResponse
           }
-          return await res.json() as QueryResponse
+          return await res.json()
         }
 
         throw json({ error: 'unknown backend' }, { status: 500 })
@@ -827,7 +827,7 @@ export const api = new Spiceflow()
         }
 
         const result = await queryIssueState({ dbConfig, proj, projectId: params.projectId, sql })
-        const rows = (result.data ?? []) as Array<Record<string, unknown>>
+        const rows = result.data ?? []
 
         // Batch-resolve assignee and resolver names from D1
         const memberIds = new Set<string>()
