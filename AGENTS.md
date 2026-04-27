@@ -70,6 +70,35 @@ If the preview migration or deploy fails, **stop**. Do not continue to productio
 
 The website `deploy` and `deploy:prod` scripts run the D1 migration before building and deploying. If migration fails, the `&&` chain stops and the deploy never happens.
 
+## Upgrading ClickHouse/Tinybird schema
+
+When you add or modify a `.datasource` or `.pipe` file in `tinybird/`, the new schema must be deployed to each user's Tinybird workspace. The flow has two steps because schema definitions are **bundled into the website worker** at build time and deployed to Tinybird via the website's migrate API.
+
+```
+tinybird/datasources/*.datasource
+        │
+        ▼
+website/src/tinybird-bundled-resources.ts  ◄── import as ?raw strings
+        │
+        ▼  (vite build + wrangler deploy)
+website worker on Cloudflare
+        │
+        ▼  POST /api/v0/orgs/:orgId/database/migrate
+Tinybird deployment API
+```
+
+**Step by step:**
+
+1. Add or edit the `.datasource` / `.pipe` file in `tinybird/`
+2. Add the raw import to `website/src/tinybird-bundled-resources.ts`
+3. If it's a new datasource that users query, add it to `TINYBIRD_DATASOURCES` in `cli/src/tinybird.ts` (so project JWTs include read access)
+4. Deploy the website (`pnpm run deploy` then `pnpm run deploy:prod`). This bundles the new schema into the worker
+5. Run `strada database upgrade` from the CLI. This calls the website's migrate endpoint, which sends the bundled resources to the Tinybird deployment API
+
+The `database upgrade` command hits the **production** website by default (`https://strada.sh`). If you only deployed to preview, upgrade won't see the new schema. Always deploy prod before running upgrade.
+
+For self-hosted ClickHouse, add the `CREATE TABLE` DDL to `clickhouse.sql`. Users run it manually against their database.
+
 ## Architecture
 
 Four packages in a pnpm monorepo, sharing a single D1 database:
