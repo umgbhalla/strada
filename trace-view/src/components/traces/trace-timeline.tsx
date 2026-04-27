@@ -7,23 +7,11 @@
 import * as React from "react"
 import * as ReactDOM from "react-dom"
 
-import { getServiceLegendColor, useContainerSize } from "../../lib/utils"
+import { getServiceLegendColor, useContainerSize, useIsDark } from "../../lib/utils"
 import type { SpanNode } from "../../lib/utils"
 import { useTraceView, useTraceTimeline, useTimelineGestures, ROW_HEIGHT, ROW_GAP } from "./trace-timeline-state"
 import { TraceTimelineSearch, TraceTimelineTimeAxis, TraceTimelineRows, TraceTimelineConnectors, TraceTimelineTooltipContent } from "./trace-timeline-parts"
 import { TraceTimelineMinimap } from "./trace-timeline-minimap"
-
-function useIsDark() {
-  const [isDark, setIsDark] = React.useState(false)
-  React.useEffect(() => {
-    const check = () => setIsDark(document.documentElement.classList.contains("dark"))
-    check()
-    const obs = new MutationObserver(check)
-    obs.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] })
-    return () => obs.disconnect()
-  }, [])
-  return isDark
-}
 
 export function TraceTimeline() {
   const { rootSpans, totalDurationMs, traceStartTime, services, selectedSpanId, onSelectSpan } = useTraceView()

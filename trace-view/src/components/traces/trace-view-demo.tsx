@@ -80,7 +80,7 @@ export function TraceViewDemo() {
       </TraceViewProvider>
 
       {selectedSpan && (
-        <div className="border border-border rounded-lg p-4 bg-card text-card-foreground space-y-3">
+        <div className="border border-border rounded-lg p-4 bg-card text-card-foreground flex flex-col gap-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <div className="h-3 w-3 rounded-sm" style={{ backgroundColor: getServiceLegendColor(selectedSpan.serviceName, services) }} />
@@ -111,7 +111,7 @@ export function TraceViewDemo() {
             </div>
           </div>
           {Object.keys(selectedSpan.spanAttributes).length > 0 && (
-            <div className="space-y-1">
+            <div className="flex flex-col gap-1">
               <span className="text-muted-foreground text-xs block">Attributes</span>
               <div className="flex flex-wrap gap-1">
                 {Object.entries(selectedSpan.spanAttributes).map(([k, v]) => (

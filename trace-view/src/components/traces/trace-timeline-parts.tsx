@@ -364,13 +364,13 @@ export function TraceTimelineTooltipContent({ span, services, totalDurationMs, t
   const httpInfo = getHttpInfo(span.spanName, span.spanAttributes)
 
   return (
-    <div className="space-y-2 font-mono text-xs">
+    <div className="flex flex-col gap-2 font-mono text-xs">
       <div className="flex items-center gap-2">
         {serviceColor && <div className="h-2.5 w-2.5 shrink-0" style={{ backgroundColor: serviceColor }} />}
         <span className="font-medium truncate">{span.spanName}</span>
       </div>
       {durationPercent !== null && (
-        <div className="space-y-1">
+        <div className="flex flex-col gap-1">
           <div className="flex items-center justify-between text-[10px]">
             <span className="text-muted-foreground">Duration</span>
             <span>{formatDuration(span.durationMs)} ({durationPercent.toFixed(1)}%)</span>
@@ -392,14 +392,14 @@ export function TraceTimelineTooltipContent({ span, services, totalDurationMs, t
         {startOffset !== null && (<><span className="text-muted-foreground">Start offset</span><span>+{formatDuration(startOffset)}</span></>)}
         {durationPercent === null && (<><span className="text-muted-foreground">Duration</span><span>{formatDuration(span.durationMs)}</span></>)}
         <span className="text-muted-foreground">Status</span>
-        <span className={span.statusCode === "Error" ? "text-severity-error" : span.statusCode === "Ok" ? "text-severity-info" : ""}>
+        <span className={span.statusCode === "Error" ? "text-destructive" : span.statusCode === "Ok" ? "text-info" : ""}>
           {span.statusCode || "Unset"}
         </span>
       </div>
       {httpInfo && (
         <div className="border-t border-border pt-1.5 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-[10px]">
           <span className="text-muted-foreground">Method</span><span className="font-medium">{httpInfo.method}</span>
-          {httpInfo.statusCode != null && (<><span className="text-muted-foreground">HTTP</span><span className={httpInfo.statusCode >= 400 ? "text-severity-error" : httpInfo.statusCode >= 300 ? "text-severity-warn" : "text-severity-info"}>{httpInfo.statusCode}</span></>)}
+          {httpInfo.statusCode != null && (<><span className="text-muted-foreground">HTTP</span><span className={httpInfo.statusCode >= 400 ? "text-destructive" : httpInfo.statusCode >= 300 ? "text-warning" : "text-info"}>{httpInfo.statusCode}</span></>)}
           {httpInfo.route && (<><span className="text-muted-foreground">Route</span><span className="truncate max-w-[180px]">{httpInfo.route}</span></>)}
         </div>
       )}

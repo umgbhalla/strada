@@ -30,7 +30,7 @@ function collectMinimapSpans(rootSpans: SpanNode[], traceStartMs: number, totalD
       leftPercent: Math.max(0, leftPercent),
       widthPercent: Math.min(widthPercent, 100 - Math.max(0, leftPercent)),
       bgColor: node.statusCode === "Error"
-        ? "oklch(0.55 0.22 20)"
+        ? "var(--destructive)"
         : getServiceLegendColor(node.serviceName, services),
     })
     node.children.forEach(visit)

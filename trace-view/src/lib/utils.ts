@@ -228,6 +228,23 @@ export function buildSpanTree(rows: OtelTraceRow[]) {
   }
 }
 
+// ─── Dark mode detection (hydration-safe) ───────────────────────
+
+function getIsDark(): boolean {
+  return document.documentElement.classList.contains("dark")
+}
+const getServerIsDark = () => false
+
+function subscribeTheme(cb: () => void) {
+  const observer = new MutationObserver(cb)
+  observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] })
+  return () => observer.disconnect()
+}
+
+export function useIsDark() {
+  return React.useSyncExternalStore(subscribeTheme, getIsDark, getServerIsDark)
+}
+
 // ─── Hooks ──────────────────────────────────────────────────────
 
 export function useContainerSize(ref: React.RefObject<HTMLElement | null>) {
