@@ -4,6 +4,7 @@ import {
   normalizeError,
   shouldIgnoreError,
   errorToAttributes,
+  normalizeLogInput,
   applyBeforeSend,
   resolveMetricReaderOptions,
   resolveUserId,
@@ -327,6 +328,101 @@ describe("resolveMetricReaderOptions", () => {
 });
 
 // ---------------------------------------------------------------------------
+// console-style log normalization
+// ---------------------------------------------------------------------------
+
+describe("normalizeLogInput", () => {
+  it("formats a single string as console-style body without attributes", () => {
+    expect(normalizeLogInput(["checkout started"])).toMatchInlineSnapshot(`
+      {
+        "attributes": {},
+        "body": "checkout started",
+      }
+    `);
+  });
+
+  it("formats multiple args like console output without structured attributes", () => {
+    expect(normalizeLogInput(["user loaded", { id: "user_123" }, true])).toMatchInlineSnapshot(`
+      {
+        "attributes": {},
+        "body": "user loaded {\"id\":\"user_123\"} true",
+      }
+    `);
+  });
+
+  it("treats one plain object as a structured log", () => {
+    expect(
+      normalizeLogInput([
+        {
+          message: "checkout started",
+          checkoutId: "chk_123",
+          paid: true,
+          attempt: 2,
+        },
+      ]),
+    ).toMatchInlineSnapshot(`
+      {
+        "attributes": {
+          "attempt": 2,
+          "checkoutId": "chk_123",
+          "message": "checkout started",
+          "paid": true,
+        },
+        "body": "checkout started",
+      }
+    `);
+  });
+
+  it("uses JSON body when a structured log has no string message", () => {
+    expect(normalizeLogInput([{ event: "cache_hit", key: "user:123" }])).toMatchInlineSnapshot(`
+      {
+        "attributes": {
+          "event": "cache_hit",
+          "key": "user:123",
+        },
+        "body": "{\"event\":\"cache_hit\",\"key\":\"user:123\"}",
+      }
+    `);
+  });
+
+  it("drops nullish attributes and stringifies nested structured values", () => {
+    expect(
+      normalizeLogInput([
+        {
+          message: "payload received",
+          payload: { ok: true },
+          list: [1, 2],
+          missing: undefined,
+          nil: null,
+        },
+      ]),
+    ).toMatchInlineSnapshot(`
+      {
+        "attributes": {
+          "list": "[1,2]",
+          "message": "payload received",
+          "payload": "{\"ok\":true}",
+        },
+        "body": "payload received",
+      }
+    `);
+  });
+
+  it("formats errors as console body text without exception attributes", () => {
+    const error = new Error("payment failed");
+    error.stack = "Error: payment failed\n    at checkout.ts:1:1";
+
+    expect(normalizeLogInput(["failed", error])).toMatchInlineSnapshot(`
+      {
+        "attributes": {},
+        "body": "failed Error: payment failed
+          at checkout.ts:1:1",
+      }
+    `);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // browser trace context
 // ---------------------------------------------------------------------------
 
@@ -382,8 +478,8 @@ describe("getBrowserWorkContext", () => {
 
 describe("readCookie", () => {
   let cookieValue = "";
-  const hadDocument = "document" in globalThis;
   const originalDocument = globalThis.document;
+  const hadDocument = originalDocument !== undefined;
 
   beforeEach(() => {
     cookieValue = "";
@@ -443,8 +539,8 @@ describe("readCookie", () => {
 
 describe("resolveUserId", () => {
   let cookieValue = "";
-  const hadDocument = "document" in globalThis;
   const originalDocument = globalThis.document;
+  const hadDocument = originalDocument !== undefined;
 
   beforeEach(() => {
     cookieValue = "";

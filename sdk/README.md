@@ -51,6 +51,29 @@ counter.add(1)
 span.end()
 ```
 
+## Default instrumentation
+
+The SDK does **not** install the OTel auto-instrumentation packages by default. It does not monkey-patch `fetch`, `XMLHttpRequest`, `http`, `express`, database clients, or `console.*`.
+
+`initStrada()` only wires OTel providers, exporters, context propagation, and a small set of Strada-owned lifecycle hooks.
+
+| Runtime | Automatic traces | Automatic logs |
+| ------- | ---------------- | -------------- |
+| **Browser** | A `pageview` span starts on `initStrada()`, restarts on SPA navigation, and ends when the tab is hidden | Uncaught `window.error` and `unhandledrejection` events are sent as exception logs |
+| **Node** | No spans are created automatically | `uncaughtException` and `unhandledRejection` are sent as exception logs |
+| **Cloudflare Workers** | No spans are created automatically | No process/global error handlers. Only explicit SDK calls send logs |
+
+Everything else is **explicit**. Use `trace.getTracer().startSpan()` for spans, `logs.getLogger().emit()` for logs, `track()` for custom event logs, and `captureException()` for handled error logs.
+
+```text
+initStrada()
+  ├─ browser only: span "pageview" ─────────► /v1/traces
+  ├─ browser/node error handlers ───────────► /v1/logs
+  └─ manual OTel / Strada helper calls ─────► /v1/traces or /v1/logs
+```
+
+Install optional OTel auto-instrumentation separately if you want automatic HTTP, database, document load, or interaction spans. See [Auto-instrumentation (optional)](#auto-instrumentation-optional).
+
 ## Create traces and spans
 
 Use the standard OTel tracing API after `initStrada()`.
@@ -116,11 +139,86 @@ await context.with(trace.setSpan(context.active(), parentSpan), async () => {
 parentSpan.end()
 ```
 
-## Emit logs with OpenTelemetry
+## Logging
+
+For app logs, use `getLogger()`. It returns a superset of the standard OTel logger: raw `.emit()` plus console-style methods that send OTel log records to Strada.
+
+```ts
+import { initStrada, getLogger } from "@strada.sh/sdk"
+
+initStrada({
+  projectId: "01JTHG5M7XPQR8KNCZ0W4D",
+  service: "api",
+})
+
+const logger = getLogger("checkout")
+
+logger.debug("cache miss", "user:123")
+logger.info("checkout started")
+logger.warn("slow query", { durationMs: 928 })
+logger.error("payment failed", { reason: "card_declined" })
+```
+
+These methods are intentionally **not** exception capture. `logger.error()` creates an error-severity log in `otel_logs`, but it does not add `exception.*` attributes and does not create an issue in `otel_errors`. Use `captureException(error)` for issue tracking.
+
+### Structured logs and attributes
+
+Pass **one plain object** as the only argument to emit a structured log. The object becomes `LogAttributes`, and `message` becomes the log body when it is a string:
+
+```ts
+logger.info({
+  message: "checkout started",
+  checkoutId: "chk_123",
+  "user.id": "user_123",
+  plan: "pro",
+  retry: false,
+})
+```
+
+This lands in `otel_logs` like:
+
+```ts
+{
+  Body: "checkout started",
+  SeverityText: "INFO",
+  LogAttributes: {
+    message: "checkout started",
+    checkoutId: "chk_123",
+    "user.id": "user_123",
+    plan: "pro",
+    retry: "false",
+  },
+}
+```
+
+If you pass multiple arguments, the call is treated like `console.*`: the arguments are formatted into the body and no structured attributes are added.
+
+```ts
+logger.info("checkout started", { checkoutId: "chk_123" })
+// Body = 'checkout started {"checkoutId":"chk_123"}'
+// LogAttributes = {}
+```
+
+Use raw OTel `.emit()` when you need full control:
+
+```ts
+logger.emit({
+  body: "payment authorized",
+  severityText: "INFO",
+  severityNumber: SeverityNumber.INFO,
+  attributes: {
+    checkoutId: "chk_123",
+  },
+})
+```
+
+`console.log()` and other console methods are still **not** patched or sent by default. Only calls to `getLogger().info()`, `getLogger().emit()`, `logs.getLogger().emit()`, `track()`, `captureException()`, and automatic runtime handlers listed below send log records.
+
+## Emit logs with raw OpenTelemetry
 
 The standard OTel logs API is `logs.getLogger().emit()`. In most cases, `severityNumber` is enough. `severityText` is optional.
 
-Important: **`console.log()` and other console methods are not sent by default**. The browser SDK exports logs you emit through the OTel logs API, `track()`, `captureException()`, and uncaught browser errors. It does not monkey-patch `console.log`, `console.info`, `console.warn`, or `console.error`.
+Important: **`console.log()` and other console methods are not sent by default**. The browser SDK exports logs you emit through `getLogger()`, the OTel logs API, `track()`, `captureException()`, and uncaught browser errors. It does not monkey-patch `console.log`, `console.info`, `console.warn`, or `console.error`.
 
 ```ts
 import { initStrada, logs, SeverityNumber } from "@strada.sh/sdk"
@@ -275,15 +373,14 @@ initStrada({
   projectId: "01JTHG5M7XPQR8KNCZ0W4D",
   service: "frontend",
 })
-// A pageview span starts immediately. Auto-instrumented fetch/XHR
-// spans become children of it. Everything is sent to otel_traces.
+// A pageview span starts immediately and is sent to otel_traces.
 ```
 
 **How it works:**
 
 - On `initStrada()`, a span named `"pageview"` starts for the current URL
 - Every span gets `session.id`, `url.path`, `url.query`, `url.full`, `user.id` injected automatically
-- Auto-instrumented `fetch` and `XHR` spans are parented to the active pageview span
+- Manual spans, custom events, and optional auto-instrumentation are parented to the active pageview when no other span is active
 - On SPA navigation (detected via the Navigation API), the old span ends and a new one starts
 - On tab close (`visibilitychange: hidden`), the current span ends and flushes
 
@@ -392,12 +489,12 @@ It also starts a `pageview` span and usually parents later browser work to that 
 }
 ```
 
-### Browser pageview + fetch hierarchy
+### Browser pageview hierarchy
 
 ```text
 trace: pageview /pricing
 ├─ span: pageview
-├─ span: fetch GET /api/plans
+├─ span: load-pricing-plans
 └─ log: signup_started
 ```
 

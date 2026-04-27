@@ -10,6 +10,8 @@
  */
 
 import { SeverityNumber } from "@opentelemetry/api-logs";
+import type { Logger as OtelLogger } from "@opentelemetry/api-logs";
+import type { Context } from "@opentelemetry/api";
 import type { BatchLogRecordProcessorBrowserConfig } from "@opentelemetry/sdk-logs";
 import type { PeriodicExportingMetricReaderOptions } from "@opentelemetry/sdk-metrics";
 import type { BatchSpanProcessorBrowserConfig } from "@opentelemetry/sdk-trace-base";
@@ -291,6 +293,141 @@ export const ERROR_SEVERITY = SeverityNumber.ERROR;
 export const ERROR_SEVERITY_TEXT = "ERROR";
 export const INFO_SEVERITY = SeverityNumber.INFO;
 export const INFO_SEVERITY_TEXT = "INFO";
+
+// ---------------------------------------------------------------------------
+// Console-style logging helpers
+// ---------------------------------------------------------------------------
+
+type LogAttributePrimitive = string | number | boolean;
+type LogAttributes = Record<string, unknown>;
+type LogMethod = (...args: unknown[]) => void;
+type LogSeverityMethod = "trace" | "debug" | "info" | "warn" | "error" | "fatal";
+
+export interface StradaLogger extends OtelLogger {
+  trace: LogMethod;
+  debug: LogMethod;
+  info: LogMethod;
+  warn: LogMethod;
+  error: LogMethod;
+  fatal: LogMethod;
+}
+
+export interface NormalizedLogInput {
+  body: string;
+  attributes: Record<string, LogAttributePrimitive>;
+}
+
+const severityByMethod = {
+  trace: [SeverityNumber.TRACE, "TRACE"],
+  debug: [SeverityNumber.DEBUG, "DEBUG"],
+  info: [SeverityNumber.INFO, "INFO"],
+  warn: [SeverityNumber.WARN, "WARN"],
+  error: [SeverityNumber.ERROR, "ERROR"],
+  fatal: [SeverityNumber.FATAL, "FATAL"],
+} as const satisfies Record<LogSeverityMethod, readonly [SeverityNumber, string]>;
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (value === null || typeof value !== "object") return false;
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+}
+
+function stringifyLogValue(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (value instanceof Error) return value.stack || value.message;
+  if (typeof value === "bigint") return value.toString();
+  if (typeof value === "symbol") return String(value);
+  if (typeof value === "function") return value.name ? `[Function: ${value.name}]` : "[Function]";
+  if (value === undefined) return "undefined";
+  try {
+    const json = JSON.stringify(value);
+    return json === undefined ? String(value) : json;
+  } catch {
+    return String(value);
+  }
+}
+
+function normalizeLogAttribute(value: unknown): LogAttributePrimitive | undefined {
+  if (value == null) return undefined;
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "bigint") return value.toString();
+  if (value instanceof Date) return value.toISOString();
+  return stringifyLogValue(value);
+}
+
+function normalizeLogAttributes(input: LogAttributes): Record<string, LogAttributePrimitive> {
+  const attributes: Record<string, LogAttributePrimitive> = {};
+  for (const [key, value] of Object.entries(input)) {
+    const normalized = normalizeLogAttribute(value);
+    if (normalized !== undefined) attributes[key] = normalized;
+  }
+  return attributes;
+}
+
+export function normalizeLogInput(args: unknown[]): NormalizedLogInput {
+  if (args.length === 1 && isPlainObject(args[0])) {
+    const attributes = normalizeLogAttributes(args[0]);
+    const message = attributes.message;
+    return {
+      body: typeof message === "string" ? message : stringifyLogValue(args[0]),
+      attributes,
+    };
+  }
+
+  return {
+    body: args.map(stringifyLogValue).join(" "),
+    attributes: {},
+  };
+}
+
+export function createStradaLogger(
+  getOtelLogger: (name: string) => OtelLogger | undefined,
+  getContext?: () => Context | undefined,
+  name = "strada",
+): StradaLogger {
+  const emitConsoleLog = (method: LogSeverityMethod, args: unknown[]) => {
+    const logger = getOtelLogger(name);
+    if (!logger) {
+      console.warn(
+        `[@strada.sh/sdk] logger.${method}() called before initStrada(). Log was not sent.`,
+      );
+      return;
+    }
+
+    const [severityNumber, severityText] = severityByMethod[method];
+    const { body, attributes } = normalizeLogInput(args);
+    const activeContext = getContext?.();
+
+    logger.emit({
+      severityNumber,
+      severityText,
+      body,
+      attributes,
+      ...(activeContext ? { context: activeContext } : {}),
+    });
+  };
+
+  return {
+    emit: (record) => {
+      const logger = getOtelLogger(name);
+      if (!logger) {
+        console.warn(
+          "[@strada.sh/sdk] logger.emit() called before initStrada(). Log was not sent.",
+        );
+        return;
+      }
+      logger.emit(record);
+    },
+    trace: (...args) => emitConsoleLog("trace", args),
+    debug: (...args) => emitConsoleLog("debug", args),
+    info: (...args) => emitConsoleLog("info", args),
+    warn: (...args) => emitConsoleLog("warn", args),
+    error: (...args) => emitConsoleLog("error", args),
+    fatal: (...args) => emitConsoleLog("fatal", args),
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Cookie reading

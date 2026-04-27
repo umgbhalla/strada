@@ -37,10 +37,12 @@ import {
   type BatchSpanProcessorBrowserConfig,
   type StradaOptions,
   type CaptureExceptionOptions,
+  type StradaLogger,
   applyBeforeSend,
   normalizeError,
   shouldIgnoreError,
   errorToAttributes,
+  createStradaLogger,
   setTags,
   resetContext,
   resolveUserId,
@@ -81,6 +83,7 @@ export {
   type SpanAttributes,
   type Logger,
 } from "./shared.ts";
+export type { StradaLogger } from "./shared.ts";
 
 // ---------------------------------------------------------------------------
 // Session management
@@ -241,6 +244,14 @@ let _errorListener: ((event: ErrorEvent) => void) | undefined;
 let _rejectionListener: ((event: PromiseRejectionEvent) => void) | undefined;
 let _visibilityListener: (() => void) | undefined;
 let _navigateListener: ((event: NavigateEvent) => void) | undefined;
+
+export function getLogger(name = "strada-web"): StradaLogger {
+  return createStradaLogger(
+    (loggerName) => _loggerProvider?.getLogger(loggerName),
+    () => getBrowserWorkContext(context.active(), _currentPageviewSpan),
+    name,
+  );
+}
 
 function getPageAttributes(
   url: URL = new URL(window.location.href),

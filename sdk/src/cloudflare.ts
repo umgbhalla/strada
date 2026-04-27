@@ -55,10 +55,12 @@ import {
   type StradaOptions,
   type CaptureExceptionOptions,
   type StradaTelemetryOptions,
+  type StradaLogger,
   applyBeforeSend,
   normalizeError,
   shouldIgnoreError,
   errorToAttributes,
+  createStradaLogger,
   setTags,
   resetContext,
   resolveEndpoint,
@@ -97,6 +99,7 @@ export {
   type SpanAttributes,
   type Logger,
 } from "./shared.ts";
+export type { StradaLogger } from "./shared.ts";
 
 // ---------------------------------------------------------------------------
 // Context manager for Workers (requires nodejs_compat)
@@ -272,6 +275,10 @@ let _tracerProvider: BasicTracerProvider | undefined;
 let _loggerProvider: LoggerProvider | undefined;
 let _logger: Logger | undefined;
 let _options: StradaOptions | undefined;
+
+export function getLogger(name = "strada"): StradaLogger {
+  return createStradaLogger((loggerName) => _loggerProvider?.getLogger(loggerName), undefined, name);
+}
 
 // ---------------------------------------------------------------------------
 // Init
