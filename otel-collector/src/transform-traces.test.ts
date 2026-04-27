@@ -183,6 +183,27 @@ describe("transformTraces", () => {
     expect(row.duration).toBe(1000000000);
   });
 
+  it("keeps only the trace flags byte", () => {
+    const input: ExportTraceServiceRequest = {
+      resourceSpans: [{
+        scopeSpans: [{
+          spans: [{
+            traceId: "abc123",
+            spanId: "def456",
+            name: "sampled-span",
+            startTimeUnixNano: "1000000000",
+            endTimeUnixNano: "2000000000",
+            flags: 257,
+          }],
+        }],
+      }],
+    };
+
+    const row = JSON.parse(transformTraces(input, "acme").trim());
+
+    expect(row.trace_flags).toBe(1);
+  });
+
   it("transforms multiple spans across resources", () => {
     const input: ExportTraceServiceRequest = {
       resourceSpans: [

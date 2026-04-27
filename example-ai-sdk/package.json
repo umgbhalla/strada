@@ -1,0 +1,19 @@
+{
+  "name": "strada-example-ai-sdk",
+  "private": true,
+  "type": "module",
+  "description": "AI SDK agent loop example that sends model and tool-call telemetry to Strada.",
+  "scripts": {
+    "start": "sigillo run -- tsx src/index.ts",
+    "typecheck": "tsc -b"
+  },
+  "dependencies": {
+    "@ai-sdk/openai": "^3.0.53",
+    "@strada.sh/sdk": "workspace:^",
+    "ai": "^6.0.168",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0"
+  }
+}

@@ -33,7 +33,7 @@ export function transformLogs(body: ExportLogsServiceRequest, projectId: string)
           timestamp: nanosToRFC3339(timestamp),
           trace_id: log.traceId ?? "",
           span_id: log.spanId ?? "",
-          flags: log.flags ?? 0,
+          flags: (log.flags ?? 0) & 0xff,
           severity_text: log.severityText ?? "",
           severity_number: log.severityNumber ?? 0,
           log_attributes: convertAttributes(log.attributes),

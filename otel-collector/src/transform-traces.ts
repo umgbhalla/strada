@@ -65,7 +65,7 @@ export function transformTraces(
           span_id: span.spanId,
           parent_span_id: span.parentSpanId ?? "",
           trace_state: span.traceState ?? "",
-          trace_flags: span.flags ?? 0,
+          trace_flags: (span.flags ?? 0) & 0xff,
           span_name: span.name,
           span_kind: SPAN_KIND_MAP[span.kind ?? 0] ?? "Unspecified",
           span_attributes: spanAttributes,

@@ -157,4 +157,21 @@ describe("transformLogs", () => {
     expect(row.body).toBe("");
     expect(row.flags).toBe(0);
   });
+
+  it("keeps only the trace flags byte", () => {
+    const input: ExportLogsServiceRequest = {
+      resourceLogs: [{
+        scopeLogs: [{
+          logRecords: [{
+            timeUnixNano: "1000000000",
+            flags: 257,
+          }],
+        }],
+      }],
+    };
+
+    const row = JSON.parse(transformLogs(input, "acme").trim());
+
+    expect(row.flags).toBe(1);
+  });
 });
