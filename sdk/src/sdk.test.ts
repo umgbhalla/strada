@@ -19,6 +19,10 @@ import {
   BAGGAGE_USER_ID,
 } from "./shared.ts";
 import { getBrowserWorkContext } from "./browser.ts";
+import {
+  MAX_LOG_STRING_LENGTH,
+  formatLogValue as formatJsonLogValue,
+} from "./log-format-json.ts";
 
 beforeEach(() => {
   resetContext();
@@ -345,7 +349,7 @@ describe("normalizeLogInput", () => {
     expect(normalizeLogInput(["user loaded", { id: "user_123" }, true])).toMatchInlineSnapshot(`
       {
         "attributes": {},
-        "body": "user loaded {\"id\":\"user_123\"} true",
+        "body": "user loaded { id: 'user_123' } true",
       }
     `);
   });
@@ -380,7 +384,7 @@ describe("normalizeLogInput", () => {
           "event": "cache_hit",
           "key": "user:123",
         },
-        "body": "{\"event\":\"cache_hit\",\"key\":\"user:123\"}",
+        "body": "{ event: 'cache_hit', key: 'user:123' }",
       }
     `);
   });
@@ -399,9 +403,9 @@ describe("normalizeLogInput", () => {
     ).toMatchInlineSnapshot(`
       {
         "attributes": {
-          "list": "[1,2]",
+          "list": "[ 1, 2 ]",
           "message": "payload received",
-          "payload": "{\"ok\":true}",
+          "payload": "{ ok: true }",
         },
         "body": "payload received",
       }
@@ -419,6 +423,43 @@ describe("normalizeLogInput", () => {
           at checkout.ts:1:1",
       }
     `);
+  });
+
+  it("truncates long structured string attributes and keeps object shape in the body", () => {
+    const long = "a".repeat(MAX_LOG_STRING_LENGTH + 3);
+
+    const normalized = normalizeLogInput([
+      {
+        message: "large payload",
+        nested: {
+          token: long,
+          ok: true,
+        },
+        topLevel: long,
+      },
+    ]);
+
+    expect(normalized.attributes.nested).toContain("{ token: '");
+    expect(normalized.attributes.nested).toContain("... 3 more characters");
+    expect(normalized.attributes.nested).toContain("ok: true");
+    expect(String(normalized.attributes.topLevel).length).toBeGreaterThan(MAX_LOG_STRING_LENGTH);
+    expect(normalized.attributes.topLevel).toMatch(/… \[truncated 3 chars\]$/);
+  });
+});
+
+describe("formatJsonLogValue", () => {
+  it("uses JSON-style formatting for browser and Workers", () => {
+    expect(formatJsonLogValue({ id: "user_123" })).toMatchInlineSnapshot(`"{\"id\":\"user_123\"}"`);
+    expect(formatJsonLogValue([1, 2])).toMatchInlineSnapshot(`"[1,2]"`);
+  });
+
+  it("truncates nested strings while preserving JSON object shape", () => {
+    const long = "b".repeat(MAX_LOG_STRING_LENGTH + 2);
+    const formatted = formatJsonLogValue({ nested: { token: long }, ok: true });
+
+    expect(formatted).toContain('{"nested":{"token":"');
+    expect(formatted).toContain('"ok":true}');
+    expect(formatted).toMatch(/… \[truncated 2 chars\]/);
   });
 });
 

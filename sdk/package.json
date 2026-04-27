@@ -52,6 +52,21 @@
       "default": "./src/*.ts"
     }
   },
+  "imports": {
+    "#log-format": {
+      "browser": "./src/log-format-json.ts",
+      "workerd": "./src/log-format-json.ts",
+      "development": "./src/log-format-node.ts",
+      "node": {
+        "types": "./dist/log-format-node.d.ts",
+        "default": "./dist/log-format-node.js"
+      },
+      "default": {
+        "types": "./dist/log-format-json.d.ts",
+        "default": "./dist/log-format-json.js"
+      }
+    }
+  },
   "files": [
     "src",
     "dist"

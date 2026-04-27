@@ -15,6 +15,7 @@ import type { Context } from "@opentelemetry/api";
 import type { BatchLogRecordProcessorBrowserConfig } from "@opentelemetry/sdk-logs";
 import type { PeriodicExportingMetricReaderOptions } from "@opentelemetry/sdk-metrics";
 import type { BatchSpanProcessorBrowserConfig } from "@opentelemetry/sdk-trace-base";
+import { formatLogValue, truncateLogString } from "#log-format";
 
 // ---------------------------------------------------------------------------
 // Re-export OTel API primitives so users don't need @opentelemetry/api
@@ -332,29 +333,15 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return proto === Object.prototype || proto === null;
 }
 
-function stringifyLogValue(value: unknown): string {
-  if (typeof value === "string") return value;
-  if (value instanceof Error) return value.stack || value.message;
-  if (typeof value === "bigint") return value.toString();
-  if (typeof value === "symbol") return String(value);
-  if (typeof value === "function") return value.name ? `[Function: ${value.name}]` : "[Function]";
-  if (value === undefined) return "undefined";
-  try {
-    const json = JSON.stringify(value);
-    return json === undefined ? String(value) : json;
-  } catch {
-    return String(value);
-  }
-}
-
 function normalizeLogAttribute(value: unknown): LogAttributePrimitive | undefined {
   if (value == null) return undefined;
-  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+  if (typeof value === "string") return truncateLogString(value);
+  if (typeof value === "number" || typeof value === "boolean") {
     return value;
   }
   if (typeof value === "bigint") return value.toString();
   if (value instanceof Date) return value.toISOString();
-  return stringifyLogValue(value);
+  return formatLogValue(value);
 }
 
 function normalizeLogAttributes(input: LogAttributes): Record<string, LogAttributePrimitive> {
@@ -371,13 +358,13 @@ export function normalizeLogInput(args: unknown[]): NormalizedLogInput {
     const attributes = normalizeLogAttributes(args[0]);
     const message = attributes.message;
     return {
-      body: typeof message === "string" ? message : stringifyLogValue(args[0]),
+      body: typeof message === "string" ? message : formatLogValue(args[0]),
       attributes,
     };
   }
 
   return {
-    body: args.map(stringifyLogValue).join(" "),
+    body: args.map(formatLogValue).join(" "),
     attributes: {},
   };
 }
