@@ -15,7 +15,11 @@ import type { Context } from "@opentelemetry/api";
 import type { BatchLogRecordProcessorBrowserConfig } from "@opentelemetry/sdk-logs";
 import type { PeriodicExportingMetricReaderOptions } from "@opentelemetry/sdk-metrics";
 import type { BatchSpanProcessorBrowserConfig } from "@opentelemetry/sdk-trace-base";
-import { formatLogValue, truncateLogString } from "#log-format";
+import { formatLogValue } from "#log-format";
+import {
+  formatLogValue as formatStructuredLogValue,
+  truncateLogString,
+} from "./log-format-json.ts";
 
 // ---------------------------------------------------------------------------
 // Re-export OTel API primitives so users don't need @opentelemetry/api
@@ -341,7 +345,7 @@ function normalizeLogAttribute(value: unknown): LogAttributePrimitive | undefine
   }
   if (typeof value === "bigint") return value.toString();
   if (value instanceof Date) return value.toISOString();
-  return formatLogValue(value);
+  return formatStructuredLogValue(value);
 }
 
 function normalizeLogAttributes(input: LogAttributes): Record<string, LogAttributePrimitive> {
@@ -358,7 +362,7 @@ export function normalizeLogInput(args: unknown[]): NormalizedLogInput {
     const attributes = normalizeLogAttributes(args[0]);
     const message = attributes.message;
     return {
-      body: typeof message === "string" ? message : formatLogValue(args[0]),
+      body: typeof message === "string" ? message : formatStructuredLogValue(args[0]),
       attributes,
     };
   }

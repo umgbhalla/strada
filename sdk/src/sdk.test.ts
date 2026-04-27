@@ -384,7 +384,7 @@ describe("normalizeLogInput", () => {
           "event": "cache_hit",
           "key": "user:123",
         },
-        "body": "{ event: 'cache_hit', key: 'user:123' }",
+        "body": "{\"event\":\"cache_hit\",\"key\":\"user:123\"}",
       }
     `);
   });
@@ -403,9 +403,9 @@ describe("normalizeLogInput", () => {
     ).toMatchInlineSnapshot(`
       {
         "attributes": {
-          "list": "[ 1, 2 ]",
+          "list": "[1,2]",
           "message": "payload received",
-          "payload": "{ ok: true }",
+          "payload": "{\"ok\":true}",
         },
         "body": "payload received",
       }
@@ -439,9 +439,9 @@ describe("normalizeLogInput", () => {
       },
     ]);
 
-    expect(normalized.attributes.nested).toContain("{ token: '");
-    expect(normalized.attributes.nested).toContain("... 3 more characters");
-    expect(normalized.attributes.nested).toContain("ok: true");
+    expect(normalized.attributes.nested).toContain('{"token":"');
+    expect(normalized.attributes.nested).toContain("… [truncated 3 chars]");
+    expect(normalized.attributes.nested).toContain('"ok":true');
     expect(String(normalized.attributes.topLevel).length).toBeGreaterThan(MAX_LOG_STRING_LENGTH);
     expect(normalized.attributes.topLevel).toMatch(/… \[truncated 3 chars\]$/);
   });
