@@ -7,6 +7,15 @@
   "observability": {
     "enabled": true,
   },
+  "limits": {
+    "subrequests": 100000,
+  },
+  "triggers": {
+    "crons": ["*/5 * * * *"],
+  },
+  "send_email": [
+    { "name": "EMAIL" },
+  ],
   "vars": {
     "STRADA_PROJECT_ID": "01KPVGTT9CJW4ZNEF414VHGRFD"
   },
@@ -35,6 +44,15 @@
   "env": {
     "preview": {
       "name": "strada-website-preview",
+      "limits": {
+        "subrequests": 100000,
+      },
+      "triggers": {
+        "crons": ["*/5 * * * *"],
+      },
+      "send_email": [
+        { "name": "EMAIL" },
+      ],
       "vars": {
         "STRADA_PROJECT_ID": "01KPVGTT9CJW4ZNEF414VHGRFD"
       },

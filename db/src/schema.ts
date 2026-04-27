@@ -164,6 +164,34 @@ export const projectToken = sqliteCore.sqliteTable('project_token', {
   sqliteCore.index('project_token_hashed_key_idx').on(table.hashedKey),
 ])
 
+// ── Alert rules ─────────────────────────────────────────────────────
+// One alert rule per org. Defines the detection threshold: "alert when
+// >= threshold errors of the same fingerprint occur within windowMinutes."
+// Cooldown prevents re-alerting the same fingerprint too quickly.
+// Destinations are stored in alert_destination (1:N).
+
+export const alertRule = sqliteCore.sqliteTable('alert_rule', {
+  id: sqliteCore.text('id').primaryKey().notNull().$defaultFn(() => ulid()),
+  orgId: sqliteCore.text('org_id').notNull().unique()
+    .references(() => org.id, { onDelete: 'cascade' }),
+  threshold: sqliteCore.integer('threshold').notNull().default(1),
+  windowMinutes: sqliteCore.integer('window_minutes').notNull().default(5),
+  cooldownMinutes: sqliteCore.integer('cooldown_minutes').notNull().default(60),
+  createdAt: epochMs('created_at').notNull().$defaultFn(() => Date.now()),
+})
+
+export const alertDestination = sqliteCore.sqliteTable('alert_destination', {
+  id: sqliteCore.text('id').primaryKey().notNull().$defaultFn(() => ulid()),
+  ruleId: sqliteCore.text('rule_id').notNull()
+    .references(() => alertRule.id, { onDelete: 'cascade' }),
+  channel: sqliteCore.text('channel', { enum: ['email', 'webhook'] }).notNull(),
+  destination: sqliteCore.text('destination').notNull(),
+  createdAt: epochMs('created_at').notNull().$defaultFn(() => Date.now()),
+}, (table) => [
+  sqliteCore.index('alert_destination_rule_id_idx').on(table.ruleId),
+  sqliteCore.uniqueIndex('alert_destination_unique').on(table.ruleId, table.channel, table.destination),
+])
+
 // ── Device flow (BetterAuth device authorization plugin) ────────────
 
 export const deviceCode = sqliteCore.sqliteTable('device_code', {
@@ -184,7 +212,7 @@ export const deviceCode = sqliteCore.sqliteTable('device_code', {
 // ── Relations (v2 API) ──────────────────────────────────────────────
 
 export const relations = defineRelations(
-  { user, session, account, verification, org, orgMember, database, project, projectToken, deviceCode },
+  { user, session, account, verification, org, orgMember, database, project, projectToken, deviceCode, alertRule, alertDestination },
   (r) => ({
     user: {
       sessions: r.many.session(),
@@ -205,6 +233,7 @@ export const relations = defineRelations(
       members: r.many.orgMember(),
       database: r.one.database(),
       projects: r.many.project(),
+      alertRule: r.one.alertRule(),
       users: r.many.user({
         from: r.org.id.through(r.orgMember.orgId),
         to: r.user.id.through(r.orgMember.userId),
@@ -229,6 +258,13 @@ export const relations = defineRelations(
     },
     deviceCode: {
       user: r.one.user({ from: r.deviceCode.userId, to: r.user.id }),
+    },
+    alertRule: {
+      org: r.one.org({ from: r.alertRule.orgId, to: r.org.id }),
+      destinations: r.many.alertDestination(),
+    },
+    alertDestination: {
+      rule: r.one.alertRule({ from: r.alertDestination.ruleId, to: r.alertRule.id }),
     },
   }),
 )

@@ -15,6 +15,7 @@ SCHEMA >
     `AssigneeMemberId` String `json:$.assignee_member_id` CODEC(ZSTD(1)),
     `ResolvedAt` Nullable(DateTime64(3)) `json:$.resolved_at` CODEC(ZSTD(1)),
     `ResolvedByMemberId` String `json:$.resolved_by_member_id` CODEC(ZSTD(1)),
+    `LastAlertedAt` Nullable(DateTime64(3)) `json:$.last_alerted_at` CODEC(ZSTD(1)),
     `Version` UInt64 `json:$.version` CODEC(ZSTD(1)),
     `UpdatedAt` DateTime64(3) `json:$.updated_at` CODEC(ZSTD(1))
 

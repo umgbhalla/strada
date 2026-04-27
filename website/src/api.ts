@@ -6,6 +6,7 @@ import dedent from 'string-dedent'
 import * as orm from 'drizzle-orm'
 import * as schema from 'db/src/schema.ts'
 import { ulid } from 'ulid'
+import { env } from 'cloudflare:workers'
 import { deployTinybirdResources, getDeploymentManagedReadToken, TinybirdClient } from 'strada/src/tinybird'
 import { bundledTinybirdResources } from './tinybird-bundled-resources.ts'
 import {
@@ -135,6 +136,7 @@ interface IssueStateRow {
   assignee_member_id: string
   resolved_at: string | null
   resolved_by_member_id: string
+  last_alerted_at: string | null
   version: number
   updated_at: string
 }
@@ -200,7 +202,7 @@ async function readCurrentIssueState(ctx: Omit<QueryTinybirdCtx, 'sql'> & { fing
   const { dbConfig, proj, projectId, fingerprintHash } = ctx
   // For ClickHouse backend, add explicit ProjectId filter since there's no JWT row-level filtering
   const projectFilter = dbConfig.backend === 'clickhouse' ? ` AND ProjectId = '${projectId}'` : ''
-  const sql = `SELECT Status, AssigneeMemberId, ResolvedAt, ResolvedByMemberId FROM otel_issue_state FINAL WHERE FingerprintHash = '${fingerprintHash}'${projectFilter} LIMIT 1 FORMAT JSON`
+  const sql = `SELECT Status, AssigneeMemberId, ResolvedAt, ResolvedByMemberId, LastAlertedAt FROM otel_issue_state FINAL WHERE FingerprintHash = '${fingerprintHash}'${projectFilter} LIMIT 1 FORMAT JSON`
   try {
     const result = await queryIssueState({ dbConfig, proj, projectId, sql })
     const row = result.data?.[0]
@@ -212,6 +214,7 @@ async function readCurrentIssueState(ctx: Omit<QueryTinybirdCtx, 'sql'> & { fing
         assignee_member_id: (row.AssigneeMemberId as string) || '',
         resolved_at: (row.ResolvedAt as string) || null,
         resolved_by_member_id: (row.ResolvedByMemberId as string) || '',
+        last_alerted_at: (row.LastAlertedAt as string) || null,
         version: 0,
         updated_at: '',
       }
@@ -226,6 +229,7 @@ async function readCurrentIssueState(ctx: Omit<QueryTinybirdCtx, 'sql'> & { fing
     assignee_member_id: '',
     resolved_at: null,
     resolved_by_member_id: '',
+    last_alerted_at: null,
     version: 0,
     updated_at: '',
   }
@@ -283,6 +287,7 @@ async function writeIssueState(ctx: { dbConfig: QueryTinybirdCtx['dbConfig']; ro
       AssigneeMemberId: row.assignee_member_id,
       ResolvedAt: row.resolved_at,
       ResolvedByMemberId: row.resolved_by_member_id,
+      LastAlertedAt: row.last_alerted_at,
       Version: row.version,
       UpdatedAt: row.updated_at,
     }
@@ -921,6 +926,7 @@ export const api = new Spiceflow()
             assignee_member_id: current.assignee_member_id,
             resolved_at: resolvedAt,
             resolved_by_member_id: resolvedByMemberId,
+            last_alerted_at: current.last_alerted_at,
             version: now,
             updated_at: new Date(now).toISOString(),
           },
@@ -966,13 +972,222 @@ export const api = new Spiceflow()
         await writeIssueState({
           dbConfig,
           row: {
-            ...current,
+            project_id: current.project_id,
+            fingerprint_hash: current.fingerprint_hash,
+            status: current.status,
             assignee_member_id: body.assigneeMemberId ?? '',
+            resolved_at: current.resolved_at,
+            resolved_by_member_id: current.resolved_by_member_id,
+            last_alerted_at: current.last_alerted_at,
             version: now,
             updated_at: new Date(now).toISOString(),
           },
         })
 
         return { ok: true }
+      },
+    })
+    // ── Alert management ──────────────────────────────────────────────
+    // Alert rules live in D1 (control plane). One rule per org with
+    // multiple destinations. The cron handler in alert-check.ts reads
+    // these rules to decide when and where to send notifications.
+    .route({
+      method: 'GET',
+      path: '/api/v0/orgs/:orgId/alerts',
+      async handler({ request, params }) {
+        const session = await requireSession(request)
+        await requireOrgMember(session.userId, params.orgId)
+
+        const db = getDb()
+        const rule = await db.query.alertRule.findFirst({
+          where: { orgId: params.orgId },
+          with: { destinations: true },
+        })
+
+        if (!rule) {
+          return { rule: null, destinations: [] }
+        }
+
+        return {
+          rule: {
+            id: rule.id,
+            threshold: rule.threshold,
+            windowMinutes: rule.windowMinutes,
+            cooldownMinutes: rule.cooldownMinutes,
+          },
+          destinations: rule.destinations.map((d) => ({
+            id: d.id,
+            channel: d.channel,
+            destination: d.destination,
+          })),
+        }
+      },
+    })
+    .route({
+      method: 'POST',
+      path: '/api/v0/orgs/:orgId/alerts/destinations',
+      request: z.object({
+        channel: z.enum(['email', 'webhook']),
+        destination: z.string().min(1),
+        threshold: z.number().int().min(1).optional(),
+        windowMinutes: z.number().int().min(1).optional(),
+        cooldownMinutes: z.number().int().min(1).optional(),
+      }),
+      async handler({ request, params }) {
+        const session = await requireSession(request)
+        await requireOrgMember(session.userId, params.orgId)
+
+        const db = getDb()
+        const body = await request.json()
+
+        // Upsert the alert rule for this org
+        let rule = await db.query.alertRule.findFirst({
+          where: { orgId: params.orgId },
+        })
+
+        if (!rule) {
+          const [created] = await db.insert(schema.alertRule)
+            .values({
+              orgId: params.orgId,
+              threshold: body.threshold ?? 1,
+              windowMinutes: body.windowMinutes ?? 5,
+              cooldownMinutes: body.cooldownMinutes ?? 60,
+            })
+            .returning()
+          rule = created!
+        } else if (body.threshold || body.windowMinutes || body.cooldownMinutes) {
+          await db.update(schema.alertRule)
+            .set({
+              ...(body.threshold != null ? { threshold: body.threshold } : {}),
+              ...(body.windowMinutes != null ? { windowMinutes: body.windowMinutes } : {}),
+              ...(body.cooldownMinutes != null ? { cooldownMinutes: body.cooldownMinutes } : {}),
+            })
+            .where(orm.eq(schema.alertRule.id, rule.id))
+        }
+
+        // Upsert destination (unique constraint handles dedup)
+        await db.insert(schema.alertDestination)
+          .values({
+            ruleId: rule.id,
+            channel: body.channel,
+            destination: body.destination,
+          })
+          .onConflictDoNothing()
+
+        return { ok: true }
+      },
+    })
+    .route({
+      method: 'PUT',
+      path: '/api/v0/orgs/:orgId/alerts',
+      request: z.object({
+        threshold: z.number().int().min(1).optional(),
+        windowMinutes: z.number().int().min(1).optional(),
+        cooldownMinutes: z.number().int().min(1).optional(),
+      }),
+      async handler({ request, params }) {
+        const session = await requireSession(request)
+        await requireOrgMember(session.userId, params.orgId)
+
+        const db = getDb()
+        const body = await request.json()
+
+        const rule = await db.query.alertRule.findFirst({
+          where: { orgId: params.orgId },
+        })
+        if (!rule) {
+          throw json({ error: 'no alert rule configured, add a destination first' }, { status: 404 })
+        }
+
+        await db.update(schema.alertRule)
+          .set({
+            ...(body.threshold != null ? { threshold: body.threshold } : {}),
+            ...(body.windowMinutes != null ? { windowMinutes: body.windowMinutes } : {}),
+            ...(body.cooldownMinutes != null ? { cooldownMinutes: body.cooldownMinutes } : {}),
+          })
+          .where(orm.eq(schema.alertRule.id, rule.id))
+
+        return { ok: true }
+      },
+    })
+    .route({
+      method: 'DELETE',
+      path: '/api/v0/orgs/:orgId/alerts/destinations/:destinationId',
+      async handler({ request, params }) {
+        const session = await requireSession(request)
+        await requireOrgMember(session.userId, params.orgId)
+
+        const db = getDb()
+
+        const rule = await db.query.alertRule.findFirst({
+          where: { orgId: params.orgId },
+        })
+        if (!rule) {
+          throw json({ error: 'no alert rule found' }, { status: 404 })
+        }
+
+        const [deleted] = await db.delete(schema.alertDestination)
+          .where(
+            orm.and(
+              orm.eq(schema.alertDestination.id, params.destinationId),
+              orm.eq(schema.alertDestination.ruleId, rule.id),
+            ),
+          )
+          .returning()
+
+        if (!deleted) {
+          throw json({ error: 'destination not found' }, { status: 404 })
+        }
+
+        return { ok: true }
+      },
+    })
+    .route({
+      method: 'POST',
+      path: '/api/v0/orgs/:orgId/alerts/test',
+      async handler({ request, params }) {
+        const session = await requireSession(request)
+        await requireOrgMember(session.userId, params.orgId)
+
+        const db = getDb()
+        const rule = await db.query.alertRule.findFirst({
+          where: { orgId: params.orgId },
+          with: { destinations: true, org: true },
+        })
+
+        if (!rule || !rule.destinations || rule.destinations.length === 0) {
+          throw json({ error: 'no alert destinations configured' }, { status: 400 })
+        }
+
+        const { buildTestAlertEmailHtml } = await import('./alert-email.ts')
+        const orgName = rule.org?.name || 'Unknown'
+        const results: Array<{ channel: string; destination: string; ok: boolean }> = []
+
+        for (const dest of rule.destinations) {
+          try {
+            if (dest.channel === 'email') {
+              const html = buildTestAlertEmailHtml(orgName)
+              await env.EMAIL.send({
+                from: { email: 'alerts@strada.sh', name: 'Strada' },
+                to: dest.destination,
+                subject: '[Strada] Test alert',
+                html,
+              })
+              results.push({ channel: dest.channel, destination: dest.destination, ok: true })
+            } else if (dest.channel === 'webhook') {
+              await fetch(dest.destination, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ type: 'test_alert', org: orgName }),
+              })
+              results.push({ channel: dest.channel, destination: dest.destination, ok: true })
+            }
+          } catch (err) {
+            console.error(`Test alert failed for ${dest.channel}:${dest.destination}`, err)
+            results.push({ channel: dest.channel, destination: dest.destination, ok: false })
+          }
+        }
+
+        return { results }
       },
     })

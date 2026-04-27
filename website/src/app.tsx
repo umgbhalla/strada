@@ -14,6 +14,7 @@ import { Button } from './components/ui/button.tsx'
 import { DeviceActionButtons } from './components/device-action-buttons.tsx'
 import { api } from './api.ts'
 import { getAuth, getSession, requireSession } from './db.ts'
+import { checkAlerts } from './alert-check.ts'
 
 const loginQuerySchema = z.object({ callbackURL: z.string().optional() })
 
@@ -293,4 +294,7 @@ declare module 'spiceflow/react' {
 
 export default {
   fetch: handleFetch,
+  async scheduled(controller: ScheduledController, _env: Env, ctx: ExecutionContext) {
+    ctx.waitUntil(checkAlerts())
+  },
 } satisfies ExportedHandler<Env>
