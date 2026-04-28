@@ -49,8 +49,8 @@ importers:
         specifier: ^6.9.0
         version: 6.9.0
       spiceflow:
-        specifier: 1.19.0-rsc.7
-        version: 1.19.0-rsc.7(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(vite@8.0.10(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))(zod@4.3.6)
+        specifier: 1.20.0-rsc.0
+        version: 1.20.0-rsc.0(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(vite@8.0.10(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))(zod@4.3.6)
       string-dedent:
         specifier: ^3.0.2
         version: 3.0.2
@@ -108,8 +108,8 @@ importers:
         specifier: workspace:^
         version: link:../sdk
       spiceflow:
-        specifier: 1.19.0-rsc.7
-        version: 1.19.0-rsc.7(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(vite@8.0.10(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))(zod@4.3.6)
+        specifier: 1.20.0-rsc.0
+        version: 1.20.0-rsc.0(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(vite@8.0.10(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))(zod@4.3.6)
     devDependencies:
       '@types/node':
         specifier: ^25.6.0
@@ -142,8 +142,8 @@ importers:
         specifier: ^19.2.5
         version: 19.2.5(react@19.2.5)
       spiceflow:
-        specifier: 1.19.0-rsc.7
-        version: 1.19.0-rsc.7(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(vite@8.0.10(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))(zod@4.3.6)
+        specifier: 1.20.0-rsc.0
+        version: 1.20.0-rsc.0(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(vite@8.0.10(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))(zod@4.3.6)
     devDependencies:
       '@cloudflare/vite-plugin':
         specifier: ^1.31.2
@@ -176,8 +176,8 @@ importers:
         specifier: workspace:^
         version: link:../sdk
       spiceflow:
-        specifier: 1.19.0-rsc.7
-        version: 1.19.0-rsc.7(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(vite@8.0.10(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))(zod@4.3.6)
+        specifier: 1.20.0-rsc.0
+        version: 1.20.0-rsc.0(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(vite@8.0.10(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))(zod@4.3.6)
     devDependencies:
       '@opentelemetry/api':
         specifier: ^1.9.1
@@ -295,8 +295,8 @@ importers:
         specifier: ^19.2.4
         version: 19.2.5(react@19.2.5)
       spiceflow:
-        specifier: 1.19.0-rsc.7
-        version: 1.19.0-rsc.7(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(vite@8.0.10(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))(zod@4.3.6)
+        specifier: 1.20.0-rsc.0
+        version: 1.20.0-rsc.0(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(vite@8.0.10(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))(zod@4.3.6)
       tailwind-merge:
         specifier: ^3.5.0
         version: 3.5.0
@@ -356,8 +356,8 @@ importers:
         specifier: ^19.2.5
         version: 19.2.5(react@19.2.5)
       spiceflow:
-        specifier: 1.19.0-rsc.7
-        version: 1.19.0-rsc.7(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(vite@8.0.10(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))(zod@4.3.6)
+        specifier: 1.20.0-rsc.0
+        version: 1.20.0-rsc.0(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(vite@8.0.10(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))(zod@4.3.6)
       strada:
         specifier: workspace:^
         version: link:../cli
@@ -3509,6 +3509,9 @@ packages:
   es-module-lexer@2.0.0:
     resolution: {integrity: sha512-5POEcUuZybH7IdmGsD8wlf0AI55wMecM9rVBTI/qEAy2c1kTOm3DjFYjrBdI2K3BaJjJYfYFeRtM0t9ssnRuxw==}
 
+  es-module-lexer@2.1.0:
+    resolution: {integrity: sha512-n27zTYMjYu1aj4MjCWzSP7G9r75utsaoc8m61weK+W8JMBGGQybd43GstCXZ3WNmSFtGT9wi59qQTW6mhTR5LQ==}
+
   esbuild@0.24.2:
     resolution: {integrity: sha512-+9egpBW8I3CD5XPe0n6BfT5fxLzxrlDzqydF3aviG+9ni1lDC/OvMHcxqEFV0+LANZG5R1bFMWfUrjVsdwxJvA==}
     engines: {node: '>=18'}
@@ -4215,8 +4218,8 @@ packages:
   spawndamnit@3.0.1:
     resolution: {integrity: sha512-MmnduQUuHCoFckZoWnXsTg7JaiLBJrKFj9UI2MbRPGaJeVpsLcVBu6P/IGZovziM/YBsellCmsprgNA+w0CzVg==}
 
-  spiceflow@1.19.0-rsc.7:
-    resolution: {integrity: sha512-tqIT4O+QNfeqmrp5BQe0JcnWbo12jq+nhxWhclDmo9b3qAtatAT4B9ervpD79yCT5UB/jxhqaVgTfOWpT63EJw==}
+  spiceflow@1.20.0-rsc.0:
+    resolution: {integrity: sha512-t1c6Xc6hvxUaUnfw5HRpnWtatDb9ZAA9g+Z6kX2N31znz66DBZLe7hIIJXGLRV11ZdnTdO1pmaKO0DO0OJqzcg==}
     peerDependencies:
       '@modelcontextprotocol/sdk': '*'
       react: '*'
@@ -6823,7 +6826,7 @@ snapshots:
   '@vitejs/plugin-rsc@0.5.21(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(vite@8.0.10(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))':
     dependencies:
       '@rolldown/pluginutils': 1.0.0-rc.5
-      es-module-lexer: 2.0.0
+      es-module-lexer: 2.1.0
       estree-walker: 3.0.3
       magic-string: 0.30.21
       periscopic: 4.0.3
@@ -7108,6 +7111,8 @@ snapshots:
   errore@0.14.1: {}
 
   es-module-lexer@2.0.0: {}
+
+  es-module-lexer@2.1.0: {}
 
   esbuild@0.24.2:
     optionalDependencies:
@@ -7982,7 +7987,7 @@ snapshots:
       cross-spawn: 7.0.6
       signal-exit: 4.1.0
 
-  spiceflow@1.19.0-rsc.7(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(vite@8.0.10(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))(zod@4.3.6):
+  spiceflow@1.20.0-rsc.0(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(vite@8.0.10(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))(zod@4.3.6):
     dependencies:
       '@vitejs/plugin-rsc': 0.5.21(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(vite@8.0.10(@types/node@25.6.0)(esbuild@0.28.0)(jiti@2.6.1)(tsx@4.21.0)(yaml@2.8.3))
       errore: 0.14.1

@@ -370,7 +370,7 @@ async function sendNotification(
 ): Promise<void> {
   if (dest.channel === 'email') {
     const subject = buildAlertSubject(data)
-    const html = buildAlertEmailHtml(data)
+    const html = await buildAlertEmailHtml(data)
 
     try {
       console.log(`[alert-check] sending email to ${dest.destination}, subject: ${subject}`)

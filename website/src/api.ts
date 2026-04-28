@@ -1169,7 +1169,7 @@ export const api = new Spiceflow()
         for (const dest of rule.destinations) {
           try {
             if (dest.channel === 'email') {
-              const html = buildTestAlertEmailHtml(orgName)
+              const html = await buildTestAlertEmailHtml(orgName)
               await env.EMAIL.send({
                 from: { email: 'alerts@updates.strada.sh', name: 'Strada' },
                 to: dest.destination,

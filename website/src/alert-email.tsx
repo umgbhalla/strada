@@ -3,64 +3,7 @@
 // rendering across Gmail, Outlook, Apple Mail.
 // Untrusted fields are auto-escaped by React's JSX.
 
-import type { ReactNode, ReactElement } from 'react'
-
-// react-dom/server is blocked in the RSC environment ("not supported in
-// React Server Components"). This tiny renderer walks the React element
-// tree and produces an HTML string directly. ~40 lines, zero deps.
-const VOID_TAGS = new Set(['br', 'hr', 'img', 'input', 'meta', 'link'])
-
-function styleToString(style: Record<string, string | number>): string {
-  return Object.entries(style)
-    .map(([k, v]) => {
-      const prop = k.replace(/[A-Z]/g, (m) => '-' + m.toLowerCase())
-      return `${prop}:${typeof v === 'number' && v !== 0 ? v + 'px' : v}`
-    })
-    .join(';')
-}
-
-function escapeAttr(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
-}
-
-function renderJsx(node: ReactNode): string {
-  if (node == null || typeof node === 'boolean') return ''
-  if (typeof node === 'string') return escapeAttr(node)
-  if (typeof node === 'number') return String(node)
-  if (Array.isArray(node)) return node.map(renderJsx).join('')
-
-  const el = node as ReactElement
-  if (typeof el.type === 'function') return renderJsx(el.type(el.props))
-  // React fragments (Symbol) and other non-string types: just render children
-  if (typeof el.type === 'symbol') return renderJsx(el.props?.children)
-
-  const tag = el.type as string
-  const props = el.props || {}
-  let attrs = ''
-
-  for (const [k, v] of Object.entries(props)) {
-    if (k === 'children' || v == null || v === false) continue
-    if (k === 'style' && typeof v === 'object') {
-      attrs += ` style="${styleToString(v as Record<string, string | number>)}"`
-    } else if (k === 'dangerouslySetInnerHTML') {
-      continue
-    } else if (k === 'className') {
-      attrs += ` class="${escapeAttr(String(v))}"`
-    } else if (k === 'charSet') {
-      attrs += ` charset="${escapeAttr(String(v))}"`
-    } else {
-      attrs += ` ${k}="${escapeAttr(String(v))}"`
-    }
-  }
-
-  if (VOID_TAGS.has(tag)) return `<${tag}${attrs}>`
-
-  const inner = props.dangerouslySetInnerHTML
-    ? props.dangerouslySetInnerHTML.__html
-    : renderJsx(props.children)
-
-  return `<${tag}${attrs}>${inner}</${tag}>`
-}
+import { renderToStaticMarkup } from 'spiceflow/federation'
 
 export interface ErrorAlertData {
   projectSlug: string
@@ -229,10 +172,10 @@ export function buildAlertSubject(data: ErrorAlertData): string {
   return `[${data.orgName}/${data.projectSlug}] ${type}: ${msg}`
 }
 
-export function buildAlertEmailHtml(data: ErrorAlertData): string {
-  return '<!DOCTYPE html>' + renderJsx(<AlertEmail data={data} />)
+export async function buildAlertEmailHtml(data: ErrorAlertData): Promise<string> {
+  return '<!DOCTYPE html>' + await renderToStaticMarkup(<AlertEmail data={data} />)
 }
 
-export function buildTestAlertEmailHtml(orgName: string): string {
-  return '<!DOCTYPE html>' + renderJsx(<TestAlertEmail orgName={orgName} />)
+export async function buildTestAlertEmailHtml(orgName: string): Promise<string> {
+  return '<!DOCTYPE html>' + await renderToStaticMarkup(<TestAlertEmail orgName={orgName} />)
 }
