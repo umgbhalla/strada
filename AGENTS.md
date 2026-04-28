@@ -491,7 +491,7 @@ D1 is Cloudflare's per-request SQLite. It works for auth and org config (low-fre
 2. D1 becomes the bottleneck for high-RPS analytical queries
 3. The CLI cannot do a single SQL query that combines error data with issue status
 
-By co-locating issue state in the same ClickHouse database as error data, a single SQL query can join `otel_errors` with `otel_issue_state FINAL` and return everything in one shot.
+By co-locating issue state in the same ClickHouse database as error data, a single SQL query can join `otel_errors` with `otel_issue_state` and return everything in one shot.
 
 **Pattern: ReplacingMergeTree for mutable state in an append-only database**
 
@@ -499,8 +499,27 @@ ClickHouse is append-only by design. You cannot UPDATE a row in-place. `Replacin
 
 1. Each mutation INSERTs a new row with a higher `Version` (epoch ms)
 2. Background merges keep only the row with the highest Version per ORDER BY key
-3. Reads use `SELECT ... FROM table FINAL` to force deduplication at query time
+3. Reads use `argMax(column, Version)` with `GROUP BY` for deduplication at query time
 4. Tinybird writes use `?wait=true` on the Events API for read-after-write consistency
+
+**Never use `FINAL` with Tinybird.** Tinybird wraps JWT-filtered queries in a subquery (`SELECT * FROM (SELECT * FROM table WHERE ProjectId = '...') AS table`), and ClickHouse does not support the `FINAL` modifier on subqueries. Use `argMax(column, Version) ... GROUP BY key` instead, which gives identical results and works everywhere.
+
+```sql
+-- BAD: FINAL breaks with Tinybird JWT subquery wrapping
+SELECT Status, AssigneeMemberId
+FROM otel_issue_state FINAL
+WHERE FingerprintHash = '...'
+LIMIT 1
+
+-- GOOD: argMax deduplication works with Tinybird and self-hosted ClickHouse
+SELECT
+    argMax(Status, Version) AS Status,
+    argMax(AssigneeMemberId, Version) AS AssigneeMemberId
+FROM otel_issue_state
+WHERE FingerprintHash = '...'
+GROUP BY FingerprintHash
+LIMIT 1
+```
 
 **Read-before-write pattern:**
 
@@ -679,6 +698,23 @@ Worker:
      → computes fingerprint
      → writes to otel_errors
 ```
+
+## Error handling
+
+**Never use silent `catch` blocks.** Every `catch` must log the error or re-throw it. Silent catches hide bugs and make debugging impossible. The alert email system was broken for weeks because `Promise.allSettled` silently swallowed a JSX rendering crash and a `catch {}` block swallowed a Tinybird query failure.
+
+```ts
+// BAD: silent catch hides the real problem
+try { ... } catch { return new Map() }
+
+// GOOD: log before falling back
+try { ... } catch (err) {
+  logger.error({ message: 'query failed', error: String(err) })
+  return new Map()
+}
+```
+
+This applies to `catch {}`, `catch (_e) {}`, and `Promise.allSettled` results that are never inspected. If you use `allSettled`, always check for `status === 'rejected'` and log the `reason`.
 
 ## Testing
 

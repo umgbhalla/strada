@@ -13,8 +13,11 @@
 import * as orm from 'drizzle-orm'
 import * as schema from 'db/src/schema.ts'
 import { env } from 'cloudflare:workers'
+import { getLogger } from '@strada.sh/sdk'
 import { getDb, getOrCreateProjectJwt } from './db.ts'
 import { buildAlertSubject, buildAlertEmailHtml } from './alert-email.tsx'
+
+const logger = getLogger('alert-check')
 
 interface AlertableError {
   fingerprintHash: string
@@ -53,20 +56,20 @@ export async function checkAlerts(): Promise<void> {
     with: { destinations: true, org: true },
   })
 
-  console.log(`Alert check: found ${rules.length} rules`)
+  logger.info({ message: `found ${rules.length} rules`, rulesCount: rules.length })
 
   if (rules.length === 0) return
 
   for (const rule of rules) {
     if (!rule.destinations || rule.destinations.length === 0) {
-      console.log(`Alert check: rule ${rule.id} has no destinations, skipping`)
+      logger.info({ message: `rule has no destinations, skipping`, ruleId: rule.id })
       continue
     }
 
     try {
       await checkOrgAlerts(rule)
     } catch (err) {
-      console.error(`Alert check failed for org ${rule.orgId}:`, err)
+      logger.error({ message: `alert check failed for org`, orgId: rule.orgId, error: String(err) })
     }
   }
 }
@@ -87,7 +90,7 @@ async function checkOrgAlerts(rule: {
     where: { orgId: rule.orgId },
   })
   if (!dbConfig) {
-    console.log(`Alert check: no database config for org ${rule.orgId}`)
+    logger.warn({ message: `no database config for org`, orgId: rule.orgId })
     return
   }
 
@@ -96,10 +99,10 @@ async function checkOrgAlerts(rule: {
     where: { orgId: rule.orgId },
   })
   if (projects.length === 0) {
-    console.log(`Alert check: no projects for org ${rule.orgId}`)
+    logger.warn({ message: `no projects for org`, orgId: rule.orgId })
     return
   }
-  console.log(`Alert check: org ${rule.orgId} has ${projects.length} projects, backend=${dbConfig.backend}`)
+  logger.info({ message: `checking org`, orgId: rule.orgId, projectCount: projects.length, backend: dbConfig.backend })
 
   const orgName = rule.org?.name || 'Unknown'
 
@@ -112,7 +115,7 @@ async function checkOrgAlerts(rule: {
         orgName,
       })
     } catch (err) {
-      console.error(`Alert check failed for project ${project.slug}:`, err)
+      logger.error({ message: `alert check failed for project`, projectSlug: project.slug, error: String(err) })
     }
   }
 }
@@ -138,7 +141,7 @@ async function checkProjectAlerts(ctx: {
     windowMinutes: rule.windowMinutes,
   })
 
-  console.log(`Alert check: project ${project.slug} has ${errors.length} error groups above threshold`)
+  logger.info({ message: `error groups above threshold`, projectSlug: project.slug, errorGroupCount: errors.length, threshold: rule.threshold, windowMinutes: rule.windowMinutes })
 
   if (errors.length === 0) return
 
@@ -156,9 +159,12 @@ async function checkProjectAlerts(ctx: {
       : 0
 
     // Skip if within cooldown
-    if (lastAlertedAt > 0 && now - lastAlertedAt < cooldownMs) continue
+    if (lastAlertedAt > 0 && now - lastAlertedAt < cooldownMs) {
+      logger.debug({ message: `skipping, within cooldown`, fingerprintHash: error.fingerprintHash, lastAlertedAt: new Date(lastAlertedAt).toISOString(), cooldownMinutes: rule.cooldownMinutes })
+      continue
+    }
 
-    // Send notifications to all destinations
+    logger.info({ message: `sending alert for error group`, fingerprintHash: error.fingerprintHash, errorCount: error.errorCount, exceptionType: error.exceptionType, destinationCount: rule.destinations.length })
     const alertData = {
       projectSlug: project.slug,
       orgName,
@@ -173,9 +179,15 @@ async function checkProjectAlerts(ctx: {
       usersImpacted: error.usersImpacted,
     }
 
-    await Promise.allSettled(
+    const results = await Promise.allSettled(
       rule.destinations.map((dest) => sendNotification(dest, alertData)),
     )
+    for (const result of results) {
+      if (result.status === 'rejected') {
+        console.error('[alert-check] sendNotification rejected:', result.reason)
+        logger.error({ message: 'sendNotification rejected', error: String(result.reason) })
+      }
+    }
 
     // Update LastAlertedAt in otel_issue_state
     await writeLastAlertedAt({
@@ -250,11 +262,19 @@ async function queryIssueStates(ctx: {
     ? `ProjectId = '${project.id}' AND `
     : ''
 
+  // Use argMax() deduplication instead of FINAL. Tinybird wraps JWT queries
+  // in a subquery and FINAL is not supported on subqueries.
   const sql = [
-    'SELECT FingerprintHash, Status, LastAlertedAt,',
-    '    AssigneeMemberId, ResolvedAt, ResolvedByMemberId',
-    'FROM otel_issue_state FINAL',
+    'SELECT',
+    '    FingerprintHash,',
+    '    argMax(Status, Version) AS Status,',
+    '    argMax(LastAlertedAt, Version) AS LastAlertedAt,',
+    '    argMax(AssigneeMemberId, Version) AS AssigneeMemberId,',
+    '    argMax(ResolvedAt, Version) AS ResolvedAt,',
+    '    argMax(ResolvedByMemberId, Version) AS ResolvedByMemberId',
+    'FROM otel_issue_state',
     `WHERE ${projectFilter}FingerprintHash IN (${inList})`,
+    'GROUP BY FingerprintHash',
     `LIMIT ${fingerprints.length}`,
     'FORMAT JSON',
   ].join('\n')
@@ -272,7 +292,8 @@ async function queryIssueStates(ctx: {
       })
     }
     return map
-  } catch {
+  } catch (err) {
+    logger.error({ message: `queryIssueStates failed, proceeding without cooldown data`, error: String(err) })
     return new Map()
   }
 }
@@ -347,17 +368,23 @@ async function sendNotification(
     const html = buildAlertEmailHtml(data)
 
     try {
+      console.log(`[alert-check] sending email to ${dest.destination}, subject: ${subject}`)
+      logger.info({ message: `sending alert email`, to: dest.destination, subject })
       await env.EMAIL.send({
         from: { email: 'alerts@updates.strada.sh', name: 'Strada' },
         to: dest.destination,
         subject,
         html,
       })
+      console.log(`[alert-check] email sent to ${dest.destination}`)
+      logger.info({ message: `alert email sent`, to: dest.destination })
     } catch (err) {
-      console.error(`Failed to send alert email to ${dest.destination}:`, err)
+      console.error(`[alert-check] email send failed:`, err)
+      logger.error({ message: `failed to send alert email`, to: dest.destination, error: String(err) })
     }
   } else if (dest.channel === 'webhook') {
     try {
+      console.log(`[alert-check] sending webhook to ${dest.destination}`)
       await fetch(dest.destination, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -375,8 +402,11 @@ async function sendNotification(
         }),
       })
     } catch (err) {
-      console.error(`Failed to send webhook to ${dest.destination}:`, err)
+      console.error(`[alert-check] webhook send failed:`, err)
+      logger.error({ message: `failed to send webhook`, destination: dest.destination, error: String(err) })
     }
+  } else {
+    console.warn(`[alert-check] unknown channel: ${dest.channel}`)
   }
 }
 

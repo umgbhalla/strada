@@ -124,7 +124,7 @@ function detectFormat(sql: string): string | null {
 // instead of doing two round-trips (ClickHouse + D1).
 //
 // ReplacingMergeTree deduplicates by (ProjectId, FingerprintHash),
-// keeping only the row with the highest Version. Reads use FINAL to
+// keeping only the row with the highest Version. Reads use argMax(col, Version) to
 // force deduplication at query time. Writes use wait=true on Tinybird
 // to guarantee read-after-write consistency (important because status
 // and assignee updates do read-before-write to preserve the other field).
@@ -202,7 +202,9 @@ async function readCurrentIssueState(ctx: Omit<QueryTinybirdCtx, 'sql'> & { fing
   const { dbConfig, proj, projectId, fingerprintHash } = ctx
   // For ClickHouse backend, add explicit ProjectId filter since there's no JWT row-level filtering
   const projectFilter = dbConfig.backend === 'clickhouse' ? ` AND ProjectId = '${projectId}'` : ''
-  const sql = `SELECT Status, AssigneeMemberId, ResolvedAt, ResolvedByMemberId, LastAlertedAt FROM otel_issue_state FINAL WHERE FingerprintHash = '${fingerprintHash}'${projectFilter} LIMIT 1 FORMAT JSON`
+  // Use argMax() instead of FINAL. Tinybird wraps JWT queries in a subquery
+  // and FINAL is not supported on subqueries.
+  const sql = `SELECT argMax(Status, Version) AS Status, argMax(AssigneeMemberId, Version) AS AssigneeMemberId, argMax(ResolvedAt, Version) AS ResolvedAt, argMax(ResolvedByMemberId, Version) AS ResolvedByMemberId, argMax(LastAlertedAt, Version) AS LastAlertedAt FROM otel_issue_state WHERE FingerprintHash = '${fingerprintHash}'${projectFilter} GROUP BY FingerprintHash LIMIT 1 FORMAT JSON`
   try {
     const result = await queryIssueState({ dbConfig, proj, projectId, sql })
     const row = result.data?.[0]
@@ -794,7 +796,7 @@ export const api = new Spiceflow()
     })
     // ── Issue management (status + assignee) ───────────────────────────
     // Issue state lives in ClickHouse/Tinybird via ReplacingMergeTree.
-    // Writes go to the Tinybird Events API (wait=true); reads use SQL with FINAL.
+     // Writes go to the Tinybird Events API (wait=true); reads use argMax(col, Version) for dedup.
     // Both mutation routes do read-before-write to preserve the other field.
     .route({
       method: 'GET',
@@ -820,10 +822,11 @@ export const api = new Spiceflow()
 
         let sql: string
         if (fingerprintFilter) {
-          sql = `SELECT FingerprintHash, Status, AssigneeMemberId, ResolvedAt, ResolvedByMemberId, UpdatedAt FROM otel_issue_state FINAL WHERE ${projectFilter}FingerprintHash = '${fingerprintFilter}' LIMIT 1 FORMAT JSON`
+          // Use argMax() instead of FINAL (Tinybird JWT subquery doesn't support FINAL)
+          sql = `SELECT FingerprintHash, argMax(Status, Version) AS Status, argMax(AssigneeMemberId, Version) AS AssigneeMemberId, argMax(ResolvedAt, Version) AS ResolvedAt, argMax(ResolvedByMemberId, Version) AS ResolvedByMemberId, argMax(UpdatedAt, Version) AS UpdatedAt FROM otel_issue_state WHERE ${projectFilter}FingerprintHash = '${fingerprintFilter}' GROUP BY FingerprintHash LIMIT 1 FORMAT JSON`
         } else {
           const where = projectFilter ? `WHERE ${projectFilter.replace(/ AND $/, '')}` : ''
-          sql = `SELECT FingerprintHash, Status, AssigneeMemberId, ResolvedAt, ResolvedByMemberId, UpdatedAt FROM otel_issue_state FINAL ${where} ORDER BY UpdatedAt DESC LIMIT 500 FORMAT JSON`
+          sql = `SELECT FingerprintHash, argMax(Status, Version) AS Status, argMax(AssigneeMemberId, Version) AS AssigneeMemberId, argMax(ResolvedAt, Version) AS ResolvedAt, argMax(ResolvedByMemberId, Version) AS ResolvedByMemberId, argMax(UpdatedAt, Version) AS UpdatedAt FROM otel_issue_state ${where} GROUP BY FingerprintHash ORDER BY UpdatedAt DESC LIMIT 500 FORMAT JSON`
         }
 
         const result = await queryIssueState({ dbConfig, proj, projectId: params.projectId, sql })

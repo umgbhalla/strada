@@ -38,7 +38,8 @@ async function fetchIssueMetadata(projectId: string, fingerprints: string[], out
   if (fingerprints.length === 0) return new Map<string, IssueMetadata>();
   try {
     const inList = fingerprints.map((f) => `'${f}'`).join(", ");
-    const sql = `SELECT FingerprintHash, Status, AssigneeMemberId FROM otel_issue_state FINAL WHERE FingerprintHash IN (${inList}) LIMIT ${fingerprints.length}`;
+    // Use argMax() instead of FINAL (Tinybird JWT subquery doesn't support FINAL)
+    const sql = `SELECT FingerprintHash, argMax(Status, Version) AS Status, argMax(AssigneeMemberId, Version) AS AssigneeMemberId FROM otel_issue_state WHERE FingerprintHash IN (${inList}) GROUP BY FingerprintHash LIMIT ${fingerprints.length}`;
     const res = await queryProject(projectId, sql);
     const map = new Map<string, IssueMetadata>();
     for (const row of res.data ?? []) {
@@ -58,7 +59,7 @@ async function fetchIssueMetadata(projectId: string, fingerprints: string[], out
 /** Fetch metadata for a single issue by fingerprint. Returns null if not found or on error. */
 async function fetchSingleIssueMetadata(projectId: string, fingerprintHash: string): Promise<IssueMetadata | null> {
   try {
-    const sql = `SELECT FingerprintHash, Status, AssigneeMemberId FROM otel_issue_state FINAL WHERE FingerprintHash = '${fingerprintHash}' LIMIT 1`;
+    const sql = `SELECT FingerprintHash, argMax(Status, Version) AS Status, argMax(AssigneeMemberId, Version) AS AssigneeMemberId FROM otel_issue_state WHERE FingerprintHash = '${fingerprintHash}' GROUP BY FingerprintHash LIMIT 1`;
     const res = await queryProject(projectId, sql);
     const row = res.data?.[0];
     if (!row) return null;

@@ -31,6 +31,8 @@ function renderJsx(node: ReactNode): string {
 
   const el = node as ReactElement
   if (typeof el.type === 'function') return renderJsx(el.type(el.props))
+  // React fragments (Symbol) and other non-string types: just render children
+  if (typeof el.type === 'symbol') return renderJsx(el.props?.children)
 
   const tag = el.type as string
   const props = el.props || {}
