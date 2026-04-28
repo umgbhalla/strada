@@ -96,6 +96,7 @@ logsCli
   .option("--min-level [level]", "Minimum severity: trace, debug, info, warn, error, fatal")
   .option("--search [text]", "Full-text search on log body")
   .option("--trace-id [id]", "Show logs for a specific trace")
+  .option("-w, --where <expr>", z.array(z.string()).describe("Raw SQL WHERE condition (repeatable, ANDed)"))
   .option("-n, --limit [count]", "Max rows (default: 200)")
   .option("--json", "Print raw JSON response")
   .action(async (subcommand, options, { console: output, process: proc }) => {
@@ -119,6 +120,7 @@ logsCli
     if (subcommand === "stats") {
       const conditions = buildTimeConditions(options);
       if (options.service) conditions.push(`ServiceName = '${options.service}'`);
+      if (options.where) for (const w of options.where) conditions.push(w);
 
       const sql = `
 SELECT
@@ -191,6 +193,7 @@ LIMIT 50
       }
       conditions.push(`SeverityNumber >= ${minNum}`);
     }
+    if (options.where) for (const w of options.where) conditions.push(w);
 
     const sql = `
 SELECT

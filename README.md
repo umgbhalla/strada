@@ -157,6 +157,11 @@ strada logs -p my-app --since 1h
 strada logs -p my-app --min-level error --since 24h
 strada logs -p my-app --search "timeout" --service api
 
+# filter by any attribute with --where (-w)
+strada logs -p my-app -w "mapContains(LogAttributes, 'event.name')"          # custom events only
+strada logs -p my-app -w "LogAttributes['user.id'] = 'user_123'"             # specific user
+strada logs -p my-app -w "LogAttributes['exception.type'] = 'TypeError'"     # specific error type
+
 # log volume by service and severity
 strada logs stats -p my-app --since 24h
 
