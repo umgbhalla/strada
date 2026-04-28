@@ -4,7 +4,7 @@
 // through the full pipeline: SDK → collector → Tinybird/ClickHouse.
 //
 // Run with:
-//   STRADA_PROJECT_ID=<id> STRADA_ENDPOINT=<url> pnpm vitest run
+//   STRADA_PROJECT_ID=<id> pnpm vitest run
 //
 // After running, use `strada issues list -p <slug>` to verify the data landed.
 
@@ -23,9 +23,9 @@ import {
 } from "@strada.sh/sdk";
 
 const projectId = process.env.STRADA_PROJECT_ID;
-const endpoint = process.env.STRADA_ENDPOINT;
+const endpoint = projectId ? `https://${projectId}-ingest.strada.sh` : undefined;
 
-describe.skipIf(!projectId || !endpoint)("example-app telemetry", () => {
+describe.skipIf(!projectId)("example-app telemetry", () => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let app: any;
 
@@ -38,7 +38,7 @@ describe.skipIf(!projectId || !endpoint)("example-app telemetry", () => {
       environment: "test",
 
       telemetry: {
-        metrics: { exportIntervalMillis: 500, exportTimeoutMillis: 5_000 },
+        metrics: { exportIntervalMillis: 5_000, exportTimeoutMillis: 5_000 },
       },
     });
 
@@ -178,6 +178,21 @@ describe.skipIf(!projectId || !endpoint)("example-app telemetry", () => {
         return { error: "multiple" };
       })
 
+      // ── Random fingerprint error (always triggers a new alert email) ──
+      .get("/error/random-fingerprint", ({ span }) => {
+        const id = Math.random().toString(36).slice(2, 10);
+        const err = new Error(`Random error ${id} for alert email testing`);
+        err.name = "AlertTestError";
+        captureException(err, {
+          mechanism: "generic",
+          handled: true,
+          fingerprint: [`alert-test-${id}`],
+          tags: { route: "/error/random-fingerprint", testId: id },
+        });
+        span.setStatus({ code: SpanStatusCode.ERROR });
+        return { error: "AlertTestError", testId: id };
+      })
+
       // ── Custom event (not an error, tests track-like log records) ──
       .get("/event/purchase", ({ span }) => {
         logger.emit({
@@ -257,6 +272,17 @@ describe.skipIf(!projectId || !endpoint)("example-app telemetry", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body).toMatchObject({ error: "multiple" });
+  });
+
+  test("random fingerprint error (triggers unique alert email)", async () => {
+    // Hit multiple times to exceed alert threshold
+    for (let i = 0; i < 5; i++) {
+      const res = await app.handle(new Request("http://localhost/error/random-fingerprint"));
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.error).toBe("AlertTestError");
+      expect(body.testId).toBeTruthy();
+    }
   });
 
   test("custom purchase event", async () => {

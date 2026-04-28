@@ -64,18 +64,19 @@ function Code({ children }: { children: string }) {
 
 function Pre({ children }: { children: string }) {
   return (
-    <pre style={{
-      fontFamily: mono,
-      fontSize: 13,
-      lineHeight: 1.5,
-      padding: 16,
-      borderRadius: 8,
-      backgroundColor: '#f5f5f5',
-      whiteSpace: 'pre-wrap',
-      wordBreak: 'break-word',
-    }}>
-      {children}
-    </pre>
+    <div style={{ overflowX: 'auto', borderRadius: 8, backgroundColor: '#f5f5f5' }}>
+      <pre style={{
+        fontFamily: mono,
+        fontSize: 13,
+        lineHeight: 1.5,
+        padding: 16,
+        margin: 0,
+        whiteSpace: 'pre',
+        color: '#1a1a1a',
+      }}>
+        {children}
+      </pre>
+    </div>
   )
 }
 
@@ -145,7 +146,17 @@ function AlertEmail({ data }: { data: ErrorAlertData }) {
       <Hr />
 
       <p style={{ margin: '12px 0' }}>View this issue:</p>
-      <Pre>{`strada issues view ${data.fingerprintHash} -p ${data.projectSlug}`}</Pre>
+      <p style={{ margin: '8px 0' }}>
+        <code style={{
+          fontFamily: mono,
+          fontSize: 13,
+          padding: '4px 8px',
+          borderRadius: 4,
+          backgroundColor: '#f0f0f0',
+        }}>
+          {`strada issues view ${data.fingerprintHash} -p ${data.projectSlug}`}
+        </code>
+      </p>
 
       <Footer orgName={data.orgName} />
     </EmailShell>
