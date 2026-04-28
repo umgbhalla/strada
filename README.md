@@ -171,6 +171,10 @@ strada query "SELECT count() FROM otel_errors WHERE ExceptionType = 'TypeError'"
 # browser analytics
 strada analytics pages -p my-app --since 7d
 strada analytics sessions -p my-app --since 24h
+
+# custom events with attribute filters
+strada analytics events -p my-app -w "LogAttributes['custom.plan'] = 'pro'"    # events from pro users
+strada analytics events -p my-app -w "LogAttributes['user.id'] = 'user_123'"   # events from a user
 ```
 
 ## Built on OpenTelemetry

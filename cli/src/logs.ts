@@ -88,7 +88,7 @@ function buildTimeConditions(options: { since?: string; until?: string }): strin
 // ── logs list ─────────────────────────────────────────────────────
 
 logsCli
-  .command("logs [subcommand]", "Browse and search log records")
+  .command("logs [subcommand]", "Browse and search log records. Use -w for attribute filters: -w \"mapContains(LogAttributes, 'event.name')\" for custom events, -w \"LogAttributes['user.id'] = 'user_123'\" for a specific user")
   .option("-p, --project <slug>", z.array(z.string()).describe("Project slug (repeatable)"))
   .option("-s, --service [name]", "Filter by ServiceName")
   .option("--since [time]", "Start time: duration (1h, 7d) or ISO date (default: 1h)")

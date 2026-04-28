@@ -8,6 +8,7 @@
 
 import { goke, type GokeExecutionContext } from "goke";
 import { z } from "zod";
+
 import { bold, cyan, dim, green, yellow, gray } from "./colors.ts";
 import { ensureDefaultOrg, resolveProjectId } from "./projects.ts";
 import { queryProject } from "./issues.ts";
@@ -451,7 +452,8 @@ FROM (
 // ── analytics events ──────────────────────────────────────────────
 
 sharedOptions(analyticsCli.command("analytics events", "Top custom events by occurrence"))
-  .action(async (options: AnalyticsOptions, { console: output, process: proc }: GokeExecutionContext) => {
+  .option("-w, --where <expr>", z.array(z.string()).describe("Raw SQL WHERE condition (repeatable, ANDed)"))
+  .action(async (options: AnalyticsOptions & { where?: string[] }, { console: output, process: proc }: GokeExecutionContext) => {
     const slugs = requireProject(options, output, proc);
     if (!slugs) return;
 
@@ -460,6 +462,7 @@ sharedOptions(analyticsCli.command("analytics events", "Top custom events by occ
 
     const conditions = [`Timestamp >= now() - INTERVAL ${since}`, `LogAttributes['event.name'] != ''`];
     if (options.service) conditions.push(`ServiceName = '${options.service}'`);
+    if (options.where) for (const w of options.where) conditions.push(w);
 
     const sql = `
 SELECT
