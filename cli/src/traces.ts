@@ -221,26 +221,26 @@ tracesCli
     const limit = Number(options.limit) || 50;
     const conditions = buildTimeConditions(options);
     if (options.service) conditions.push(`ServiceName = '${options.service}'`);
-    const having = options.errors ? "\nHAVING ErrorSpanCount > 0" : "";
+    const having = options.errors ? "HAVING ErrorSpanCount > 0" : "";
 
-    const sql = `
-SELECT
-    TraceId,
-    min(Timestamp) AS StartTime,
-    max(toUnixTimestamp64Nano(Timestamp) + Duration) - min(toUnixTimestamp64Nano(Timestamp)) AS DurationNs,
-    count() AS SpanCount,
-    groupUniqArray(ServiceName) AS Services,
-    countIf(StatusCode = 'Error') AS ErrorSpanCount,
-    anyIf(SpanName, ParentSpanId = '') AS RootSpanName,
-    anyIf(ServiceName, ParentSpanId = '') AS RootServiceName,
-    anyIf(StatusCode, ParentSpanId = '') AS RootStatusCode
-FROM otel_traces
-WHERE ${conditions.join("\n  AND ")}
-GROUP BY TraceId
-${having}
-ORDER BY StartTime DESC
-LIMIT ${limit}
-`.trim();
+    const sql = dedent`
+      SELECT
+          TraceId,
+          min(Timestamp) AS StartTime,
+          max(toUnixTimestamp64Nano(Timestamp) + Duration) - min(toUnixTimestamp64Nano(Timestamp)) AS DurationNs,
+          count() AS SpanCount,
+          groupUniqArray(ServiceName) AS Services,
+          countIf(StatusCode = 'Error') AS ErrorSpanCount,
+          anyIf(SpanName, ParentSpanId = '') AS RootSpanName,
+          anyIf(ServiceName, ParentSpanId = '') AS RootServiceName,
+          anyIf(StatusCode, ParentSpanId = '') AS RootStatusCode
+      FROM otel_traces
+      WHERE ${conditions.join("\n  AND ")}
+      GROUP BY TraceId
+      ${having}
+      ORDER BY StartTime DESC
+      LIMIT ${limit}
+    `.trim();
 
     const results = await Promise.all(projects.map((project) => queryProject(project.id, sql)));
     const rows = results.flatMap((result) => result.data ?? []) as QueryRow[];
@@ -308,25 +308,25 @@ tracesCli
 
     const org = await ensureDefaultOrg();
     const project = await resolveProjectId(org.id, options.project);
-    const sql = `
-SELECT
-    TraceId,
-    SpanId,
-    ParentSpanId,
-    SpanName,
-    ServiceName,
-    SpanKind,
-    Duration,
-    Timestamp,
-    StatusCode,
-    StatusMessage,
-    SpanAttributes,
-    ResourceAttributes
-FROM otel_traces
-WHERE TraceId = '${traceId}'
-ORDER BY Timestamp ASC
-LIMIT 10000
-`.trim();
+    const sql = dedent`
+      SELECT
+          TraceId,
+          SpanId,
+          ParentSpanId,
+          SpanName,
+          ServiceName,
+          SpanKind,
+          Duration,
+          Timestamp,
+          StatusCode,
+          StatusMessage,
+          SpanAttributes,
+          ResourceAttributes
+      FROM otel_traces
+      WHERE TraceId = '${traceId}'
+      ORDER BY Timestamp ASC
+      LIMIT 10000
+    `.trim();
 
     const result = await queryProject(project.id, sql);
     const rows = ((result.data ?? []) as QueryRow[]).map((row) => toTraceRow(row));

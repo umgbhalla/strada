@@ -7,6 +7,7 @@
 // ProjectId is never referenced; the JWT filter handles it automatically.
 
 import { goke, type GokeExecutionContext } from "goke";
+import dedent from "string-dedent";
 import { z } from "zod";
 
 import { bold, cyan, dim, green, yellow, gray } from "./colors.ts";
@@ -78,17 +79,17 @@ sharedOptions(analyticsCli.command("analytics pages", "Top pages by pageviews"))
     const conditions = buildMvConditions(options);
     const limit = Number(options.limit) || 20;
 
-    const sql = `
-SELECT
-    Pathname,
-    countMerge(Hits) AS pageviews,
-    uniqMerge(Visits) AS visitors
-FROM otel_analytics_pages
-WHERE ${conditions.join("\n  AND ")}
-GROUP BY Pathname
-ORDER BY pageviews DESC
-LIMIT ${limit}
-`.trim();
+    const sql = dedent`
+      SELECT
+          Pathname,
+          countMerge(Hits) AS pageviews,
+          uniqMerge(Visits) AS visitors
+      FROM otel_analytics_pages
+      WHERE ${conditions.join("\n  AND ")}
+      GROUP BY Pathname
+      ORDER BY pageviews DESC
+      LIMIT ${limit}
+    `.trim();
 
     const rows = await queryAllProjects(slugs, sql);
 
@@ -128,17 +129,17 @@ sharedOptions(analyticsCli.command("analytics browsers", "Top browsers by visito
     const conditions = buildMvConditions(options);
     const limit = Number(options.limit) || 20;
 
-    const sql = `
-SELECT
-    Browser,
-    uniqMerge(Visits) AS visitors,
-    countMerge(Hits) AS pageviews
-FROM otel_analytics_pages
-WHERE ${conditions.join("\n  AND ")}
-GROUP BY Browser
-ORDER BY visitors DESC
-LIMIT ${limit}
-`.trim();
+    const sql = dedent`
+      SELECT
+          Browser,
+          uniqMerge(Visits) AS visitors,
+          countMerge(Hits) AS pageviews
+      FROM otel_analytics_pages
+      WHERE ${conditions.join("\n  AND ")}
+      GROUP BY Browser
+      ORDER BY visitors DESC
+      LIMIT ${limit}
+    `.trim();
 
     const rows = await queryAllProjects(slugs, sql);
 
@@ -177,17 +178,17 @@ sharedOptions(analyticsCli.command("analytics devices", "Top devices by visitors
     const conditions = buildMvConditions(options);
     const limit = Number(options.limit) || 20;
 
-    const sql = `
-SELECT
-    Device,
-    uniqMerge(Visits) AS visitors,
-    countMerge(Hits) AS pageviews
-FROM otel_analytics_pages
-WHERE ${conditions.join("\n  AND ")}
-GROUP BY Device
-ORDER BY visitors DESC
-LIMIT ${limit}
-`.trim();
+    const sql = dedent`
+      SELECT
+          Device,
+          uniqMerge(Visits) AS visitors,
+          countMerge(Hits) AS pageviews
+      FROM otel_analytics_pages
+      WHERE ${conditions.join("\n  AND ")}
+      GROUP BY Device
+      ORDER BY visitors DESC
+      LIMIT ${limit}
+    `.trim();
 
     const rows = await queryAllProjects(slugs, sql);
 
@@ -226,17 +227,17 @@ sharedOptions(analyticsCli.command("analytics countries", "Top countries by visi
     const conditions = buildMvConditions(options);
     const limit = Number(options.limit) || 20;
 
-    const sql = `
-SELECT
-    Country,
-    uniqMerge(Visits) AS visitors,
-    countMerge(Hits) AS pageviews
-FROM otel_analytics_pages
-WHERE ${conditions.join("\n  AND ")}
-GROUP BY Country
-ORDER BY visitors DESC
-LIMIT ${limit}
-`.trim();
+    const sql = dedent`
+      SELECT
+          Country,
+          uniqMerge(Visits) AS visitors,
+          countMerge(Hits) AS pageviews
+      FROM otel_analytics_pages
+      WHERE ${conditions.join("\n  AND ")}
+      GROUP BY Country
+      ORDER BY visitors DESC
+      LIMIT ${limit}
+    `.trim();
 
     const rows = await queryAllProjects(slugs, sql);
 
@@ -279,17 +280,17 @@ sharedOptions(analyticsCli.command("analytics referrers", "Top traffic sources b
     }
     const limit = Number(options.limit) || 20;
 
-    const sql = `
-SELECT
-    Referrer,
-    uniqMerge(Visits) AS visitors,
-    countMerge(Hits) AS pageviews
-FROM otel_analytics_pages
-WHERE ${conditions.join("\n  AND ")}
-GROUP BY Referrer
-ORDER BY visitors DESC
-LIMIT ${limit}
-`.trim();
+    const sql = dedent`
+      SELECT
+          Referrer,
+          uniqMerge(Visits) AS visitors,
+          countMerge(Hits) AS pageviews
+      FROM otel_analytics_pages
+      WHERE ${conditions.join("\n  AND ")}
+      GROUP BY Referrer
+      ORDER BY visitors DESC
+      LIMIT ${limit}
+    `.trim();
 
     const rows = await queryAllProjects(slugs, sql);
 
@@ -328,17 +329,17 @@ sharedOptions(analyticsCli.command("analytics languages", "Top languages by visi
     const conditions = buildMvConditions(options);
     const limit = Number(options.limit) || 20;
 
-    const sql = `
-SELECT
-    Language,
-    uniqMerge(Visits) AS visitors,
-    countMerge(Hits) AS pageviews
-FROM otel_analytics_pages
-WHERE ${conditions.join("\n  AND ")}
-GROUP BY Language
-ORDER BY visitors DESC
-LIMIT ${limit}
-`.trim();
+    const sql = dedent`
+      SELECT
+          Language,
+          uniqMerge(Visits) AS visitors,
+          countMerge(Hits) AS pageviews
+      FROM otel_analytics_pages
+      WHERE ${conditions.join("\n  AND ")}
+      GROUP BY Language
+      ORDER BY visitors DESC
+      LIMIT ${limit}
+    `.trim();
 
     const rows = await queryAllProjects(slugs, sql);
 
@@ -377,31 +378,31 @@ sharedOptions(analyticsCli.command("analytics kpis", "Summary KPIs: visitors, pa
     const pagesConditions = buildMvConditions(options);
     const sessionsConditions = buildMvConditions(options);
 
-    const pagesSql = `
-SELECT
-    uniqMerge(Visits) AS unique_visitors,
-    countMerge(Hits) AS total_pageviews
-FROM otel_analytics_pages
-WHERE ${pagesConditions.join("\n  AND ")}
-`.trim();
+    const pagesSql = dedent`
+      SELECT
+          uniqMerge(Visits) AS unique_visitors,
+          countMerge(Hits) AS total_pageviews
+      FROM otel_analytics_pages
+      WHERE ${pagesConditions.join("\n  AND ")}
+    `.trim();
 
     // SimpleAggregateFunction(max/min, DateTime64) columns can't be subtracted
     // directly. Convert to milliseconds via toUnixTimestamp64Milli, then diff.
-    const sessionsSql = `
-SELECT
-    count() AS total_sessions,
-    sumIf(1, latest_ms = first_ms) / greatest(count(), 1) AS bounce_rate,
-    avg(latest_ms - first_ms) / 1000 AS avg_session_duration_sec
-FROM (
-    SELECT
-        SessionId,
-        toUnixTimestamp64Milli(max(LatestHit)) AS latest_ms,
-        toUnixTimestamp64Milli(min(FirstHit)) AS first_ms
-    FROM otel_analytics_sessions
-    WHERE ${sessionsConditions.join("\n      AND ")}
-    GROUP BY SessionId
-)
-`.trim();
+    const sessionsSql = dedent`
+      SELECT
+          count() AS total_sessions,
+          sumIf(1, latest_ms = first_ms) / greatest(count(), 1) AS bounce_rate,
+          avg(latest_ms - first_ms) / 1000 AS avg_session_duration_sec
+      FROM (
+          SELECT
+              SessionId,
+              toUnixTimestamp64Milli(max(LatestHit)) AS latest_ms,
+              toUnixTimestamp64Milli(min(FirstHit)) AS first_ms
+          FROM otel_analytics_sessions
+          WHERE ${sessionsConditions.join("\n      AND ")}
+          GROUP BY SessionId
+      )
+    `.trim();
 
     const org = await ensureDefaultOrg();
     const projects = await Promise.all(slugs.map((s) => resolveProjectId(org.id, s)));
@@ -464,17 +465,17 @@ sharedOptions(analyticsCli.command("analytics events", "Top custom events by occ
     if (options.service) conditions.push(`ServiceName = '${options.service}'`);
     if (options.where) for (const w of options.where) conditions.push(w);
 
-    const sql = `
-SELECT
-    LogAttributes['event.name'] AS event_name,
-    count() AS occurrences,
-    uniqExact(LogAttributes['session.id']) AS unique_sessions
-FROM otel_logs
-WHERE ${conditions.join("\n  AND ")}
-GROUP BY event_name
-ORDER BY occurrences DESC
-LIMIT ${limit}
-`.trim();
+    const sql = dedent`
+      SELECT
+          LogAttributes['event.name'] AS event_name,
+          count() AS occurrences,
+          uniqExact(LogAttributes['session.id']) AS unique_sessions
+      FROM otel_logs
+      WHERE ${conditions.join("\n  AND ")}
+      GROUP BY event_name
+      ORDER BY occurrences DESC
+      LIMIT ${limit}
+    `.trim();
 
     const rows = await queryAllProjects(slugs, sql);
 
@@ -520,11 +521,11 @@ analyticsCli
     ];
     if (options.service) conditions.push(`ServiceName = '${options.service}'`);
 
-    const sql = `
-SELECT uniq(SpanAttributes['session.id']) AS active_visitors
-FROM otel_traces
-WHERE ${conditions.join("\n  AND ")}
-`.trim();
+    const sql = dedent`
+      SELECT uniq(SpanAttributes['session.id']) AS active_visitors
+      FROM otel_traces
+      WHERE ${conditions.join("\n  AND ")}
+    `.trim();
 
     const rows = await queryAllProjects(slugs, sql);
     const active = rows.reduce((sum, r) => sum + Number(r.active_visitors ?? 0), 0);

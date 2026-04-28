@@ -8,6 +8,7 @@
 //             user-facing concept with status, assignee, and lifecycle
 
 import { goke } from "goke";
+import dedent from "string-dedent";
 import { z } from "zod";
 import { bold, cyan, dim, red, yellow, gray, green, white } from "./colors.ts";
 import { getApiClient } from "./api-client.ts";
@@ -39,7 +40,16 @@ async function fetchIssueMetadata(projectId: string, fingerprints: string[], out
   try {
     const inList = fingerprints.map((f) => `'${f}'`).join(", ");
     // Use argMax() instead of FINAL (Tinybird JWT subquery doesn't support FINAL)
-    const sql = `SELECT FingerprintHash, argMax(Status, Version) AS Status, argMax(AssigneeMemberId, Version) AS AssigneeMemberId FROM otel_issue_state WHERE FingerprintHash IN (${inList}) GROUP BY FingerprintHash LIMIT ${fingerprints.length}`;
+    const sql = dedent`
+      SELECT
+          FingerprintHash,
+          argMax(Status, Version) AS Status,
+          argMax(AssigneeMemberId, Version) AS AssigneeMemberId
+      FROM otel_issue_state
+      WHERE FingerprintHash IN (${inList})
+      GROUP BY FingerprintHash
+      LIMIT ${fingerprints.length}
+    `.trim();
     const res = await queryProject(projectId, sql);
     const map = new Map<string, IssueMetadata>();
     for (const row of res.data ?? []) {
@@ -59,7 +69,16 @@ async function fetchIssueMetadata(projectId: string, fingerprints: string[], out
 /** Fetch metadata for a single issue by fingerprint. Returns null if not found or on error. */
 async function fetchSingleIssueMetadata(projectId: string, fingerprintHash: string): Promise<IssueMetadata | null> {
   try {
-    const sql = `SELECT FingerprintHash, argMax(Status, Version) AS Status, argMax(AssigneeMemberId, Version) AS AssigneeMemberId FROM otel_issue_state WHERE FingerprintHash = '${fingerprintHash}' GROUP BY FingerprintHash LIMIT 1`;
+    const sql = dedent`
+      SELECT
+          FingerprintHash,
+          argMax(Status, Version) AS Status,
+          argMax(AssigneeMemberId, Version) AS AssigneeMemberId
+      FROM otel_issue_state
+      WHERE FingerprintHash = '${fingerprintHash}'
+      GROUP BY FingerprintHash
+      LIMIT 1
+    `.trim();
     const res = await queryProject(projectId, sql);
     const row = res.data?.[0];
     if (!row) return null;
@@ -117,22 +136,22 @@ issuesCli
       conditions.push(`MechanismHandled = false`);
     }
 
-    const sql = `
-SELECT
-    FingerprintHash,
-    anyLast(ExceptionType) AS last_type,
-    anyLast(ExceptionMessage) AS last_message,
-    anyLast(Level) AS last_level,
-    count() AS event_count,
-    min(Timestamp) AS first_seen,
-    max(Timestamp) AS last_seen,
-    countIf(MechanismHandled = false) AS unhandled_count
-FROM otel_errors
-WHERE ${conditions.join("\n  AND ")}
-GROUP BY FingerprintHash
-ORDER BY event_count DESC
-LIMIT ${limit}
-`.trim();
+    const sql = dedent`
+      SELECT
+          FingerprintHash,
+          anyLast(ExceptionType) AS last_type,
+          anyLast(ExceptionMessage) AS last_message,
+          anyLast(Level) AS last_level,
+          count() AS event_count,
+          min(Timestamp) AS first_seen,
+          max(Timestamp) AS last_seen,
+          countIf(MechanismHandled = false) AS unhandled_count
+      FROM otel_errors
+      WHERE ${conditions.join("\n  AND ")}
+      GROUP BY FingerprintHash
+      ORDER BY event_count DESC
+      LIMIT ${limit}
+    `.trim();
 
     // Query all projects in parallel
     const results = await Promise.all(projects.map((p) => queryProject(p.id, sql)));
@@ -232,47 +251,47 @@ issuesCli
     const eventsLimit = Number(options.events) || 5;
 
     // Query 1: Issue summary (aggregated)
-    const summarySql = `
-SELECT
-    anyLast(ExceptionType) AS last_type,
-    anyLast(ExceptionMessage) AS last_message,
-    anyLast(Level) AS last_level,
-    anyLast(MechanismType) AS last_mechanism,
-    anyLast(MechanismHandled) AS last_handled,
-    count() AS event_count,
-    countIf(MechanismHandled = false) AS unhandled_count,
-    min(Timestamp) AS first_seen,
-    max(Timestamp) AS last_seen,
-    groupUniqArray(ServiceName) AS services,
-    groupUniqArray(Release) AS releases,
-    groupUniqArray(Environment) AS environments
-FROM otel_errors
-WHERE FingerprintHash = '${fingerprint}'
-LIMIT 1
-`.trim();
+    const summarySql = dedent`
+      SELECT
+          anyLast(ExceptionType) AS last_type,
+          anyLast(ExceptionMessage) AS last_message,
+          anyLast(Level) AS last_level,
+          anyLast(MechanismType) AS last_mechanism,
+          anyLast(MechanismHandled) AS last_handled,
+          count() AS event_count,
+          countIf(MechanismHandled = false) AS unhandled_count,
+          min(Timestamp) AS first_seen,
+          max(Timestamp) AS last_seen,
+          groupUniqArray(ServiceName) AS services,
+          groupUniqArray(Release) AS releases,
+          groupUniqArray(Environment) AS environments
+      FROM otel_errors
+      WHERE FingerprintHash = '${fingerprint}'
+      LIMIT 1
+    `.trim();
 
     // Query 2: Recent error events with stacktrace
-    const eventsSql = `
-SELECT
-    Timestamp,
-    ExceptionType,
-    ExceptionMessage,
-    ExceptionStacktrace,
-    ExceptionFrames,
-    MechanismType,
-    MechanismHandled,
-    Level,
-    Release,
-    Environment,
-    ServiceName,
-    TraceId,
-    SpanId,
-    Tags
-FROM otel_errors
-WHERE FingerprintHash = '${fingerprint}'
-ORDER BY Timestamp DESC
-LIMIT ${eventsLimit}
-`.trim();
+    const eventsSql = dedent`
+      SELECT
+          Timestamp,
+          ExceptionType,
+          ExceptionMessage,
+          ExceptionStacktrace,
+          ExceptionFrames,
+          MechanismType,
+          MechanismHandled,
+          Level,
+          Release,
+          Environment,
+          ServiceName,
+          TraceId,
+          SpanId,
+          Tags
+      FROM otel_errors
+      WHERE FingerprintHash = '${fingerprint}'
+      ORDER BY Timestamp DESC
+      LIMIT ${eventsLimit}
+    `.trim();
 
     const [summaryRes, eventsRes, issueMeta] = await Promise.all([
       queryProject(project.id, summarySql),

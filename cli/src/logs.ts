@@ -7,6 +7,7 @@
 // dates ("2026-04-28", "2026-04-28T10:30:00Z").
 
 import { goke } from "goke";
+import dedent from "string-dedent";
 import { z } from "zod";
 import { bold, cyan, dim, red, yellow, gray, green, white } from "./colors.ts";
 import { ensureDefaultOrg, resolveProjectId } from "./projects.ts";
@@ -122,21 +123,21 @@ logsCli
       if (options.service) conditions.push(`ServiceName = '${options.service}'`);
       if (options.where) for (const w of options.where) conditions.push(w);
 
-      const sql = `
-SELECT
-    ServiceName,
-    count() AS total,
-    countIf(SeverityText = 'DEBUG' OR SeverityText = 'TRACE') AS debug,
-    countIf(SeverityText = 'INFO') AS info,
-    countIf(SeverityText = 'WARN') AS warn,
-    countIf(SeverityText = 'ERROR') AS error,
-    countIf(SeverityText = 'FATAL') AS fatal
-FROM otel_logs
-WHERE ${conditions.join("\n  AND ")}
-GROUP BY ServiceName
-ORDER BY total DESC
-LIMIT 50
-`.trim();
+      const sql = dedent`
+        SELECT
+            ServiceName,
+            count() AS total,
+            countIf(SeverityText = 'DEBUG' OR SeverityText = 'TRACE') AS debug,
+            countIf(SeverityText = 'INFO') AS info,
+            countIf(SeverityText = 'WARN') AS warn,
+            countIf(SeverityText = 'ERROR') AS error,
+            countIf(SeverityText = 'FATAL') AS fatal
+        FROM otel_logs
+        WHERE ${conditions.join("\n  AND ")}
+        GROUP BY ServiceName
+        ORDER BY total DESC
+        LIMIT 50
+      `.trim();
 
       const results = await Promise.all(projects.map((p) => queryProject(p.id, sql)));
       const allRows = results.flatMap((data) => data.data ?? []);
@@ -195,20 +196,20 @@ LIMIT 50
     }
     if (options.where) for (const w of options.where) conditions.push(w);
 
-    const sql = `
-SELECT
-    Timestamp,
-    SeverityText,
-    ServiceName,
-    Body,
-    LogAttributes,
-    TraceId,
-    SpanId
-FROM otel_logs
-WHERE ${conditions.join("\n  AND ")}
-ORDER BY Timestamp DESC
-LIMIT ${limit}
-`.trim();
+    const sql = dedent`
+      SELECT
+          Timestamp,
+          SeverityText,
+          ServiceName,
+          Body,
+          LogAttributes,
+          TraceId,
+          SpanId
+      FROM otel_logs
+      WHERE ${conditions.join("\n  AND ")}
+      ORDER BY Timestamp DESC
+      LIMIT ${limit}
+    `.trim();
 
     const results = await Promise.all(projects.map((p) => queryProject(p.id, sql)));
     const allRows = results.flatMap((data) => data.data ?? []);
@@ -248,5 +249,4 @@ LIMIT ${limit}
     output.log(dim(`  ${bold(String(allRows.length))} log${allRows.length === 1 ? "" : "s"}`));
     output.log("");
   });
-
 

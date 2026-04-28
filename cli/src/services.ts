@@ -88,31 +88,31 @@ servicesCli
     if (options.until) conditions.push(`Timestamp <= ${parseTimeBoundary(options.until)}`);
     const where = conditions.join("\n  AND ");
 
-    const logsSql = `
-SELECT
-    ServiceName,
-    count() AS logs,
-    countIf(SeverityText IN ('ERROR', 'FATAL')) AS log_errors,
-    max(Timestamp) AS last_seen
-FROM otel_logs
-WHERE ${where}
-GROUP BY ServiceName
-ORDER BY logs DESC
-LIMIT ${limit}
-`.trim();
+    const logsSql = dedent`
+      SELECT
+          ServiceName,
+          count() AS logs,
+          countIf(SeverityText IN ('ERROR', 'FATAL')) AS log_errors,
+          max(Timestamp) AS last_seen
+      FROM otel_logs
+      WHERE ${where}
+      GROUP BY ServiceName
+      ORDER BY logs DESC
+      LIMIT ${limit}
+    `.trim();
 
-    const tracesSql = `
-SELECT
-    ServiceName,
-    count() AS spans,
-    countIf(StatusCode = 'Error') AS span_errors,
-    max(Timestamp) AS last_seen
-FROM otel_traces
-WHERE ${where}
-GROUP BY ServiceName
-ORDER BY spans DESC
-LIMIT ${limit}
-`.trim();
+    const tracesSql = dedent`
+      SELECT
+          ServiceName,
+          count() AS spans,
+          countIf(StatusCode = 'Error') AS span_errors,
+          max(Timestamp) AS last_seen
+      FROM otel_traces
+      WHERE ${where}
+      GROUP BY ServiceName
+      ORDER BY spans DESC
+      LIMIT ${limit}
+    `.trim();
 
     const [logsResults, tracesResults] = await Promise.all([
       Promise.all(projects.map((project) => queryProject(project.id, logsSql))),
