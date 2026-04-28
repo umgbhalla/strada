@@ -175,8 +175,9 @@ function renderSpanTree(output: { log: (message: string) => void }, spans: SpanN
     const prefix = isLastStack.slice(0, -1).map((last) => last ? "   " : "│  ").join("");
     const branch = isLastStack.length === 0 ? "" : isLastStack[isLastStack.length - 1] ? "└─ " : "├─ ";
     const name = span.statusCode === "Error" ? red(span.spanName) : span.spanName;
+    const errorBadge = span.statusCode === "Error" ? `${red("[ERROR]")} ` : "";
     const service = cyan(span.serviceName || "(missing)");
-    output.log(`${dim(prefix + branch)}${name} ${dim(`[${service}]`)} ${dim(formatDurationMs(span.durationMs))} ${statusColor(span.statusCode)}`);
+    output.log(`${dim(prefix + branch)}${errorBadge}${name} ${dim(`[${service}]`)} ${dim(formatDurationMs(span.durationMs))} ${statusColor(span.statusCode)}`);
     span.children.forEach((child, index) => visit(child, [...isLastStack, index === span.children.length - 1]));
   }
 
