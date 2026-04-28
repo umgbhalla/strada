@@ -123,6 +123,15 @@ export async function databaseCreateAction(
     }
   }
 
+  // Show the warning before authenticating so users know what will happen
+  // before they click the Tinybird OAuth URL.
+  clack.log.warn(
+    `Strada will create OTel datasources in the Tinybird workspace you authenticate with.\n` +
+    `  Use a fresh, dedicated workspace — do NOT point this at an existing workspace\n` +
+    `  with unrelated data or different schemas. Deploying to the wrong workspace can corrupt\n` +
+    `  or overwrite existing datasources.`,
+  );
+
   // Authenticate with Tinybird
   const auth = await (async () => {
     if (options.token && options.baseUrl) {
@@ -160,23 +169,6 @@ export async function databaseCreateAction(
   }
 
   clack.log.success(`Authenticated as ${cyan(workspace.user_email)} in workspace ${cyan(workspace.name)}`);
-
-  clack.log.warn(
-    `Strada will create OTel datasources in "${workspace.name}".\n` +
-    `  Use a fresh, dedicated Tinybird workspace — do NOT point this at an existing workspace\n` +
-    `  with unrelated data or different schemas. Deploying to the wrong workspace can corrupt\n` +
-    `  or overwrite existing datasources.`,
-  );
-
-  if (process.stdin.isTTY) {
-    const confirmed = await clack.confirm({
-      message: `Deploy Strada OTel tables into workspace "${workspace.name}"?`,
-    });
-    if (clack.isCancel(confirmed) || !confirmed) {
-      clack.outro("Cancelled. Create a new dedicated Tinybird workspace and re-run strada database create.");
-      return proc.exit(0);
-    }
-  }
 
   const spinner = clack.spinner();
   spinner.start("Loading Tinybird resource files...");
