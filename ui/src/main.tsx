@@ -6,6 +6,7 @@ import './globals.css'
 import { trace } from '@strada.sh/sdk'
 import { Spiceflow } from 'spiceflow'
 import { Head, Link } from 'spiceflow/react'
+import { ChartsDemoPage } from './components/charts-demo.tsx'
 import { TraceTimelineDemo } from './components/traces/trace-timeline-demo.tsx'
 import { ThemeToggle } from './components/traces/theme-toggle.tsx'
 
@@ -16,6 +17,11 @@ const demos = [
     href: '/traces',
     title: 'Trace Timeline',
     description: 'Interactive waterfall view of a distributed trace across microservices.',
+  },
+  {
+    href: '/charts',
+    title: 'Charts',
+    description: 'Reusable ECharts-powered timeseries charts for dashboards.',
   },
 ]
 
@@ -82,6 +88,9 @@ export const app = new Spiceflow({ tracer })
         <TraceTimelineDemo />
       </div>
     )
+  })
+  .page('/charts', async function ChartsDemo() {
+    return <ChartsDemoPage />
   })
 
 void app.listen(Number(process.env.PORT || 3456))

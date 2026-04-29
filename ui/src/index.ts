@@ -15,6 +15,17 @@ export { TraceViewProvider } from './components/traces/trace-timeline-state.tsx'
 export type { TraceViewContextValue, TimelineBar, ViewportState } from './components/traces/trace-timeline-state.tsx'
 export { TraceTimelineMinimap } from './components/traces/trace-timeline-minimap.tsx'
 export { ThemeToggle } from './components/traces/theme-toggle.tsx'
+export { Chart, ChartLegend, TimeseriesChart } from './components/charts.tsx'
+export type {
+  ChartEvents,
+  ChartProps,
+  SafeTooltipOption,
+  StradaChartOption,
+  TimeseriesChartProps,
+  TimeseriesData,
+} from './components/charts.tsx'
+export { ChartPalette } from './lib/chart-palette.ts'
+export type { ChartSemanticColorName, ChartSequentialPaletteName } from './lib/chart-palette.ts'
 export {
   buildSpanTree,
   calculateSelfTime,

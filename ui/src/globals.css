@@ -1,6 +1,6 @@
 @import 'tailwindcss';
 
-@custom-variant dark (&:is(.dark *));
+@custom-variant dark (&:is(.dark, .dark *));
 
 @theme inline {
   --color-background: var(--background);
@@ -94,6 +94,16 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+@keyframes strada-chart-wave {
+  from {
+    transform: translateX(0);
+  }
+
+  to {
+    transform: translateX(-400px);
   }
 }
 
