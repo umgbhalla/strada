@@ -37,7 +37,7 @@
 
 import { goke } from "goke";
 import { bold, dim } from "./colors.ts";
-import { ensureDefaultOrg, resolveProjectId } from "./projects.ts";
+import { resolveProject } from "./projects.ts";
 import { printTable } from "./table.ts";
 import { queryProject } from "./issues.ts";
 
@@ -45,17 +45,11 @@ export const queryCli = goke();
 
 queryCli
   .command("query <sql>", "Run a SQL query against a project. Append FORMAT <name> to the SQL to change output: JSON, JSONEachRow, CSV, CSVWithNames, TSV, TSVWithNames, PrettyCompact, Parquet, Prometheus. Without a FORMAT clause the CLI renders a table; add --json to get the raw JSON envelope { data, meta, rows, statistics } instead.")
-  .option("-p, --project <slug>", "Project slug (run `strada projects list` to see slugs)")
+  .option("-p, --project [slug]", "Project slug override (defaults to folder setup)")
+  .option("--org [name-or-id]", "Organization override (defaults to folder setup)")
   .option("--json", "Print the raw JSON envelope { data, meta, rows, statistics } instead of a table (only applies when no FORMAT clause is in the SQL)")
   .action(async (sql: string, options, { console: output, process: proc }) => {
-    if (!options.project) {
-      output.log("Missing required option: --project <slug>");
-      output.log(dim("Run `strada projects list` to see available project slugs."));
-      return proc.exit(1);
-    }
-
-    const org = await ensureDefaultOrg();
-    const project = await resolveProjectId(org.id, options.project);
+    const { project } = await resolveProject({ project: options.project || undefined, org: options.org || undefined });
 
     const res = await queryProject(project.id, sql);
 

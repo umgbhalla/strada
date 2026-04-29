@@ -6,11 +6,15 @@ import { goke } from "goke";
 import type { GokeExecutionContext } from "goke";
 import { bold, cyan } from "./colors.ts";
 import { openInBrowser } from "goke";
-import { loadConfig, saveConfig, getBaseUrl } from "./config.ts";
+import { getResolvedConfig, saveConfig, getBaseUrl, setScope } from "./config.ts";
 
 export const loginCli = goke();
 
 const CLI_CLIENT_ID = "strada-cli"
+
+async function readJson<T>(response: Response): Promise<T> {
+  return JSON.parse(await response.text()) as T;
+}
 
 loginCli
   .command("login", "Authenticate with Strada via browser login")
@@ -46,21 +50,21 @@ async function loginAction(
     return proc.exit(1);
   }
 
-  const deviceData = await deviceRes.json() as {
+  const deviceData = await readJson<{
     device_code: string;
     user_code: string;
     verification_uri: string;
     verification_uri_complete: string;
     expires_in: number;
     interval: number;
-  };
+  }>(deviceRes);
 
   const verificationUrl = deviceData.verification_uri_complete ||
     `${baseUrl}${deviceData.verification_uri}?user_code=${deviceData.user_code}`;
 
   clack.log.info(`Your code: ${bold(cyan(deviceData.user_code))}`);
   clack.log.info(`Opening browser to approve...`);
-  void openInBrowser(verificationUrl);
+  await openInBrowser(verificationUrl);
 
   // Step 2: Poll until approved
   const spinner = clack.spinner();
@@ -83,18 +87,18 @@ async function loginAction(
     });
 
     if (pollRes.ok) {
-      const result = await pollRes.json() as { access_token?: string };
+      const result = await readJson<{ access_token?: string }>(pollRes);
       const token = result.access_token;
       if (token) {
         spinner.stop("Approved!");
-        saveConfig({ sessionToken: token, baseUrl });
+        setScope("/", { sessionToken: token, baseUrl });
         clack.log.success(`Logged in to ${cyan(baseUrl)}`);
         clack.outro("Done");
         return;
       }
     }
 
-    const pollBody = await pollRes.json().catch(() => ({})) as { error?: string };
+    const pollBody: { error?: string } = await readJson<{ error?: string }>(pollRes).catch(() => ({}));
     if (pollBody.error === "expired_token") {
       spinner.stop("Code expired");
       clack.log.error("Device code expired. Run `strada login` again.");
@@ -119,7 +123,7 @@ async function logoutAction({ console: output }: GokeExecutionContext) {
 }
 
 async function whoamiAction({ console: output, process: proc }: GokeExecutionContext) {
-  const config = loadConfig();
+  const config = getResolvedConfig();
   if (!config.sessionToken) {
     output.log("Not logged in. Run `strada login` first.");
     return proc.exit(1);
@@ -132,7 +136,7 @@ async function whoamiAction({ console: output, process: proc }: GokeExecutionCon
     output.log("Session expired or invalid. Run `strada login` again.");
     return proc.exit(1);
   }
-  const session = await res.json() as { user?: { name?: string; email?: string } };
+  const session = await readJson<{ user?: { name?: string; email?: string } }>(res);
   output.log(`Logged in as ${session.user?.name || "unknown"} (${session.user?.email || "unknown"})`);
   output.log(`Server: ${baseUrl}`);
 }

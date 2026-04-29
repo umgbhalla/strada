@@ -6,7 +6,7 @@ import { goke } from "goke";
 import dedent from "string-dedent";
 import { z } from "zod";
 import { bold, cyan, dim, red, yellow, gray } from "./colors.ts";
-import { ensureDefaultOrg, resolveProjectId } from "./projects.ts";
+import { resolveProjects } from "./projects.ts";
 import { queryProject } from "./issues.ts";
 import { printTable, formatCount, timeAgo } from "./table.ts";
 import { parseTimeBoundary } from "./parse-duration.ts";
@@ -22,7 +22,7 @@ interface ServiceSummary {
   lastSeen: string;
 }
 
-type QueryRow = Record<string, string | number | null | undefined>;
+type QueryRow = Record<string, unknown>;
 
 function str(row: QueryRow, key: string): string {
   const value = row[key];
@@ -67,21 +67,14 @@ servicesCli
       time range.
     `,
   )
-  .option("-p, --project <slug>", z.array(z.string()).describe("Project slug (repeatable)"))
+  .option("-p, --project <slug>", z.array(z.string()).describe("Project slug override (repeatable, defaults to folder setup)"))
+  .option("--org [name-or-id]", "Organization override (defaults to folder setup)")
   .option("--since [time]", "Start time: duration (1h, 7d) or ISO date (default: 24h)")
   .option("--until [time]", "End time: duration (1h) or ISO date")
   .option("-n, --limit [count]", "Max services (default: 100)")
   .option("--json", "Print raw JSON response")
   .action(async (options, { console: output, process: proc }) => {
-    if (!options.project || options.project.length === 0) {
-      output.log("Missing required option: --project <slug>");
-      output.log(dim("Run `strada projects list` to see available project slugs."));
-      return proc.exit(1);
-    }
-
-    const org = await ensureDefaultOrg();
-    const slugs = options.project;
-    const projects = await Promise.all(slugs.map((slug) => resolveProjectId(org.id, slug)));
+    const { slugs, projects } = await resolveProjects({ project: options.project, org: options.org || undefined });
     const limit = Number(options.limit) || 100;
 
     const conditions = [`Timestamp >= ${parseTimeBoundary(options.since || "24h")}`];

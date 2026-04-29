@@ -6,7 +6,7 @@
 
 import { goke } from "goke";
 import { bold, cyan, dim } from "./colors.ts";
-import { loadConfig, updateConfig } from "./config.ts";
+import { getResolvedConfig, loadConfig, updateConfig } from "./config.ts";
 import type { CachedProject } from "./config.ts";
 import { getApiClient } from "./api-client.ts";
 import { resolveCurrentOrg } from "./orgs.ts";
@@ -25,13 +25,13 @@ export const ensureDefaultOrg = resolveCurrentOrg;
 
 function getOrgProjects(orgId: string): CachedProject[] {
   const config = loadConfig();
-  return config.projectsByOrg?.[orgId] ?? [];
+  return config.projectCacheByOrg?.[orgId] ?? [];
 }
 
 function setOrgProjects(orgId: string, projects: CachedProject[]) {
   const config = loadConfig();
-  const projectsByOrg = { ...config.projectsByOrg, [orgId]: projects };
-  updateConfig({ projectsByOrg });
+  const projectCacheByOrg = { ...config.projectCacheByOrg, [orgId]: projects };
+  updateConfig({ projectCacheByOrg });
 }
 
 async function fetchAndCacheProjects(orgId: string): Promise<CachedProject[]> {
@@ -60,12 +60,41 @@ export async function resolveProjectId(orgId: string, slug: string): Promise<{ i
   throw new Error(`Project "${slug}" not found. Run \`strada projects list\` to see available projects.`);
 }
 
+export async function resolveProject(options: { project?: string; org?: string } = {}) {
+  const org = await ensureDefaultOrg({ org: options.org });
+  const scoped = getResolvedConfig();
+  if (!options.project && scoped.orgId === org.id && scoped.projectId && scoped.projectSlug) {
+    return { org, project: { id: scoped.projectId, slug: scoped.projectSlug } };
+  }
+
+  const projectRef = options.project || (scoped.orgId === org.id ? scoped.projectSlug : undefined);
+  if (!projectRef) {
+    throw new Error("No project configured for this folder. Run `strada setup` or pass `--project <slug>`.");
+  }
+  return { org, project: await resolveProjectId(org.id, projectRef) };
+}
+
+export async function resolveProjects(options: { project?: string[]; org?: string } = {}) {
+  const org = await ensureDefaultOrg({ org: options.org });
+  const scoped = getResolvedConfig();
+  const slugs = options.project && options.project.length > 0
+    ? options.project
+    : scoped.orgId === org.id && scoped.projectSlug
+      ? [scoped.projectSlug]
+      : undefined;
+  if (!slugs) {
+    throw new Error("No project configured for this folder. Run `strada setup` or pass `--project <slug>`.");
+  }
+  return { org, slugs, projects: await Promise.all(slugs.map((slug) => resolveProjectId(org.id, slug))) };
+}
+
 // ── Project commands ──────────────────────────────────────────────
 
 projectsCli
   .command("projects list", "List all projects in your organization")
-  .action(async (_options, { console: output }) => {
-    const org = await ensureDefaultOrg();
+  .option("--org [name-or-id]", "Organization override (defaults to folder setup)")
+  .action(async (options, { console: output }) => {
+    const org = await ensureDefaultOrg({ org: options.org || undefined });
     // Always fetch fresh + update cache when user explicitly lists projects
     const projects = await fetchAndCacheProjects(org.id);
 
@@ -83,9 +112,10 @@ projectsCli
 
 projectsCli
   .command("projects create <slug>", "Create a new project")
-  .action(async (slug, _options, { console: output }) => {
+  .option("--org [name-or-id]", "Organization override (defaults to folder setup)")
+  .action(async (slug, options, { console: output }) => {
     const { safeFetch } = getApiClient();
-    const org = await ensureDefaultOrg();
+    const org = await ensureDefaultOrg({ org: options.org || undefined });
     const res = await safeFetch("/api/v0/orgs/:orgId/projects", {
       method: "POST",
       params: { orgId: org.id },
@@ -117,28 +147,23 @@ projectsCli
     if (res instanceof Error) throw res;
     // Remove from cache. We don't know the orgId here, so scan all orgs.
     const config = loadConfig();
-    if (config.projectsByOrg) {
-      const projectsByOrg = { ...config.projectsByOrg };
-      for (const orgId of Object.keys(projectsByOrg)) {
-        projectsByOrg[orgId] = projectsByOrg[orgId]!.filter((p) => p.id !== id);
+    if (config.projectCacheByOrg) {
+      const projectCacheByOrg = { ...config.projectCacheByOrg };
+      for (const orgId of Object.keys(projectCacheByOrg)) {
+        projectCacheByOrg[orgId] = projectCacheByOrg[orgId]!.filter((p) => p.id !== id);
       }
-      updateConfig({ projectsByOrg });
+      updateConfig({ projectCacheByOrg });
     }
     output.log(`Project ${id} deleted.`);
   });
 
 projectsCli
   .command("query <sql>", "Run a SQL query against your project's database")
-  .option("-p, --project <slug>", "Project slug (run `strada projects list` to see slugs)")
+  .option("-p, --project [slug]", "Project slug override (defaults to folder setup)")
+  .option("--org [name-or-id]", "Organization override (defaults to folder setup)")
   .action(async (sql, options, { console: output, process: proc }) => {
-    if (!options.project) {
-      output.log("Missing required option: --project <slug>");
-      output.log(dim("Run `strada projects list` to see available project slugs."));
-      return proc.exit(1);
-    }
     const { safeFetch } = getApiClient();
-    const org = await ensureDefaultOrg();
-    const project = await resolveProjectId(org.id, options.project);
+    const { project } = await resolveProject({ project: options.project || undefined, org: options.org || undefined });
 
     const res = await safeFetch("/api/v0/projects/:projectId/query", {
       method: "POST",

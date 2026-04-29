@@ -11,7 +11,7 @@ import dedent from "string-dedent";
 import { z } from "zod";
 
 import { bold, cyan, dim, green, yellow, gray } from "./colors.ts";
-import { ensureDefaultOrg, resolveProjectId } from "./projects.ts";
+import { resolveProjects } from "./projects.ts";
 import { queryProject } from "./issues.ts";
 import { printTable, formatCount, timeAgo } from "./table.ts";
 import { parseDuration } from "./parse-duration.ts";
@@ -22,6 +22,7 @@ export const analyticsCli = goke();
 
 interface AnalyticsOptions {
   project?: string[];
+  org?: string;
   service?: string;
   since?: string;
   limit?: string | number;
@@ -38,32 +39,18 @@ function buildMvConditions(opts: AnalyticsOptions): string[] {
 }
 
 /** Resolve projects and query all in parallel */
-async function queryAllProjects(slugs: string[], sql: string) {
-  const org = await ensureDefaultOrg();
-  const projects = await Promise.all(slugs.map((s) => resolveProjectId(org.id, s)));
+async function queryAllProjects(options: AnalyticsOptions, sql: string) {
+  const { slugs, projects } = await resolveProjects({ project: options.project, org: options.org });
   const results = await Promise.all(projects.map((p) => queryProject(p.id, sql)));
-  return results.flatMap((data) => data.data ?? []);
-}
-
-function requireProject(
-  options: AnalyticsOptions,
-  output: { log: (msg: string) => void },
-  proc: { exit: (code: number) => void },
-): string[] | null {
-  if (!options.project || options.project.length === 0) {
-    output.log("Missing required option: --project <slug>");
-    output.log(dim("Run `strada projects list` to see available project slugs."));
-    proc.exit(1);
-    return null;
-  }
-  return options.project;
+  return { slugs, rows: results.flatMap((data) => data.data ?? []) };
 }
 
 // ── Shared option definitions ─────────────────────────────────────
 
 const sharedOptions = (cmd: ReturnType<typeof goke.prototype.command>) =>
   cmd
-    .option("-p, --project <slug>", z.array(z.string()).describe("Project slug (repeatable)"))
+    .option("-p, --project <slug>", z.array(z.string()).describe("Project slug override (repeatable, defaults to folder setup)"))
+    .option("--org [name-or-id]", "Organization override (defaults to folder setup)")
     .option("-s, --service [name]", "Filter by service name")
     .option("--since [duration]", "Time range, e.g. 1h, 24h, 7d (default: 7d)")
     .option("-n, --limit [count]", "Max number of rows (default: 20)")
@@ -73,9 +60,6 @@ const sharedOptions = (cmd: ReturnType<typeof goke.prototype.command>) =>
 
 sharedOptions(analyticsCli.command("analytics pages", "Top pages by pageviews"))
   .action(async (options: AnalyticsOptions, { console: output, process: proc }: GokeExecutionContext) => {
-    const slugs = requireProject(options, output, proc);
-    if (!slugs) return;
-
     const conditions = buildMvConditions(options);
     const limit = Number(options.limit) || 20;
 
@@ -91,7 +75,7 @@ sharedOptions(analyticsCli.command("analytics pages", "Top pages by pageviews"))
       LIMIT ${limit}
     `.trim();
 
-    const rows = await queryAllProjects(slugs, sql);
+    const { slugs, rows } = await queryAllProjects(options, sql);
 
     if (rows.length === 0) {
       output.log(dim(`No pageview data in ${cyan(slugs.join(", "))} (last ${options.since || "7d"})`));
@@ -123,9 +107,6 @@ sharedOptions(analyticsCli.command("analytics pages", "Top pages by pageviews"))
 
 sharedOptions(analyticsCli.command("analytics browsers", "Top browsers by visitors"))
   .action(async (options: AnalyticsOptions, { console: output, process: proc }: GokeExecutionContext) => {
-    const slugs = requireProject(options, output, proc);
-    if (!slugs) return;
-
     const conditions = buildMvConditions(options);
     const limit = Number(options.limit) || 20;
 
@@ -141,7 +122,7 @@ sharedOptions(analyticsCli.command("analytics browsers", "Top browsers by visito
       LIMIT ${limit}
     `.trim();
 
-    const rows = await queryAllProjects(slugs, sql);
+    const { slugs, rows } = await queryAllProjects(options, sql);
 
     if (rows.length === 0) {
       output.log(dim(`No browser data in ${cyan(slugs.join(", "))} (last ${options.since || "7d"})`));
@@ -172,9 +153,6 @@ sharedOptions(analyticsCli.command("analytics browsers", "Top browsers by visito
 
 sharedOptions(analyticsCli.command("analytics devices", "Top devices by visitors"))
   .action(async (options: AnalyticsOptions, { console: output, process: proc }: GokeExecutionContext) => {
-    const slugs = requireProject(options, output, proc);
-    if (!slugs) return;
-
     const conditions = buildMvConditions(options);
     const limit = Number(options.limit) || 20;
 
@@ -190,7 +168,7 @@ sharedOptions(analyticsCli.command("analytics devices", "Top devices by visitors
       LIMIT ${limit}
     `.trim();
 
-    const rows = await queryAllProjects(slugs, sql);
+    const { slugs, rows } = await queryAllProjects(options, sql);
 
     if (rows.length === 0) {
       output.log(dim(`No device data in ${cyan(slugs.join(", "))} (last ${options.since || "7d"})`));
@@ -221,9 +199,6 @@ sharedOptions(analyticsCli.command("analytics devices", "Top devices by visitors
 
 sharedOptions(analyticsCli.command("analytics countries", "Top countries by visitors"))
   .action(async (options: AnalyticsOptions, { console: output, process: proc }: GokeExecutionContext) => {
-    const slugs = requireProject(options, output, proc);
-    if (!slugs) return;
-
     const conditions = buildMvConditions(options);
     const limit = Number(options.limit) || 20;
 
@@ -239,7 +214,7 @@ sharedOptions(analyticsCli.command("analytics countries", "Top countries by visi
       LIMIT ${limit}
     `.trim();
 
-    const rows = await queryAllProjects(slugs, sql);
+    const { slugs, rows } = await queryAllProjects(options, sql);
 
     if (rows.length === 0) {
       output.log(dim(`No country data in ${cyan(slugs.join(", "))} (last ${options.since || "7d"})`));
@@ -270,9 +245,6 @@ sharedOptions(analyticsCli.command("analytics countries", "Top countries by visi
 
 sharedOptions(analyticsCli.command("analytics referrers", "Top traffic sources by visitors"))
   .action(async (options: AnalyticsOptions, { console: output, process: proc }: GokeExecutionContext) => {
-    const slugs = requireProject(options, output, proc);
-    if (!slugs) return;
-
     const conditions = buildMvConditions(options);
     conditions.push(`Referrer != ''`);
     if (options.domain) {
@@ -292,7 +264,7 @@ sharedOptions(analyticsCli.command("analytics referrers", "Top traffic sources b
       LIMIT ${limit}
     `.trim();
 
-    const rows = await queryAllProjects(slugs, sql);
+    const { slugs, rows } = await queryAllProjects(options, sql);
 
     if (rows.length === 0) {
       output.log(dim(`No referrer data in ${cyan(slugs.join(", "))} (last ${options.since || "7d"})`));
@@ -323,9 +295,6 @@ sharedOptions(analyticsCli.command("analytics referrers", "Top traffic sources b
 
 sharedOptions(analyticsCli.command("analytics languages", "Top languages by visitors"))
   .action(async (options: AnalyticsOptions, { console: output, process: proc }: GokeExecutionContext) => {
-    const slugs = requireProject(options, output, proc);
-    if (!slugs) return;
-
     const conditions = buildMvConditions(options);
     const limit = Number(options.limit) || 20;
 
@@ -341,7 +310,7 @@ sharedOptions(analyticsCli.command("analytics languages", "Top languages by visi
       LIMIT ${limit}
     `.trim();
 
-    const rows = await queryAllProjects(slugs, sql);
+    const { slugs, rows } = await queryAllProjects(options, sql);
 
     if (rows.length === 0) {
       output.log(dim(`No language data in ${cyan(slugs.join(", "))} (last ${options.since || "7d"})`));
@@ -372,9 +341,6 @@ sharedOptions(analyticsCli.command("analytics languages", "Top languages by visi
 
 sharedOptions(analyticsCli.command("analytics kpis", "Summary KPIs: visitors, pageviews, bounce rate, session duration"))
   .action(async (options: AnalyticsOptions, { console: output, process: proc }: GokeExecutionContext) => {
-    const slugs = requireProject(options, output, proc);
-    if (!slugs) return;
-
     const pagesConditions = buildMvConditions(options);
     const sessionsConditions = buildMvConditions(options);
 
@@ -404,8 +370,7 @@ sharedOptions(analyticsCli.command("analytics kpis", "Summary KPIs: visitors, pa
       )
     `.trim();
 
-    const org = await ensureDefaultOrg();
-    const projects = await Promise.all(slugs.map((s) => resolveProjectId(org.id, s)));
+    const { slugs, projects } = await resolveProjects({ project: options.project, org: options.org });
 
     // Query pages and sessions MVs in parallel across all projects
     const [pagesResults, sessionsResults] = await Promise.all([
@@ -455,9 +420,6 @@ sharedOptions(analyticsCli.command("analytics kpis", "Summary KPIs: visitors, pa
 sharedOptions(analyticsCli.command("analytics events", "Top custom events by occurrence"))
   .option("-w, --where <expr>", z.array(z.string()).describe("Raw SQL WHERE condition (repeatable, ANDed)"))
   .action(async (options: AnalyticsOptions & { where?: string[] }, { console: output, process: proc }: GokeExecutionContext) => {
-    const slugs = requireProject(options, output, proc);
-    if (!slugs) return;
-
     const since = parseDuration(options.since || "7d");
     const limit = Number(options.limit) || 20;
 
@@ -477,7 +439,7 @@ sharedOptions(analyticsCli.command("analytics events", "Top custom events by occ
       LIMIT ${limit}
     `.trim();
 
-    const rows = await queryAllProjects(slugs, sql);
+    const { slugs, rows } = await queryAllProjects(options, sql);
 
     if (rows.length === 0) {
       output.log(dim(`No custom events in ${cyan(slugs.join(", "))} (last ${options.since || "7d"})`));
@@ -508,13 +470,11 @@ sharedOptions(analyticsCli.command("analytics events", "Top custom events by occ
 
 analyticsCli
   .command("analytics realtime", "Active visitors in the last 5 minutes")
-  .option("-p, --project <slug>", z.array(z.string()).describe("Project slug (repeatable)"))
+  .option("-p, --project <slug>", z.array(z.string()).describe("Project slug override (repeatable, defaults to folder setup)"))
+  .option("--org [name-or-id]", "Organization override (defaults to folder setup)")
   .option("-s, --service [name]", "Filter by service name")
   .option("--domain [domain]", "Filter by domain")
   .action(async (options: AnalyticsOptions, { console: output, process: proc }: GokeExecutionContext) => {
-    const slugs = requireProject(options, output, proc);
-    if (!slugs) return;
-
     const conditions = [
       `SpanName = 'pageview'`,
       `Timestamp >= now() - INTERVAL 5 MINUTE`,
@@ -527,7 +487,7 @@ analyticsCli
       WHERE ${conditions.join("\n  AND ")}
     `.trim();
 
-    const rows = await queryAllProjects(slugs, sql);
+    const { rows } = await queryAllProjects(options, sql);
     const active = rows.reduce((sum, r) => sum + Number(r.active_visitors ?? 0), 0);
 
     output.log("");

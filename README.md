@@ -112,6 +112,42 @@ strada database create
 ```bash
 strada projects create my-app
 # Returns a project ID and ingest endpoint
+
+strada setup --project my-app
+# Saves this folder's default org/project in ~/.strada/config.json
+```
+
+`strada setup` binds the **current folder** to an organization and project. After setup, CLI commands run against that project implicitly, so you do not need to pass `--project my-app` to every command.
+
+When you belong to multiple organizations or have multiple projects, run setup inside each app folder:
+
+```bash
+cd ~/code/acme-api
+strada setup
+# pick Acme / api
+
+cd ~/code/personal-site
+strada setup
+# pick Personal / frontend
+```
+
+The mapping is stored outside your repo in `~/.strada/config.json`, not committed to source control. Strada resolves config by walking up from the current working directory and using the closest matching folder scope:
+
+```json
+{
+  "scoped": {
+    "/": {
+      "sessionToken": "...",
+      "baseUrl": "https://strada.sh"
+    },
+    "/Users/me/code/acme-api": {
+      "orgId": "01HORG...",
+      "orgName": "Acme",
+      "projectId": "01HPROJ...",
+      "projectSlug": "api"
+    }
+  }
+}
 ```
 
 **3. Send telemetry**
@@ -151,34 +187,34 @@ track("purchase_completed", { plan: "pro", amount: 49 })
 
 ```bash
 # list error groups from the last 24 hours
-strada issues list -p my-app --since 24h
+strada issues list --since 24h
 
 # view a specific error with stacktrace
-strada issues view <fingerprint> -p my-app
+strada issues view <fingerprint>
 
 # browse recent logs
-strada logs -p my-app --since 1h
-strada logs -p my-app --min-level error --since 24h
-strada logs -p my-app --search "timeout" --service api
+strada logs --since 1h
+strada logs --min-level error --since 24h
+strada logs --search "timeout" --service api
 
 # filter by any attribute with --where (-w)
-strada logs -p my-app -w "mapContains(LogAttributes, 'event.name')"          # custom events only
-strada logs -p my-app -w "LogAttributes['user.id'] = 'user_123'"             # specific user
-strada logs -p my-app -w "LogAttributes['exception.type'] = 'TypeError'"     # specific error type
+strada logs -w "mapContains(LogAttributes, 'event.name')"          # custom events only
+strada logs -w "LogAttributes['user.id'] = 'user_123'"             # specific user
+strada logs -w "LogAttributes['exception.type'] = 'TypeError'"     # specific error type
 
 # log volume by service and severity
-strada logs stats -p my-app --since 24h
+strada logs stats --since 24h
 
 # run any SQL query
-strada query "SELECT count() FROM otel_errors WHERE ExceptionType = 'TypeError'" -p my-app
+strada query "SELECT count() FROM otel_errors WHERE ExceptionType = 'TypeError'"
 
 # browser analytics
-strada analytics pages -p my-app --since 7d
-strada analytics sessions -p my-app --since 24h
+strada analytics pages --since 7d
+strada analytics sessions --since 24h
 
 # custom events with attribute filters
-strada analytics events -p my-app -w "LogAttributes['custom.plan'] = 'pro'"    # events from pro users
-strada analytics events -p my-app -w "LogAttributes['user.id'] = 'user_123'"   # events from a user
+strada analytics events -w "LogAttributes['custom.plan'] = 'pro'"    # events from pro users
+strada analytics events -w "LogAttributes['user.id'] = 'user_123'"   # events from a user
 ```
 
 ## Built on OpenTelemetry

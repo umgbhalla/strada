@@ -1,126 +1,142 @@
-// Org management CLI commands. List and switch between organizations.
-//
-// The current org is stored in ~/.strada/config.json as `currentOrgId`.
-// When unset, commands fall back to the ensure-default behavior (first org
-// or auto-create "Personal"). Use `strada orgs switch` to change it.
+// Org and setup CLI commands. Folder scopes map a cwd to its default org and project.
 
 import * as clack from "@clack/prompts";
 import { goke } from "goke";
+import dedent from "string-dedent";
+import { z } from "zod";
 import { bold, cyan, dim, green } from "./colors.ts";
-import { loadConfig, updateConfig } from "./config.ts";
+import { getResolvedConfig, setScope, updateConfig, loadConfig } from "./config.ts";
+import type { CachedProject } from "./config.ts";
 import { getApiClient } from "./api-client.ts";
 
 export const orgsCli = goke();
 
-interface OrgInfo {
+export interface OrgInfo {
   id: string;
   name: string;
   role: string;
 }
 
-async function fetchOrgs(): Promise<OrgInfo[]> {
+export async function fetchOrgs(): Promise<OrgInfo[]> {
   const { safeFetch } = getApiClient();
   const res = await safeFetch("/api/v0/orgs");
   if (res instanceof Error) throw res;
   return res.orgs;
 }
 
-/**
- * Resolve the current org. If `currentOrgId` is set in config, validate it
- * against the user's memberships. Otherwise fall back to ensure-default.
- */
-export async function resolveCurrentOrg(): Promise<OrgInfo> {
+export async function fetchProjects(orgId: string): Promise<CachedProject[]> {
+  const { safeFetch } = getApiClient();
+  const res = await safeFetch("/api/v0/orgs/:orgId/projects", { params: { orgId } });
+  if (res instanceof Error) throw res;
+  const projects = res.projects.map((project) => ({ id: project.id, slug: project.slug }));
   const config = loadConfig();
+  updateConfig({ projectCacheByOrg: { ...config.projectCacheByOrg, [orgId]: projects } });
+  return projects;
+}
 
-  if (config.currentOrgId) {
-    const orgs = await fetchOrgs();
-    const match = orgs.find((o) => o.id === config.currentOrgId);
+function findByNameOrId<T extends { id: string; name?: string; slug?: string }>(items: T[], value: string): T | undefined {
+  return items.find((item) =>
+    item.id === value || item.name?.toLowerCase() === value.toLowerCase() || item.slug === value
+  );
+}
+
+export async function resolveCurrentOrg(options: { org?: string; cwd?: string } = {}): Promise<OrgInfo> {
+  const orgs = await fetchOrgs();
+  const scoped = getResolvedConfig(options.cwd);
+  const orgRef = options.org || scoped.orgId;
+
+  if (orgRef) {
+    const match = findByNameOrId(orgs, orgRef);
     if (match) return match;
-    // Stale currentOrgId (user removed from org, org deleted, etc.). Clear it
-    // and fall through to ensure-default.
-    updateConfig({ currentOrgId: undefined });
+    throw new Error(`Organization "${orgRef}" not found. Run \`strada orgs list\` to see available orgs.`);
   }
 
-  const { safeFetch } = getApiClient();
-  const res = await safeFetch("/api/v0/orgs/ensure-default", { method: "POST" });
-  if (res instanceof Error) throw res;
-  return { id: res.id, name: res.name, role: "admin" };
+  if (orgs.length === 1) return orgs[0]!;
+
+  throw new Error("No organization configured for this folder. Run `strada setup` or pass `--org <name-or-id>`.");
 }
 
 orgsCli
   .command("orgs list", "List all organizations you belong to")
-  .action(async (_options, { console: output }) => {
+  .action(async (_options, { console: output, process: proc }) => {
     const orgs = await fetchOrgs();
-    const currentOrgId = loadConfig().currentOrgId;
+    const current = getResolvedConfig(proc.cwd);
 
     if (orgs.length === 0) {
-      output.log("No organizations found. Run any command to auto-create a Personal org.");
+      output.log("No organizations found.");
       return;
     }
 
     output.log(bold("Organizations:"));
     output.log("");
     for (const org of orgs) {
-      const isCurrent = org.id === currentOrgId || (!currentOrgId && orgs.length === 1);
+      const isCurrent = org.id === current.orgId || (!current.orgId && orgs.length === 1);
       const marker = isCurrent ? green("● ") : "  ";
-      const role = dim(`(${org.role})`);
-      output.log(`${marker}${cyan(org.name)} ${role} ${dim(org.id)}`);
+      output.log(`${marker}${cyan(org.name)} ${dim(`(${org.role})`)} ${dim(org.id)}`);
     }
 
-    if (!currentOrgId && orgs.length > 1) {
+    if (!current.orgId && orgs.length > 1) {
       output.log("");
-      output.log(dim("No org selected. Run `strada orgs switch` to pick one."));
+      output.log(dim("No org configured for this folder. Run `strada setup`."));
     }
   });
 
 orgsCli
-  .command("orgs switch [name]", "Switch to a different organization")
-  .action(async (name, _options, { console: output, process: proc }) => {
+  .command(
+    "setup",
+    dedent`
+      Save the default organization and project for the current folder.
+
+      Strada resolves config by walking up from the current directory and using
+      the closest matching scope. Use this once per app folder so commands like
+      \`strada logs\` and \`strada issues list\` do not need \`--project\`.
+    `,
+  )
+  .option("--scope [path]", z.string().describe("Directory scope to configure (default: current directory)"))
+  .option("--org [name-or-id]", z.string().describe("Organization name or ID"))
+  .option("-p, --project [slug-or-id]", z.string().describe("Project slug or ID"))
+  .action(async (options, { console: output, process: proc }) => {
+    const cwd = options.scope || proc.cwd;
+    const isTty = process.stdin.isTTY && process.stdout.isTTY;
+
     const orgs = await fetchOrgs();
+    let org = options.org ? findByNameOrId(orgs, options.org) : undefined;
+    if (options.org && !org) throw new Error(`Organization "${options.org}" not found.`);
 
-    if (orgs.length === 0) {
-      output.log("No organizations found.");
-      return proc.exit(1);
-    }
-
-    let selected: OrgInfo | undefined;
-
-    if (name) {
-      // Match by name (case-insensitive) or by ID
-      selected = orgs.find(
-        (o) => o.name.toLowerCase() === name.toLowerCase() || o.id === name,
-      );
-      if (!selected) {
-        clack.log.error(`Organization "${name}" not found.`);
-        output.log("");
-        output.log("Available orgs:");
-        for (const org of orgs) {
-          output.log(`  ${cyan(org.name)} ${dim(org.id)}`);
-        }
-        return proc.exit(1);
-      }
-    } else if (!process.stdin.isTTY) {
-      clack.log.error("Org name or ID required in non-interactive mode.");
-      output.log("Usage: strada orgs switch <name-or-id>");
-      return proc.exit(1);
-    } else {
+    if (!org) {
+      if (!isTty) throw new Error("--org is required in non-interactive mode.");
       const choice = await clack.select({
-        message: "Select an organization",
-        options: orgs.map((o) => ({
-          value: o.id,
-          label: o.name,
-          hint: `${o.role} · ${o.id}`,
-        })),
+        message: "Select organization",
+        options: orgs.map((item) => ({ value: item.id, label: item.name, hint: `${item.role} · ${item.id}` })),
       });
-      if (clack.isCancel(choice)) {
-        clack.outro("Cancelled");
-        return proc.exit(0);
-      }
-      selected = orgs.find((o) => o.id === choice);
+      if (clack.isCancel(choice)) return proc.exit(0);
+      org = orgs.find((item) => item.id === choice);
     }
+    if (!org) return proc.exit(1);
 
-    if (!selected) return proc.exit(1);
+    const projects = await fetchProjects(org.id);
+    let project = options.project ? findByNameOrId(projects, options.project) : undefined;
+    if (options.project && !project) throw new Error(`Project "${options.project}" not found in ${org.name}.`);
 
-    updateConfig({ currentOrgId: selected.id });
-    clack.log.success(`Switched to ${bold(selected.name)}`);
+    if (!project) {
+      if (!isTty) throw new Error("--project is required in non-interactive mode.");
+      const choice = await clack.select({
+        message: "Select project",
+        options: projects.map((item) => ({ value: item.id, label: item.slug, hint: item.id })),
+      });
+      if (clack.isCancel(choice)) return proc.exit(0);
+      project = projects.find((item) => item.id === choice);
+    }
+    if (!project) return proc.exit(1);
+
+    setScope(cwd, {
+      orgId: org.id,
+      orgName: org.name,
+      projectId: project.id,
+      projectSlug: project.slug,
+    });
+
+    output.log(green("✔") + ` Saved setup for ${bold(cwd)}`);
+    output.log(`  org:     ${cyan(org.name)} ${dim(org.id)}`);
+    output.log(`  project: ${cyan(project.slug)} ${dim(project.id)}`);
   });

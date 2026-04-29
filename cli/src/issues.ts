@@ -12,14 +12,22 @@ import dedent from "string-dedent";
 import { z } from "zod";
 import { bold, cyan, dim, red, yellow, gray, green, white } from "./colors.ts";
 import { getApiClient } from "./api-client.ts";
-import { ensureDefaultOrg, resolveProjectId } from "./projects.ts";
+import { resolveProject, resolveProjects } from "./projects.ts";
 import { printTable, formatCount, timeAgo } from "./table.ts";
 import { parseDuration } from "./parse-duration.ts";
 
 export const issuesCli = goke();
 
+export interface QueryResult {
+  data?: Array<Record<string, unknown>>;
+  meta?: Array<{ name: string; type?: string }>;
+  rows?: number;
+  statistics?: { elapsed: number; rows_read?: number; bytes_read?: number };
+  raw?: string;
+}
+
 /** Run a SQL query against a project. Shared by issues subcommands, analytics, and the query command. */
-export async function queryProject(projectId: string, sql: string) {
+export async function queryProject(projectId: string, sql: string): Promise<QueryResult> {
   const { safeFetch } = getApiClient();
   const res = await safeFetch("/api/v0/projects/:projectId/query", {
     method: "POST",
@@ -27,7 +35,7 @@ export async function queryProject(projectId: string, sql: string) {
     body: { sql },
   });
   if (res instanceof Error) throw res;
-  return res;
+  return res as QueryResult;
 }
 
 /**
@@ -108,21 +116,14 @@ function str(row: Record<string, unknown>, key: string): string {
 
 issuesCli
   .command("issues list", "List issue groups sorted by frequency")
-  .option("-p, --project <slug>", z.array(z.string()).describe("Project slug (repeatable)"))
+  .option("-p, --project <slug>", z.array(z.string()).describe("Project slug override (repeatable, defaults to folder setup)"))
+  .option("--org [name-or-id]", "Organization override (defaults to folder setup)")
   .option("-s, --service [name]", "Filter by service name")
   .option("--since [duration]", "Time range, e.g. 1h, 24h, 7d (default: 24h)")
   .option("-n, --limit [count]", "Max number of issue groups (default: 20)")
   .option("--unhandled", "Show only unhandled errors")
   .action(async (options, { console: output, process: proc }) => {
-    if (!options.project || options.project.length === 0) {
-      output.log("Missing required option: --project <slug>");
-      output.log(dim("Run `strada projects list` to see available project slugs."));
-      return proc.exit(1);
-    }
-
-    const org = await ensureDefaultOrg();
-    const slugs = options.project;
-    const projects = await Promise.all(slugs.map((s) => resolveProjectId(org.id, s)));
+    const { slugs, projects } = await resolveProjects({ project: options.project, org: options.org || undefined });
 
     const since = parseDuration(options.since || "24h");
     const limit = Number(options.limit) || 20;
@@ -236,18 +237,12 @@ issuesCli
 
 issuesCli
   .command("issues view <fingerprint>", "Show details for a single issue by fingerprint hash")
-  .option("-p, --project <slug>", "Project slug (run `strada projects list` to see slugs)")
+  .option("-p, --project [slug]", "Project slug override (defaults to folder setup)")
+  .option("--org [name-or-id]", "Organization override (defaults to folder setup)")
   .option("-n, --events [count]", "Number of recent error events to show (default: 5)")
   .option("--json", "Output raw JSON")
   .action(async (fingerprint, options, { console: output, process: proc }) => {
-    if (!options.project) {
-      output.log("Missing required option: --project <slug>");
-      output.log(dim("Run `strada projects list` to see available project slugs."));
-      return proc.exit(1);
-    }
-
-    const org = await ensureDefaultOrg();
-    const project = await resolveProjectId(org.id, options.project);
+    const { project } = await resolveProject({ project: options.project || undefined, org: options.org || undefined });
     const eventsLimit = Number(options.events) || 5;
 
     // Query 1: Issue summary (aggregated)
@@ -413,14 +408,10 @@ issuesCli
 
 issuesCli
   .command("issues resolve <fingerprint>", "Mark an issue as resolved")
-  .option("-p, --project <slug>", "Project slug")
+  .option("-p, --project [slug]", "Project slug override (defaults to folder setup)")
+  .option("--org [name-or-id]", "Organization override (defaults to folder setup)")
   .action(async (fingerprint, options, { console: output, process: proc }) => {
-    if (!options.project) {
-      output.log("Missing required option: --project <slug>");
-      return proc.exit(1);
-    }
-    const org = await ensureDefaultOrg();
-    const project = await resolveProjectId(org.id, options.project);
+    const { project } = await resolveProject({ project: options.project || undefined, org: options.org || undefined });
     const { safeFetch } = getApiClient();
     const res = await safeFetch("/api/v0/projects/:projectId/issues/:fingerprintHash/status", {
       method: "PUT",
@@ -435,14 +426,10 @@ issuesCli
 
 issuesCli
   .command("issues mute <fingerprint>", "Mute an issue (suppress from default listing)")
-  .option("-p, --project <slug>", "Project slug")
+  .option("-p, --project [slug]", "Project slug override (defaults to folder setup)")
+  .option("--org [name-or-id]", "Organization override (defaults to folder setup)")
   .action(async (fingerprint, options, { console: output, process: proc }) => {
-    if (!options.project) {
-      output.log("Missing required option: --project <slug>");
-      return proc.exit(1);
-    }
-    const org = await ensureDefaultOrg();
-    const project = await resolveProjectId(org.id, options.project);
+    const { project } = await resolveProject({ project: options.project || undefined, org: options.org || undefined });
     const { safeFetch } = getApiClient();
     const res = await safeFetch("/api/v0/projects/:projectId/issues/:fingerprintHash/status", {
       method: "PUT",
@@ -457,14 +444,10 @@ issuesCli
 
 issuesCli
   .command("issues unresolve <fingerprint>", "Reopen a resolved or muted issue")
-  .option("-p, --project <slug>", "Project slug")
+  .option("-p, --project [slug]", "Project slug override (defaults to folder setup)")
+  .option("--org [name-or-id]", "Organization override (defaults to folder setup)")
   .action(async (fingerprint, options, { console: output, process: proc }) => {
-    if (!options.project) {
-      output.log("Missing required option: --project <slug>");
-      return proc.exit(1);
-    }
-    const org = await ensureDefaultOrg();
-    const project = await resolveProjectId(org.id, options.project);
+    const { project } = await resolveProject({ project: options.project || undefined, org: options.org || undefined });
     const { safeFetch } = getApiClient();
     const res = await safeFetch("/api/v0/projects/:projectId/issues/:fingerprintHash/status", {
       method: "PUT",
@@ -479,21 +462,17 @@ issuesCli
 
 issuesCli
   .command("issues assign <fingerprint>", "Assign an issue to an org member")
-  .option("-p, --project <slug>", "Project slug")
+  .option("-p, --project [slug]", "Project slug override (defaults to folder setup)")
+  .option("--org [name-or-id]", "Organization override (defaults to folder setup)")
   .option("--to [member-id]", "Org member ID to assign")
   .option("--unassign", "Remove the current assignee")
   .action(async (fingerprint, options, { console: output, process: proc }) => {
-    if (!options.project) {
-      output.log("Missing required option: --project <slug>");
-      return proc.exit(1);
-    }
     if (!options.to && !options.unassign) {
       output.log("Specify --to <member-id> or --unassign");
       return proc.exit(1);
     }
 
-    const org = await ensureDefaultOrg();
-    const project = await resolveProjectId(org.id, options.project);
+    const { project } = await resolveProject({ project: options.project || undefined, org: options.org || undefined });
     const { safeFetch } = getApiClient();
 
     const body: { assigneeMemberId?: string | null } = {};

@@ -10,7 +10,7 @@ import { goke } from "goke";
 import dedent from "string-dedent";
 import { z } from "zod";
 import { bold, cyan, dim, red, yellow, gray, green, white } from "./colors.ts";
-import { ensureDefaultOrg, resolveProjectId } from "./projects.ts";
+import { resolveProjects } from "./projects.ts";
 import { queryProject } from "./issues.ts";
 import { printTable, formatCount } from "./table.ts";
 import { parseTimeBoundary, isIsoDate, parseDuration } from "./parse-duration.ts";
@@ -90,7 +90,8 @@ function buildTimeConditions(options: { since?: string; until?: string }): strin
 
 logsCli
   .command("logs [subcommand]", "Browse and search log records. Use -w for attribute filters: -w \"mapContains(LogAttributes, 'event.name')\" for custom events, -w \"LogAttributes['user.id'] = 'user_123'\" for a specific user")
-  .option("-p, --project <slug>", z.array(z.string()).describe("Project slug (repeatable)"))
+  .option("-p, --project <slug>", z.array(z.string()).describe("Project slug override (repeatable, defaults to folder setup)"))
+  .option("--org [name-or-id]", "Organization override (defaults to folder setup)")
   .option("-s, --service [name]", "Filter by ServiceName")
   .option("--since [time]", "Start time: duration (1h, 7d) or ISO date (default: 1h)")
   .option("--until [time]", "End time: duration (1h) or ISO date")
@@ -107,15 +108,7 @@ logsCli
       return proc.exit(1);
     }
 
-    if (!options.project || options.project.length === 0) {
-      output.log("Missing required option: --project <slug>");
-      output.log(dim("Run `strada projects list` to see available project slugs."));
-      return proc.exit(1);
-    }
-
-    const org = await ensureDefaultOrg();
-    const slugs = options.project;
-    const projects = await Promise.all(slugs.map((s) => resolveProjectId(org.id, s)));
+    const { slugs, projects } = await resolveProjects({ project: options.project, org: options.org || undefined });
 
     // ── stats subcommand ──────────────────────────────────────────
     if (subcommand === "stats") {
@@ -249,4 +242,3 @@ logsCli
     output.log(dim(`  ${bold(String(allRows.length))} log${allRows.length === 1 ? "" : "s"}`));
     output.log("");
   });
-

@@ -5,7 +5,7 @@ import { goke } from "goke";
 import dedent from "string-dedent";
 import { z } from "zod";
 import { bold, cyan, dim, gray, green, red, yellow } from "./colors.ts";
-import { ensureDefaultOrg, resolveProjectId } from "./projects.ts";
+import { resolveProject, resolveProjects } from "./projects.ts";
 import { queryProject } from "./issues.ts";
 import { printTable, formatCount, timeAgo } from "./table.ts";
 import { parseTimeBoundary } from "./parse-duration.ts";
@@ -531,7 +531,8 @@ tracesCli
       exists. Project isolation is enforced by the project-scoped query API.
     `,
   )
-  .option("-p, --project <slug>", z.array(z.string()).describe("Project slug (repeatable)"))
+  .option("-p, --project <slug>", z.array(z.string()).describe("Project slug override (repeatable, defaults to folder setup)"))
+  .option("--org [name-or-id]", "Organization override (defaults to folder setup)")
   .option("-s, --service [name]", "Filter by ServiceName")
   .option("--since [time]", "Start time: duration (1h, 7d) or ISO date (default: 1h)")
   .option("--until [time]", "End time: duration (1h) or ISO date")
@@ -539,14 +540,7 @@ tracesCli
   .option("-n, --limit [count]", "Max traces (default: 50)")
   .option("--json", "Print raw JSON response")
   .action(async (options, { console: output, process: proc }) => {
-    if (!options.project || options.project.length === 0) {
-      output.log("Missing required option: --project <slug>");
-      output.log(dim("Run `strada projects list` to see available project slugs."));
-      return proc.exit(1);
-    }
-
-    const org = await ensureDefaultOrg();
-    const projects = await Promise.all(options.project.map((slug) => resolveProjectId(org.id, slug)));
+    const { slugs, projects } = await resolveProjects({ project: options.project, org: options.org || undefined });
     const limit = Number(options.limit) || 50;
     const conditions = buildTimeConditions(options);
     if (options.service) conditions.push(`ServiceName = '${options.service}'`);
@@ -580,12 +574,12 @@ tracesCli
     }
 
     if (rows.length === 0) {
-      output.log(dim(`No traces found in ${cyan(options.project.join(", "))} (last ${options.since || "1h"})`));
+      output.log(dim(`No traces found in ${cyan(slugs.join(", "))} (last ${options.since || "1h"})`));
       return;
     }
 
     output.log("");
-    output.log(bold(`Traces in ${cyan(options.project.join(", "))}`) + dim(` (last ${options.since || "1h"})`));
+    output.log(bold(`Traces in ${cyan(slugs.join(", "))}`) + dim(` (last ${options.since || "1h"})`));
     if (options.service) output.log(dim(`  service: ${options.service}`));
     if (options.errors) output.log(dim("  errors only"));
     output.log("");
@@ -626,17 +620,11 @@ tracesCli
       after the compact tree has identified the span that needs inspection.
     `,
   )
-  .option("-p, --project <slug>", "Project slug")
+  .option("-p, --project [slug]", "Project slug override (defaults to folder setup)")
+  .option("--org [name-or-id]", "Organization override (defaults to folder setup)")
   .option("--json", "Print raw span JSON")
   .action(async (traceId, spanId, options, { console: output, process: proc }) => {
-    if (!options.project) {
-      output.log("Missing required option: --project <slug>");
-      output.log(dim("Run `strada projects list` to see available project slugs."));
-      return proc.exit(1);
-    }
-
-    const org = await ensureDefaultOrg();
-    const project = await resolveProjectId(org.id, options.project);
+    const { project } = await resolveProject({ project: options.project || undefined, org: options.org || undefined });
     const sql = dedent`
       SELECT
           ${TRACE_SPAN_COLUMNS}
@@ -651,7 +639,7 @@ tracesCli
     const rows = ((result.data ?? []) as QueryRow[]).map((row) => toTraceRow(row));
 
     if (rows.length === 0) {
-      output.log(dim(`No span ${cyan(spanId)} found in trace ${cyan(traceId)} for ${cyan(options.project)}`));
+      output.log(dim(`No span ${cyan(spanId)} found in trace ${cyan(traceId)} for ${cyan(project.slug)}`));
       return proc.exit(1);
     }
     if (rows.length > 1) {
@@ -663,7 +651,7 @@ tracesCli
     const trace = buildSpanTree(rows);
     const span = trace.rootSpans[0];
     if (!span) {
-      output.log(dim(`No span ${cyan(spanId)} found in trace ${cyan(traceId)} for ${cyan(options.project)}`));
+      output.log(dim(`No span ${cyan(spanId)} found in trace ${cyan(traceId)} for ${cyan(project.slug)}`));
       return proc.exit(1);
     }
 
@@ -689,19 +677,13 @@ tracesCli
       match the trace-view timeline UI, making future code sharing simple.
     `,
   )
-  .option("-p, --project <slug>", "Project slug")
+  .option("-p, --project [slug]", "Project slug override (defaults to folder setup)")
+  .option("--org [name-or-id]", "Organization override (defaults to folder setup)")
   .option("--attrs <count>", z.number().default(3).describe("Number of compact span attributes to show"))
   .option("-e, --expand-span <spanId>", z.array(z.string()).describe("SpanId or unique SpanId prefix to expand (repeatable)"))
   .option("--json", "Print trace-view compatible JSON")
   .action(async (traceId, options, { console: output, process: proc }) => {
-    if (!options.project) {
-      output.log("Missing required option: --project <slug>");
-      output.log(dim("Run `strada projects list` to see available project slugs."));
-      return proc.exit(1);
-    }
-
-    const org = await ensureDefaultOrg();
-    const project = await resolveProjectId(org.id, options.project);
+    const { project } = await resolveProject({ project: options.project || undefined, org: options.org || undefined });
     const sql = dedent`
       SELECT
           ${TRACE_SPAN_COLUMNS}
@@ -721,7 +703,7 @@ tracesCli
     }
 
     if (rows.length === 0) {
-      output.log(dim(`No spans found for trace ${cyan(traceId)} in ${cyan(options.project)}`));
+      output.log(dim(`No spans found for trace ${cyan(traceId)} in ${cyan(project.slug)}`));
       return proc.exit(1);
     }
 
