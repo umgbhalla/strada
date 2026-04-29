@@ -56,6 +56,7 @@ import {
   resetContext,
   resolveMetricReaderOptions,
   resolveEndpoint,
+  shouldExportTelemetry,
   ATTR,
   BAGGAGE_SESSION_ID,
   BAGGAGE_USER_ID,
@@ -321,7 +322,8 @@ export function initStrada(options: StradaOptions): void {
         : {}),
     }));
 
-  const endpoint = resolveEndpoint(options);
+  const exportTelemetry = shouldExportTelemetry(options);
+  const endpoint = exportTelemetry ? resolveEndpoint(options) : undefined;
 
   // Log provider (used for both logs and error capture).
   // Wrapped in BaggageLogProcessor to extract session.id and user.id from
@@ -331,16 +333,18 @@ export function initStrada(options: StradaOptions): void {
   // so this adds zero overhead on regular long-running servers.
   _loggerProvider = new LoggerProvider({
     resource,
-    processors: [
-      new AutoFlushLogProcessor(
-        new BaggageLogProcessor(
-          new BatchLogRecordProcessor(
-            new OTLPLogExporter({ url: `${endpoint}/v1/logs` }),
-            options.telemetry?.logs,
+    processors: exportTelemetry
+      ? [
+          new AutoFlushLogProcessor(
+            new BaggageLogProcessor(
+              new BatchLogRecordProcessor(
+                new OTLPLogExporter({ url: `${endpoint}/v1/logs` }),
+                options.telemetry?.logs,
+              ),
+            ),
           ),
-        ),
-      ),
-    ],
+        ]
+      : [],
   });
   logs.setGlobalLoggerProvider(_loggerProvider);
   _logger = _loggerProvider.getLogger("strada");
@@ -351,11 +355,15 @@ export function initStrada(options: StradaOptions): void {
   // unless Vercel's native waitUntil is present in the current request context.
   const spanProcessors: SpanProcessor[] = [
     new BaggageSpanProcessor(),
-    new BatchSpanProcessor(
-      new OTLPTraceExporter({ url: `${endpoint}/v1/traces` }),
-      options.telemetry?.traces,
-    ),
-    new AutoFlushSpanProcessor(),
+    ...(exportTelemetry
+      ? [
+          new BatchSpanProcessor(
+            new OTLPTraceExporter({ url: `${endpoint}/v1/traces` }),
+            options.telemetry?.traces,
+          ),
+          new AutoFlushSpanProcessor(),
+        ]
+      : []),
   ];
 
   _tracerProvider = new NodeTracerProvider({ resource, spanProcessors });
@@ -373,12 +381,14 @@ export function initStrada(options: StradaOptions): void {
   // Meter provider for metrics export via HTTP/JSON.
   _meterProvider = new MeterProvider({
     resource,
-    readers: [
-      new PeriodicExportingMetricReader({
-        exporter: new OTLPMetricExporter({ url: `${endpoint}/v1/metrics` }),
-        ...resolveMetricReaderOptions(options),
-      }),
-    ],
+    readers: exportTelemetry
+      ? [
+          new PeriodicExportingMetricReader({
+            exporter: new OTLPMetricExporter({ url: `${endpoint}/v1/metrics` }),
+            ...resolveMetricReaderOptions(options),
+          }),
+        ]
+      : [],
   });
   metrics.setGlobalMeterProvider(_meterProvider);
 

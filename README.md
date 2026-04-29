@@ -124,7 +124,11 @@ initStrada({
   service: "api",
   environment: "production",
   version: "1.2.0",
+  enabled: !import.meta.hot,
 })
+
+// enabled: false keeps OTel APIs local but sends nothing to ingest.
+// In Vite/RSC dev servers, import.meta.hot is truthy during HMR.
 
 // capture errors
 try {

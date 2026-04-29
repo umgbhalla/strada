@@ -65,6 +65,7 @@ import {
   setTags,
   resetContext,
   resolveEndpoint,
+  shouldExportTelemetry,
   ATTR,
   BAGGAGE_SESSION_ID,
   BAGGAGE_USER_ID,
@@ -319,21 +320,24 @@ export function initStrada(options: StradaOptions): void {
     [ATTR["telemetry.sdk.language"]]: "javascript",
   });
 
-  const endpoint = resolveEndpoint(options);
+  const exportTelemetry = shouldExportTelemetry(options);
+  const endpoint = exportTelemetry ? resolveEndpoint(options) : undefined;
 
   // Logger provider: baggage extraction -> batch export -> auto-flush
-  const logExporter = new OTLPLogExporter({
-    url: `${endpoint}/v1/logs`,
-  });
   _loggerProvider = new LoggerProvider({
     resource,
-    processors: [
-      new AutoFlushLogProcessor(
-        new BaggageLogProcessor(
-          new BatchLogRecordProcessor(logExporter, options.telemetry?.logs),
-        ),
-      ),
-    ],
+    processors: exportTelemetry
+      ? [
+          new AutoFlushLogProcessor(
+            new BaggageLogProcessor(
+              new BatchLogRecordProcessor(
+                new OTLPLogExporter({ url: `${endpoint}/v1/logs` }),
+                options.telemetry?.logs,
+              ),
+            ),
+          ),
+        ]
+      : [],
   });
   logs.setGlobalLoggerProvider(_loggerProvider);
   _logger = _loggerProvider.getLogger("strada");
@@ -343,11 +347,15 @@ export function initStrada(options: StradaOptions): void {
     resource,
     spanProcessors: [
       new BaggageSpanProcessor(),
-      new BatchSpanProcessor(
-        new OTLPTraceExporter({ url: `${endpoint}/v1/traces` }),
-        options.telemetry?.traces,
-      ),
-      new AutoFlushSpanProcessor(),
+      ...(exportTelemetry
+        ? [
+            new BatchSpanProcessor(
+              new OTLPTraceExporter({ url: `${endpoint}/v1/traces` }),
+              options.telemetry?.traces,
+            ),
+            new AutoFlushSpanProcessor(),
+          ]
+        : []),
     ],
   });
 

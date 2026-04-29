@@ -48,6 +48,7 @@ import {
   resetContext,
   resolveUserId,
   resolveEndpoint,
+  shouldExportTelemetry,
   ATTR,
   createStradaBaggage,
   BAGGAGE_SESSION_ID,
@@ -393,17 +394,22 @@ export function initStrada(options: StradaOptions): void {
     ...browserAttrs,
   });
 
-  const endpoint = resolveEndpoint(options);
+  const exportTelemetry = shouldExportTelemetry(options);
+  const endpoint = exportTelemetry ? resolveEndpoint(options) : undefined;
 
   // Tracer provider with context-injecting processor
   _tracerProvider = new WebTracerProvider({
     resource,
     spanProcessors: [
       new StradaSpanProcessor(() => _sessionId!, getUserId),
-      new BatchSpanProcessor(
-        new OTLPTraceExporter({ url: `${endpoint}/v1/traces` }),
-        options.telemetry?.traces,
-      ),
+      ...(exportTelemetry
+        ? [
+            new BatchSpanProcessor(
+              new OTLPTraceExporter({ url: `${endpoint}/v1/traces` }),
+              options.telemetry?.traces,
+            ),
+          ]
+        : []),
     ],
   });
   // Register composite propagator for both trace context (traceparent) and
@@ -424,21 +430,22 @@ export function initStrada(options: StradaOptions): void {
   });
 
   // Logger provider: context injection -> filtering -> batch export
-  const logExporter = new OTLPLogExporter({ url: `${endpoint}/v1/logs` });
   _loggerProvider = new LoggerProvider({
     resource,
-    processors: [
-      new ContextLogProcessor(
-        new FilteringLogProcessor(
-          new BatchLogRecordProcessor(
-            logExporter,
-            options.telemetry?.logs,
+    processors: exportTelemetry
+      ? [
+          new ContextLogProcessor(
+            new FilteringLogProcessor(
+              new BatchLogRecordProcessor(
+                new OTLPLogExporter({ url: `${endpoint}/v1/logs` }),
+                options.telemetry?.logs,
+              ),
+            ),
+            () => _sessionId!,
+            getUserId,
           ),
-        ),
-        () => _sessionId!,
-        getUserId,
-      ),
-    ],
+        ]
+      : [],
   });
   logs.setGlobalLoggerProvider(_loggerProvider);
   _logger = _loggerProvider.getLogger("strada-web");

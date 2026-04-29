@@ -14,7 +14,11 @@ initStrada({
   projectId: "01JTHG5M7XPQR8KNCZ0W4D", // TODO: replace with your project id, get one with `strada projects create`
   environment: "production",
   version: "1.0.0",
+  enabled: !import.meta.hot,
 })
+
+// Set enabled: false to keep OTel APIs local without sending data to ingest.
+// In Vite/RSC dev servers, import.meta.hot is truthy during HMR.
 
 try {
   throw new Error("db timeout")

@@ -71,6 +71,8 @@ export interface StradaOptions {
   projectId: string;
   /** service.name resource attribute */
   service: string;
+  /** Set to false to install local OTel providers without sending data to ingest. */
+  enabled?: boolean;
   /** Override the ingest endpoint. Defaults to https://{projectId}-ingest.strada.sh */
   endpoint?: string;
   /** service.version resource attribute (maps to Release in error tracking) */
@@ -534,6 +536,10 @@ export function resolveEndpoint(options: StradaOptions): string {
     return options.endpoint.replace(/\/+$/, "").toLowerCase();
   }
   return `https://${options.projectId}-ingest.strada.sh`.toLowerCase();
+}
+
+export function shouldExportTelemetry(options: StradaOptions): boolean {
+  return options.enabled !== false;
 }
 
 export const BAGGAGE_SESSION_ID = "strada.session.id";
