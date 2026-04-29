@@ -9,7 +9,7 @@ import { getActionRequest, json, parseFormData, Spiceflow, redirect } from 'spic
 import { Head, router } from 'spiceflow/react'
 import { z } from 'zod'
 import { env } from 'cloudflare:workers'
-import { initStrada, captureException } from '@strada.sh/sdk'
+import { initStrada, captureException, trace } from '@strada.sh/sdk'
 import { Button } from './components/ui/button.tsx'
 import { DeviceActionButtons } from './components/device-action-buttons.tsx'
 import { api } from './api.ts'
@@ -77,7 +77,9 @@ if (env.STRADA_PROJECT_ID) {
   initStrada({ projectId: env.STRADA_PROJECT_ID, service: 'strada-website' })
 }
 
-export const app = new Spiceflow()
+const tracer = trace.getTracer('strada-website')
+
+export const app = new Spiceflow({ tracer })
 
   // ── Strada SDK (error capture) ────────────────────────────────
   .onError(({ error }) => {

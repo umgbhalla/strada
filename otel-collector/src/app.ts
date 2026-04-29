@@ -2,6 +2,7 @@
 
 import { Spiceflow } from "spiceflow";
 import { cors } from "spiceflow/cors";
+import { trace } from "@strada.sh/sdk";
 import { datasources } from "./env.ts";
 import { getProjectId } from "./get-project-id.ts";
 import { resolveProjectConfig } from "./resolve-config.ts";
@@ -84,7 +85,9 @@ async function resolveOrFail({
 }
 
 export function createCollectorApp({ db }: { db: D1Database }) {
-  return new Spiceflow()
+  const tracer = trace.getTracer("strada-otel-collector");
+
+  return new Spiceflow({ tracer })
     .use(
       cors({
         origin: "*",

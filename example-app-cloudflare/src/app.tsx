@@ -5,7 +5,7 @@
  */
 
 import { Spiceflow } from 'spiceflow'
-import { captureException, initStrada, track } from '@strada.sh/sdk'
+import { captureException, initStrada, track, trace } from '@strada.sh/sdk'
 
 const stradaProjectId = '01KPVGTT9CJW4ZNEF414VHGRFD'
 
@@ -15,7 +15,9 @@ initStrada({
   environment: 'production',
 })
 
-export const app = new Spiceflow()
+const tracer = trace.getTracer('strada-example-app-cloudflare')
+
+export const app = new Spiceflow({ tracer })
   .get('/', () => {
     return {
       ok: true,

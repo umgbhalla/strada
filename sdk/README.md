@@ -4,6 +4,8 @@
 
 Import from `@strada.sh/sdk` in every runtime. The package uses export conditions so browsers get the browser runtime, Cloudflare Workers get the Workers runtime, and servers get the Node runtime.
 
+Always import OpenTelemetry APIs from `@strada.sh/sdk`, not from `@opentelemetry/*` packages directly. The SDK is a thin wrapper around those packages and re-exports the same APIs, so `trace.getTracer()`, `logs.getLogger()`, `metrics.getMeter()`, `context`, and `propagation` work the same way while staying connected to Strada's configured providers.
+
 ```ts
 import { initStrada, captureException } from "@strada.sh/sdk"
 
@@ -25,7 +27,7 @@ try {
 
 ## Use normal OpenTelemetry APIs
 
-After `initStrada()`, the global OTel providers are configured. You can use standard OTel APIs directly.
+After `initStrada()`, the global OTel providers are configured. Use the standard OTel APIs re-exported by `@strada.sh/sdk`.
 
 ```ts
 import { initStrada, trace, logs, metrics, SeverityNumber } from "@strada.sh/sdk"

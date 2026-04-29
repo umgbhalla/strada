@@ -12,6 +12,7 @@
     "./src/*": "./src/*"
   },
   "dependencies": {
+    "@strada.sh/sdk": "workspace:^",
     "@tailwindcss/vite": "^4.2.2",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",

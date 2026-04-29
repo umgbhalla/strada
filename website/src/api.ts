@@ -7,6 +7,7 @@ import * as orm from 'drizzle-orm'
 import * as schema from 'db/src/schema.ts'
 import { ulid } from 'ulid'
 import { env } from 'cloudflare:workers'
+import { trace } from '@strada.sh/sdk'
 import { deployTinybirdResources, getDeploymentManagedReadToken, TinybirdClient } from 'strada/src/tinybird'
 import { bundledTinybirdResources } from './tinybird-bundled-resources.ts'
 import {
@@ -329,7 +330,9 @@ async function createOrgForUser(userId: string, name: string) {
   return { id: orgId, name, databaseId: dbId, role: 'admin' as const }
 }
 
-export const api = new Spiceflow()
+const tracer = trace.getTracer('strada-website-api')
+
+export const api = new Spiceflow({ tracer })
   .route({
       method: 'POST',
       path: '/api/v0/orgs',

@@ -3,12 +3,15 @@
  * waterfall view of a distributed trace with demo data.
  */
 import './globals.css'
+import { trace } from '@strada.sh/sdk'
 import { Spiceflow } from 'spiceflow'
 import { Head } from 'spiceflow/react'
 import { TraceViewDemo } from './components/traces/trace-view-demo'
 import { ThemeToggle } from './components/traces/theme-toggle.tsx'
 
-export const app = new Spiceflow()
+const tracer = trace.getTracer('trace-view')
+
+export const app = new Spiceflow({ tracer })
   .layout('/*', async ({ children }) => {
     return (
       <html lang="en">
