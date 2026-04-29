@@ -271,7 +271,9 @@ export function TimeseriesChart({
 
   const options = useMemo(() => {
     const series: any[] = []
-    const seriesType = type === 'bar' ? ({ type: 'bar', stack: 'total' } as const) : ({ type: 'line', showSymbol: false } as const)
+    const seriesType = type === 'bar'
+      ? ({ type: 'bar', stack: 'total' } as const)
+      : ({ type: 'line', showSymbol: false, smooth: false } as const)
 
     for (const item of data) {
       const incompleteBeforePoints = incompleteBefore && type === 'line' ? item.data.filter((point) => point[0] <= incompleteBefore) : []
@@ -307,6 +309,7 @@ export function TimeseriesChart({
         type: 'line' as const,
         lineStyle: { type: 'dashed' as const },
         showSymbol: false,
+        smooth: false,
         emphasis: { focus: 'series' as const },
       }
 
