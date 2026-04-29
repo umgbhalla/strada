@@ -16,12 +16,12 @@ import {
 import * as echarts from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
 import type { ReactNode } from 'react'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 
 import { Chart, ChartLegend, TimeseriesChart } from './charts.tsx'
-import type { StradaChartOption } from './charts.tsx'
 import { ThemeToggle } from './traces/theme-toggle.tsx'
 import { ChartPalette } from '../lib/chart-palette.ts'
+import type { StradaChartOption } from '../lib/echarts-options.ts'
 import { useIsDark } from '../lib/utils.ts'
 
 echarts.use([
@@ -40,7 +40,7 @@ echarts.use([
 export function ChartsDemoPage() {
   const isDark = useIsDark()
   const [selectedRange, setSelectedRange] = useState<{ from?: number; to?: number }>({})
-  const data = buildChartDemoData(isDark)
+  const data = useMemo(() => buildChartDemoData(isDark), [isDark])
   const selectedRangeText = selectedRange.from && selectedRange.to
     ? `${new Date(selectedRange.from).toLocaleTimeString()} – ${new Date(selectedRange.to).toLocaleTimeString()}`
     : 'Drag across the chart to select a time range'
@@ -186,15 +186,16 @@ export function ChartsDemoPage() {
 }
 
 function buildChartDemoData(isDark: boolean) {
-  const now = Date.now()
+  const now = Date.UTC(2026, 0, 1, 12, 0, 0)
   const timestamps = Array.from({ length: 50 }, (_, index) => now - (49 - index) * 60_000)
   const point = (timestamp: number, value: number): [number, number] => [timestamp, value]
   const buildSeriesData = ({ seed, count, stepMs, scale }: { seed: number; count: number; stepMs: number; scale: number }) => {
     const start = now - (count - 1) * stepMs
     return Array.from({ length: count }, (_, index) => {
-      const wave = Math.sin((index + seed) / 5) * 28
-      const drift = index * 1.5
-      return point(start + index * stepMs, Math.max(0, 80 * scale + wave * scale + drift * scale))
+      const trend = index * 0.15
+      const noise = (seededNoise(seed, index) - 0.5) * 8
+      const value = Math.round((30 + seed * 15 + trend + noise) * 100) / 100
+      return point(start + index * stepMs, value * scale)
     })
   }
 
@@ -261,6 +262,11 @@ function buildChartDemoData(isDark: boolean) {
       series: [{ type: 'pie', data: [...pieData.slice(0, 2), { value: 150, name: '<img src=x onerror=alert(\'XSS\')>' }, ...pieData.slice(2)] }],
     } satisfies StradaChartOption,
   }
+}
+
+function seededNoise(seed: number, index: number) {
+  const value = Math.sin(seed * 1000 + index * 9973) * 10000
+  return value - Math.floor(value)
 }
 
 const pieData = [

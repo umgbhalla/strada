@@ -19,11 +19,18 @@ export { Chart, ChartLegend, TimeseriesChart } from './components/charts.tsx'
 export type {
   ChartEvents,
   ChartProps,
+  TimeseriesChartProps,
+} from './components/charts.tsx'
+export {
+  buildTimeseriesChartOption,
+  prepareChartOptions,
+} from './lib/echarts-options.ts'
+export type {
+  BuildTimeseriesChartOptionOptions,
   SafeTooltipOption,
   StradaChartOption,
-  TimeseriesChartProps,
   TimeseriesData,
-} from './components/charts.tsx'
+} from './lib/echarts-options.ts'
 export { ChartPalette } from './lib/chart-palette.ts'
 export type { ChartSemanticColorName, ChartSequentialPaletteName } from './lib/chart-palette.ts'
 export {
