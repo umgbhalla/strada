@@ -189,19 +189,25 @@ export function buildTimeseriesChartOption({
       name: xAxisName,
       nameLocation: 'middle' as const,
       nameGap: 30,
+      nameTextStyle: { color: theme.mutedForeground },
       type: 'time' as const,
       splitLine: { show: false },
       axisLine: { show: false },
       splitNumber: xAxisTickCount ?? 5,
-      axisLabel: xAxisTickFormat ? { formatter: (value: number) => xAxisTickFormat(value) } : undefined,
+      axisLabel: {
+        color: theme.mutedForeground,
+        ...(xAxisTickFormat && { formatter: (value: number) => xAxisTickFormat(value) }),
+      },
     },
     yAxis: {
       name: yAxisName,
       nameLocation: 'middle' as const,
       nameGap: 40,
+      nameTextStyle: { color: theme.mutedForeground },
       type: 'value' as const,
       axisTick: { show: true },
       axisLabel: {
+        color: theme.mutedForeground,
         margin: 15,
         ...(yAxisTickFormat && { formatter: (value: number) => yAxisTickFormat(value) }),
       },
@@ -227,7 +233,8 @@ function getChartThemeColors({ colorMode, isDarkMode }: Pick<BuildTimeseriesChar
       border: 'var(--border)',
       brushFill: 'color-mix(in srgb, var(--primary) 20%, transparent)',
       brushBorder: 'color-mix(in srgb, var(--primary) 60%, transparent)',
-      gridLine: undefined,
+      mutedForeground: isDarkMode ? '#999999' : '#737373',
+      gridLine: isDarkMode ? '#393939' : '#e2e2e2',
     }
   }
 
@@ -238,6 +245,7 @@ function getChartThemeColors({ colorMode, isDarkMode }: Pick<BuildTimeseriesChar
         border: '#393939',
         brushFill: 'rgba(244, 244, 244, 0.2)',
         brushBorder: 'rgba(244, 244, 244, 0.6)',
+        mutedForeground: '#c7c7c7',
         gridLine: '#393939',
       }
     : {
@@ -246,6 +254,7 @@ function getChartThemeColors({ colorMode, isDarkMode }: Pick<BuildTimeseriesChar
         border: '#e2e2e2',
         brushFill: 'rgba(64, 64, 64, 0.2)',
         brushBorder: 'rgba(64, 64, 64, 0.6)',
+        mutedForeground: '#525252',
         gridLine: '#e2e2e2',
       }
 }

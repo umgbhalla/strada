@@ -19,7 +19,7 @@ import {
 import * as echarts from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
 
-import { CHART_LIGHT_COLORS, ChartPalette } from '../src/lib/chart-palette.ts'
+import { CHART_DARK_COLORS, CHART_LIGHT_COLORS, ChartPalette } from '../src/lib/chart-palette.ts'
 import { buildTimeseriesChartOption, prepareChartOptions, type TimeseriesData } from '../src/lib/echarts-options.ts'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -42,12 +42,12 @@ installCanvasGlobals()
 
 const width = 960
 const height = 420
-const isDarkMode = false
+const isDarkMode = true
 
 console.log(`Creating ${width}x${height} canvas`)
 const canvas = createCanvas(width, height)
 // @ts-expect-error @napi-rs/canvas implements the browser canvas methods ECharts uses in Node.
-const chart = echarts.init(canvas, { color: CHART_LIGHT_COLORS }, {
+const chart = echarts.init(canvas, { color: isDarkMode ? CHART_DARK_COLORS : CHART_LIGHT_COLORS }, {
   renderer: 'canvas',
   devicePixelRatio: 2,
   width,
@@ -68,6 +68,7 @@ try {
     tooltipValueFormat: (value) => `${value.toFixed(0)} req/s`,
     ariaDescription: 'Example Strada requests and errors timeseries chart rendered in Node.js',
   })
+  options.backgroundColor = 'transparent'
 
   console.log('Rendering ECharts option to canvas')
   chart.setOption(prepareChartOptions(options), { notMerge: true, lazyUpdate: false })
