@@ -23,6 +23,79 @@ interface OtlpRequest {
   json(): Promise<unknown>;
 }
 
+interface IngestRateLimiter {
+  limit(options: { key: string }): Promise<{ success: boolean }>;
+}
+
+async function hashToken(token: string): Promise<string> {
+  const data = new TextEncoder().encode(token);
+  const hash = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(hash)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+function getBearerToken(request: OtlpRequest): string | null {
+  const header = request.headers.get("authorization");
+  const match = /^Bearer\s+(.+)$/i.exec(header ?? "");
+  return match?.[1]?.trim() || null;
+}
+
+async function validateIngestToken({
+  db,
+  orgId,
+  token,
+}: {
+  db: D1Database;
+  orgId: string;
+  token: string;
+}): Promise<boolean> {
+  const hashed = await hashToken(token);
+  const row = await db.prepare(`
+    SELECT id
+    FROM org_token
+    WHERE org_id = ? AND hashed_key = ? AND scope = 'ingest'
+    LIMIT 1
+  `).bind(orgId, hashed).first<{ id: string }>();
+
+  return Boolean(row);
+}
+
+async function requireIngestAccess({
+  db,
+  request,
+  projectId,
+  orgId,
+  anonymousRateLimiter,
+}: {
+  db: D1Database;
+  request: OtlpRequest;
+  projectId: string;
+  orgId: string;
+  anonymousRateLimiter?: IngestRateLimiter;
+}) {
+  const token = getBearerToken(request);
+  if (token) {
+    const valid = await validateIngestToken({ db, orgId, token });
+    if (!valid) {
+      throw new Response(JSON.stringify({ error: "invalid ingest token" }), {
+        status: 401,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    return;
+  }
+
+  if (!anonymousRateLimiter) return;
+
+  const ip = request.headers.get("cf-connecting-ip") ?? "unknown";
+  const { success } = await anonymousRateLimiter.limit({ key: `anonymous-ingest:${projectId}:${ip}` });
+  if (!success) {
+    throw new Response(JSON.stringify({ error: "anonymous ingest rate limit exceeded" }), {
+      status: 429,
+      headers: { "content-type": "application/json" },
+    });
+  }
+}
+
 async function parseOtlpRequest<T>(request: OtlpRequest): Promise<T> {
   const contentEncoding = request.headers.get("content-encoding");
   if (!contentEncoding || contentEncoding.toLowerCase() === "identity") {
@@ -84,7 +157,7 @@ async function resolveOrFail({
   return config;
 }
 
-export function createCollectorApp({ db }: { db: D1Database }) {
+export function createCollectorApp({ db, anonymousRateLimiter }: { db: D1Database; anonymousRateLimiter?: IngestRateLimiter }) {
   const tracer = trace.getTracer("strada-otel-collector");
 
   return new Spiceflow({ tracer })
@@ -99,6 +172,7 @@ export function createCollectorApp({ db }: { db: D1Database }) {
     .post("/v1/traces", async ({ request, waitUntil }) => {
       const projectId = getProjectId(request);
       const config = await resolveOrFail({ db, projectId });
+      await requireIngestAccess({ db, request, projectId, orgId: config.orgId, anonymousRateLimiter });
 
       const body = await parseOtlpRequest<ExportTraceServiceRequest>(request);
       const backend = createBackend(config);
@@ -120,6 +194,7 @@ export function createCollectorApp({ db }: { db: D1Database }) {
     .post("/v1/logs", async ({ request, waitUntil }) => {
       const projectId = getProjectId(request);
       const config = await resolveOrFail({ db, projectId });
+      await requireIngestAccess({ db, request, projectId, orgId: config.orgId, anonymousRateLimiter });
 
       const body = await parseOtlpRequest<ExportLogsServiceRequest>(request);
       const backend = createBackend(config);
@@ -139,6 +214,7 @@ export function createCollectorApp({ db }: { db: D1Database }) {
     .post("/v1/metrics", async ({ request, waitUntil }) => {
       const projectId = getProjectId(request);
       const config = await resolveOrFail({ db, projectId });
+      await requireIngestAccess({ db, request, projectId, orgId: config.orgId, anonymousRateLimiter });
 
       const body = await parseOtlpRequest<ExportMetricsServiceRequest>(request);
       const backend = createBackend(config);

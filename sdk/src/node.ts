@@ -56,6 +56,7 @@ import {
   resetContext,
   resolveMetricReaderOptions,
   resolveEndpoint,
+  resolveIngestHeaders,
   resolveReleaseAttributes,
   shouldExportTelemetry,
   ATTR,
@@ -327,6 +328,7 @@ export function initStrada(options: StradaOptions): void {
 
   const exportTelemetry = shouldExportTelemetry(options);
   const endpoint = exportTelemetry ? resolveEndpoint(options) : undefined;
+  const ingestHeaders = resolveIngestHeaders(options);
 
   // Log provider (used for both logs and error capture).
   // Wrapped in BaggageLogProcessor to extract session.id and user.id from
@@ -341,7 +343,7 @@ export function initStrada(options: StradaOptions): void {
           new AutoFlushLogProcessor(
             new BaggageLogProcessor(
               new BatchLogRecordProcessor(
-                new OTLPLogExporter({ url: `${endpoint}/v1/logs` }),
+                new OTLPLogExporter({ url: `${endpoint}/v1/logs`, headers: ingestHeaders }),
                 options.telemetry?.logs,
               ),
             ),
@@ -361,7 +363,7 @@ export function initStrada(options: StradaOptions): void {
     ...(exportTelemetry
       ? [
           new BatchSpanProcessor(
-            new OTLPTraceExporter({ url: `${endpoint}/v1/traces` }),
+            new OTLPTraceExporter({ url: `${endpoint}/v1/traces`, headers: ingestHeaders }),
             options.telemetry?.traces,
           ),
           new AutoFlushSpanProcessor(),
@@ -387,7 +389,7 @@ export function initStrada(options: StradaOptions): void {
     readers: exportTelemetry
       ? [
           new PeriodicExportingMetricReader({
-            exporter: new OTLPMetricExporter({ url: `${endpoint}/v1/metrics` }),
+            exporter: new OTLPMetricExporter({ url: `${endpoint}/v1/metrics`, headers: ingestHeaders }),
             ...resolveMetricReaderOptions(options),
           }),
         ]

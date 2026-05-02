@@ -75,6 +75,8 @@ export interface StradaOptions {
   enabled?: boolean;
   /** Override the ingest endpoint. Defaults to https://{projectId}-ingest.strada.sh */
   endpoint?: string;
+  /** Server-side org token. Do not pass this from browser bundles. */
+  token?: string;
   /** service.version resource attribute (maps to Release in error tracking) */
   version?: string;
   /** deployment.environment.name resource attribute */
@@ -628,6 +630,10 @@ export function resolveEndpoint(options: StradaOptions): string {
     return options.endpoint.replace(/\/+$/, "").toLowerCase();
   }
   return `https://${options.projectId}-ingest.strada.sh`.toLowerCase();
+}
+
+export function resolveIngestHeaders(options: StradaOptions): Record<string, string> | undefined {
+  return options.token ? { Authorization: `Bearer ${options.token}` } : undefined;
 }
 
 export function shouldExportTelemetry(options: StradaOptions): boolean {

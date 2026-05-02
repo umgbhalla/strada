@@ -13,6 +13,7 @@ import { alertsCli } from "./alerts.ts";
 import { logsCli } from "./logs.ts";
 import { servicesCli } from "./services.ts";
 import { tracesCli } from "./traces.ts";
+import { tokensCli } from "./tokens.ts";
 
 export const cli = goke("strada")
   .use(databaseCli)
@@ -25,7 +26,8 @@ export const cli = goke("strada")
   .use(alertsCli)
   .use(logsCli)
   .use(servicesCli)
-  .use(tracesCli);
+  .use(tracesCli)
+  .use(tokensCli);
 
 cli.help();
 cli.version(packageJson.version);

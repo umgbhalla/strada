@@ -22,6 +22,7 @@ const endpoint = process.env.STRADA_ENDPOINT || `https://${projectId}-ingest.str
 initStrada({
   projectId,
   endpoint,
+  token: process.env.STRADA_TOKEN,
   service: 'example-app',
   environment: process.env.NODE_ENV || 'development',
   telemetry: {
@@ -93,11 +94,11 @@ const app = new Spiceflow({ tracer })
   })
 
 const port = Number(process.env.PORT || 5446)
-app.listen(port)
+void app.listen(port)
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.on(signal, () => {
-    shutdown().finally(() => process.exit(0))
+    void shutdown().finally(() => process.exit(0))
   })
 }
 

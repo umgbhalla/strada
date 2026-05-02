@@ -5,12 +5,14 @@
  */
 
 import { Spiceflow } from 'spiceflow'
+import { env } from 'cloudflare:workers'
 import { captureException, initStrada, track, trace } from '@strada.sh/sdk'
 
 const stradaProjectId = '01KPVGTT9CJW4ZNEF414VHGRFD'
 
 initStrada({
   projectId: stradaProjectId,
+  token: env.STRADA_TOKEN,
   service: 'strada-example-app-cloudflare-sdk',
   environment: 'production',
 })

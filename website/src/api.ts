@@ -13,11 +13,11 @@ import { bundledTinybirdResources } from './tinybird-bundled-resources.ts'
 import {
   getAccessibleOrgDatabase,
   getAccessibleProject,
-  getAccessibleProjectToken,
+  getAccessibleOrgToken,
   getDb,
   getOrCreateProjectJwt,
   hashToken,
-  generateProjectToken,
+  generateIngestToken,
   requireOrgMember,
   requireSession,
 } from './db.ts'
@@ -44,9 +44,9 @@ const createProjectRequestSchema = z.object({
   slug: z.string().min(1).regex(/^[a-z0-9-]+$/, 'slug must be lowercase alphanumeric with hyphens'),
 })
 
-const createProjectTokenRequestSchema = z.object({
+const createOrgTokenRequestSchema = z.object({
   name: z.string().min(1),
-  scope: z.enum(['ingest', 'read']),
+  scope: z.enum(['ingest']).default('ingest'),
 })
 
 const queryProjectRequestSchema = z.object({ sql: z.string().min(1) })
@@ -547,10 +547,21 @@ export const api = new Spiceflow({ tracer })
         const proj = rows[0]
         if (!proj) throw json({ error: 'insert failed' }, { status: 500 })
 
+        const { fullKey, prefix } = generateIngestToken()
+        const hashed = await hashToken(fullKey)
+        await db.insert(schema.orgToken).values({
+          orgId: params.orgId,
+          name: `${body.slug} ingest`,
+          prefix,
+          hashedKey: hashed,
+          createdBy: session.userId,
+        })
+
         return {
           id: proj.id,
           slug: proj.slug,
           ingestEndpoint: `https://${proj.id}-ingest.strada.sh`,
+          token: fullKey,
         }
       },
     })
@@ -590,25 +601,22 @@ export const api = new Spiceflow({ tracer })
     })
     .route({
       method: 'POST',
-      path: '/api/v0/projects/:projectId/tokens',
-      request: createProjectTokenRequestSchema,
+      path: '/api/v0/orgs/:orgId/tokens',
+      request: createOrgTokenRequestSchema,
       async handler({ request, params }) {
         const session = await requireSession(request)
-        const proj = await getAccessibleProject({ userId: session.userId, projectId: params.projectId })
-        if (!proj) {
-          throw json({ error: 'project not found' }, { status: 404 })
-        }
-        if (proj.accessRole !== 'admin') {
+        const member = await requireOrgMember(session.userId, params.orgId)
+        if (member.role !== 'admin') {
           throw json({ error: 'forbidden' }, { status: 403 })
         }
 
         const db = getDb()
         const body = await request.json()
-        const { fullKey, prefix } = generateProjectToken()
+        const { fullKey, prefix } = generateIngestToken()
         const hashed = await hashToken(fullKey)
 
-        await db.insert(schema.projectToken).values({
-          projectId: params.projectId,
+        await db.insert(schema.orgToken).values({
+          orgId: params.orgId,
           name: body.name,
           prefix,
           hashedKey: hashed,
@@ -619,16 +627,14 @@ export const api = new Spiceflow({ tracer })
         return { key: fullKey, prefix: `str_${prefix}...`, name: body.name, scope: body.scope }
       },
     })
-    .get('/api/v0/projects/:projectId/tokens', async ({ request, params }) => {
+    .get('/api/v0/orgs/:orgId/tokens', async ({ request, params }) => {
       const session = await requireSession(request)
-      const proj = await getAccessibleProject({ userId: session.userId, projectId: params.projectId })
-      if (!proj) {
-        throw json({ error: 'project not found' }, { status: 404 })
-      }
+      const member = await requireOrgMember(session.userId, params.orgId)
+      if (member.role !== 'admin') throw json({ error: 'forbidden' }, { status: 403 })
       const db = getDb()
 
-      const tokens = await db.query.projectToken.findMany({
-        where: { projectId: params.projectId },
+      const tokens = await db.query.orgToken.findMany({
+        where: { orgId: params.orgId },
         with: { creator: { columns: { id: true, name: true } } },
         orderBy: { createdAt: 'desc' },
       })
@@ -645,18 +651,18 @@ export const api = new Spiceflow({ tracer })
     })
     .route({
       method: 'DELETE',
-      path: '/api/v0/project-tokens/:id',
+      path: '/api/v0/org-tokens/:id',
       async handler({ request, params }) {
         const session = await requireSession(request)
-        const token = await getAccessibleProjectToken(session.userId, params.id)
-        if (!token?.project) {
+        const token = await getAccessibleOrgToken(session.userId, params.id)
+        if (!token?.org) {
           throw json({ error: 'token not found' }, { status: 404 })
         }
-        if (token.accessRole !== 'admin') {
+        if (token.org.members[0]?.role !== 'admin') {
           throw json({ error: 'forbidden' }, { status: 403 })
         }
         const db = getDb()
-        await db.delete(schema.projectToken).where(orm.eq(schema.projectToken.id, params.id))
+        await db.delete(schema.orgToken).where(orm.eq(schema.orgToken.id, params.id))
         return { ok: true }
       },
     })

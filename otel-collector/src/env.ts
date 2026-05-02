@@ -19,6 +19,7 @@ export const datasources = {
 /** Resolved database config for a project, fetched from D1. */
 export interface ProjectConfig {
   projectId: string;
+  orgId: string;
   backend: "tinybird" | "clickhouse";
   tinybirdEndpoint: string | null;
   tinybirdAdminToken: string | null;

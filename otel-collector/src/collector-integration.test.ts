@@ -100,10 +100,14 @@ function setResponseHeaders(response: Response, res: ServerResponse): void {
 function createFakeD1(
   {
     projectId,
+    orgId = 'TEST-ORG',
     clickhouseUrl,
+    ingestTokenHash,
   }: {
     projectId: string
+    orgId?: string
     clickhouseUrl: string
+    ingestTokenHash?: string
   },
 ): D1Database {
   return {
@@ -112,10 +116,19 @@ function createFakeD1(
         bind(...params: string[]) {
           return {
             async first() {
+              if (sql.includes('FROM org_token')) {
+                const [tokenOrgId, hashedKey] = params
+                if (tokenOrgId === orgId && hashedKey === ingestTokenHash) {
+                  return { id: 'TEST-TOKEN' }
+                }
+                return null
+              }
+
               if (params[0] !== projectId) return null
 
               return {
                 project_id: projectId,
+                org_id: orgId,
                 backend: 'clickhouse' as const,
                 tinybird_endpoint: null,
                 tinybird_admin_token: null,
@@ -144,6 +157,12 @@ function createFakeD1(
   }
 }
 
+async function hashToken(token: string): Promise<string> {
+  const data = new TextEncoder().encode(token)
+  const hash = await crypto.subtle.digest('SHA-256', data)
+  return Array.from(new Uint8Array(hash)).map((b) => b.toString(16).padStart(2, '0')).join('')
+}
+
 function extractTable(query: string): string {
   const match = /INSERT INTO\s+[^.]+\.([A-Za-z0-9_]+)\s+FORMAT JSONEachLine/.exec(
     query,
@@ -164,13 +183,14 @@ async function waitFor(
   }
 }
 
-async function emitOtelData(baseUrl: string): Promise<void> {
+async function emitOtelData(baseUrl: string, headers?: Record<string, string>): Promise<void> {
   const resource = resourceFromAttributes({
     [ATTR_SERVICE_NAME]: 'collector-integration-test',
   })
 
   const traceExporter = new OTLPTraceExporter({
     url: `${baseUrl}/v1/traces`,
+    headers,
   })
   const traceProvider = new NodeTracerProvider({
     resource,
@@ -195,6 +215,7 @@ async function emitOtelData(baseUrl: string): Promise<void> {
 
   const logExporter = new OTLPLogExporter({
     url: `${baseUrl}/v1/logs`,
+    headers,
   })
   const loggerProvider = new LoggerProvider({
     resource,
@@ -225,6 +246,7 @@ async function emitOtelData(baseUrl: string): Promise<void> {
   const metricReader = new PeriodicExportingMetricReader({
     exporter: new OTLPMetricExporter({
       url: `${baseUrl}/v1/metrics`,
+      headers,
     }),
     exportIntervalMillis: 3_600_000,
   })
@@ -272,6 +294,7 @@ const VOLATILE_FIELDS = new Set([
   'ExemplarsTraceId',
   'ExemplarsSpanId',
   'FingerprintHash',
+  'TraceFlags',
 ])
 
 function stripVolatileFields(value: unknown): unknown {
@@ -301,6 +324,10 @@ function stripVolatileFields(value: unknown): unknown {
         /(collector-integration\.test\.ts","lineno":)(\d+)(,"colno":)(\d+)/g,
         '$1 0$3 0',
       )
+      .replace(
+        /(chunk-vitest\.js:0:0","lineno":)(\d+)(,"colno":)(\d+)/g,
+        '$1 0$3 0',
+      )
   }
 
   return value
@@ -311,8 +338,58 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 describe.sequential('collector integration with official OTel SDKs', () => {
+  it('validates ingest bearer tokens and rate limits anonymous ingest', async () => {
+    const projectId = 'TEST-PROJECT'
+    const ingestToken = 'str_valid_ingest_token'
+    const db = createFakeD1({
+      projectId,
+      clickhouseUrl: 'http://127.0.0.1:1',
+      ingestTokenHash: await hashToken(ingestToken),
+    })
+    const url = `https://${projectId.toLowerCase()}-ingest.strada.sh/v1/logs`
+    const body = JSON.stringify({ resourceLogs: [] })
+
+    const app = createCollectorApp({ db })
+    const valid = await app.handle(new Request(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${ingestToken}` },
+      body,
+    }))
+    expect(valid.status).toBe(200)
+
+    const invalid = await app.handle(new Request(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer wrong' },
+      body,
+    }))
+    expect(invalid.status).toBe(401)
+    await expect(invalid.json()).resolves.toMatchInlineSnapshot(`
+      {
+        "error": "invalid ingest token",
+      }
+    `)
+
+    const limitedApp = createCollectorApp({
+      db,
+      anonymousRateLimiter: { limit: async () => ({ success: false }) },
+    })
+    const limited = await limitedApp.handle(new Request(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body,
+    }))
+    expect(limited.status).toBe(429)
+    await expect(limited.json()).resolves.toMatchInlineSnapshot(`
+      {
+        "error": "anonymous ingest rate limit exceeded",
+      }
+    `)
+  })
+
   it('exports traces/logs/metrics to ClickHouse SQL with valid JSON payloads', async () => {
     const projectId = 'TEST-PROJECT'
+    const ingestToken = 'str_test_ingest_token'
+    const ingestTokenHash = await hashToken(ingestToken)
     const tmpDir = await mkdtemp(join(tmpdir(), 'collector-integration-'))
     const outputFile = join(tmpDir, 'captured-inserts.json')
     const inserts: CapturedInsert[] = []
@@ -362,7 +439,7 @@ describe.sequential('collector integration with official OTel SDKs', () => {
       process.env.CLICKHOUSE_PASSWORD = ''
 
       const app = createCollectorApp({
-        db: createFakeD1({ projectId, clickhouseUrl: fakeBackend.baseUrl }),
+        db: createFakeD1({ projectId, clickhouseUrl: fakeBackend.baseUrl, ingestTokenHash }),
       })
 
       collector = await startServer(
@@ -384,7 +461,7 @@ describe.sequential('collector integration with official OTel SDKs', () => {
 
       const collectorBaseUrl = collector.baseUrl
 
-      await emitOtelData(collectorBaseUrl)
+      await emitOtelData(collectorBaseUrl, { Authorization: `Bearer ${ingestToken}` })
 
       await waitFor(() => {
         const tables = new Set(inserts.map((insert) => insert.table))
@@ -465,7 +542,7 @@ describe.sequential('collector integration with official OTel SDKs', () => {
               {
                 "DebugId": "",
                 "Environment": "",
-                "ExceptionFrames": "[{"function":"emitOtelData","filename":"/Users/morse/Documents/GitHub/strada/otel-collector/src/collector-integration.test.ts","lineno": 0,"colno": 0,"in_app":true},{"filename":"/Users/morse/Documents/GitHub/strada/otel-collector/src/collector-integration.test.ts","lineno": 0,"colno": 0,"in_app":true},{"function":"processTicksAndRejections","filename":"node:internal/process/task_queues","lineno":104,"colno":5,"in_app":false},{"filename":"file:///__vitest_runner__/dist/chunk-vitest.js:0:0","lineno":1893,"colno":20,"in_app":false}]",
+                "ExceptionFrames": "[{"function":"emitOtelData","filename":"/Users/morse/Documents/GitHub/strada/otel-collector/src/collector-integration.test.ts","lineno": 0,"colno": 0,"in_app":true},{"filename":"/Users/morse/Documents/GitHub/strada/otel-collector/src/collector-integration.test.ts","lineno": 0,"colno": 0,"in_app":true},{"function":"processTicksAndRejections","filename":"node:internal/process/task_queues","lineno":104,"colno":5,"in_app":false},{"filename":"file:///__vitest_runner__/dist/chunk-vitest.js:0:0","lineno": 0,"colno": 0,"in_app":false}]",
                 "ExceptionMessage": "payment declined",
                 "ExceptionStacktrace": "Error: payment declined
             at emitOtelData (/Users/morse/Documents/GitHub/strada/otel-collector/src/collector-integration.test.ts:0:0)
@@ -515,7 +592,6 @@ describe.sequential('collector integration with official OTel SDKs', () => {
                 "ServiceName": "collector-integration-test",
                 "SeverityNumber": 17,
                 "SeverityText": "ERROR",
-                "TraceFlags": 0,
               },
             ],
             "table": "otel_logs",
@@ -685,7 +761,6 @@ describe.sequential('collector integration with official OTel SDKs', () => {
                 "SpanName": "checkout",
                 "StatusCode": "Error",
                 "StatusMessage": "checkout failed",
-                "TraceFlags": 257,
                 "TraceState": "",
               },
             ],

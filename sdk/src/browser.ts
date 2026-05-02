@@ -343,6 +343,9 @@ export function initStrada(options: StradaOptions): void {
 
   _options = options;
   _sessionId = getOrCreateSessionId();
+  if (options.token) {
+    console.warn("[@strada.sh/sdk] token is ignored in browser builds. Browser ingest is anonymous and rate limited.");
+  }
 
   const getUserId = () => resolveUserId(_options);
 

@@ -1,6 +1,6 @@
 // Schema for the Strada D1 database.
 // Contains BetterAuth core tables, org/project hierarchy, database config,
-// and project tokens for ingest authentication.
+// and org-wide ingest tokens for collector authentication.
 
 import { defineRelations } from 'drizzle-orm'
 import * as sqliteCore from 'drizzle-orm/sqlite-core'
@@ -143,25 +143,26 @@ export const project = sqliteCore.sqliteTable('project', {
   sqliteCore.uniqueIndex('project_org_id_slug_unique').on(table.orgId, table.slug),
 ])
 
-// ── Project tokens ──────────────────────────────────────────────────
-// Bearer tokens for ingest and read access. The collector validates the
-// token hash to authenticate incoming OTLP data. The full key is shown
-// once at creation; only the SHA-256 hash is stored.
+// ── Org ingest tokens ────────────────────────────────────────────────
+// Bearer tokens for server-side ingest. The collector validates the token
+// hash against the project's org. The full key is shown once at creation;
+// only the SHA-256 hash is stored. Browser ingest intentionally omits this
+// token and is rate limited at the Cloudflare Worker layer instead.
 
-export const projectToken = sqliteCore.sqliteTable('project_token', {
+export const orgToken = sqliteCore.sqliteTable('org_token', {
   id: sqliteCore.text('id').primaryKey().notNull().$defaultFn(() => ulid()),
-  projectId: sqliteCore.text('project_id').notNull().references(() => project.id, { onDelete: 'cascade' }),
+  orgId: sqliteCore.text('org_id').notNull().references(() => org.id, { onDelete: 'cascade' }),
   name: sqliteCore.text('name').notNull(),
   // First 12 chars after "str_" prefix, for display
   prefix: sqliteCore.text('prefix').notNull(),
   // SHA-256 hex digest of the full key
   hashedKey: sqliteCore.text('hashed_key').notNull().unique(),
-  scope: sqliteCore.text('scope', { enum: ['ingest', 'read'] }).notNull(),
+  scope: sqliteCore.text('scope', { enum: ['ingest'] }).notNull().default('ingest'),
   createdBy: sqliteCore.text('created_by').notNull().references(() => user.id, { onDelete: 'cascade' }),
   createdAt: epochMs('created_at').notNull().$defaultFn(() => Date.now()),
 }, (table) => [
-  sqliteCore.index('project_token_project_id_idx').on(table.projectId),
-  sqliteCore.index('project_token_hashed_key_idx').on(table.hashedKey),
+  sqliteCore.index('org_token_org_id_idx').on(table.orgId),
+  sqliteCore.index('org_token_hashed_key_idx').on(table.hashedKey),
 ])
 
 // ── Alert rules ─────────────────────────────────────────────────────
@@ -212,7 +213,7 @@ export const deviceCode = sqliteCore.sqliteTable('device_code', {
 // ── Relations (v2 API) ──────────────────────────────────────────────
 
 export const relations = defineRelations(
-  { user, session, account, verification, org, orgMember, database, project, projectToken, deviceCode, alertRule, alertDestination },
+  { user, session, account, verification, org, orgMember, database, project, orgToken, deviceCode, alertRule, alertDestination },
   (r) => ({
     user: {
       sessions: r.many.session(),
@@ -233,6 +234,7 @@ export const relations = defineRelations(
       members: r.many.orgMember(),
       database: r.one.database(),
       projects: r.many.project(),
+      tokens: r.many.orgToken(),
       alertRule: r.one.alertRule(),
       users: r.many.user({
         from: r.org.id.through(r.orgMember.orgId),
@@ -250,11 +252,10 @@ export const relations = defineRelations(
     project: {
       org: r.one.org({ from: r.project.orgId, to: r.org.id }),
       database: r.one.database({ from: r.project.databaseId, to: r.database.id }),
-      tokens: r.many.projectToken(),
     },
-    projectToken: {
-      project: r.one.project({ from: r.projectToken.projectId, to: r.project.id }),
-      creator: r.one.user({ from: r.projectToken.createdBy, to: r.user.id }),
+    orgToken: {
+      org: r.one.org({ from: r.orgToken.orgId, to: r.org.id }),
+      creator: r.one.user({ from: r.orgToken.createdBy, to: r.user.id }),
     },
     deviceCode: {
       user: r.one.user({ from: r.deviceCode.userId, to: r.user.id }),

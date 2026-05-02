@@ -83,8 +83,8 @@ alertsCli
     const { safeFetch } = getApiClient();
 
     const body = {
-      channel: options.channel as "email" | "webhook",
-      destination: options.to as string,
+      channel: options.channel,
+      destination: options.to,
       ...(options.threshold ? { threshold: Number(options.threshold) } : {}),
       ...(options.window ? { windowMinutes: Number(options.window) } : {}),
       ...(options.cooldown ? { cooldownMinutes: Number(options.cooldown) } : {}),

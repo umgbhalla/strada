@@ -10,7 +10,7 @@
 import { env } from "cloudflare:workers";
 import { createCollectorApp } from "./app.ts";
 
-const app = createCollectorApp({ db: env.DB });
+const app = createCollectorApp({ db: env.DB, anonymousRateLimiter: env.ANON_INGEST_RATE_LIMITER });
 
 export default {
   fetch(request: Request): Promise<Response> {

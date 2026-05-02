@@ -65,6 +65,7 @@ import {
   setTags,
   resetContext,
   resolveEndpoint,
+  resolveIngestHeaders,
   resolveReleaseAttributes,
   shouldExportTelemetry,
   ATTR,
@@ -321,6 +322,7 @@ export function initStrada(options: StradaOptions): void {
 
   const exportTelemetry = shouldExportTelemetry(options);
   const endpoint = exportTelemetry ? resolveEndpoint(options) : undefined;
+  const ingestHeaders = resolveIngestHeaders(options);
 
   // Logger provider: baggage extraction -> batch export -> auto-flush
   _loggerProvider = new LoggerProvider({
@@ -330,7 +332,7 @@ export function initStrada(options: StradaOptions): void {
           new AutoFlushLogProcessor(
             new BaggageLogProcessor(
               new BatchLogRecordProcessor(
-                new OTLPLogExporter({ url: `${endpoint}/v1/logs` }),
+                new OTLPLogExporter({ url: `${endpoint}/v1/logs`, headers: ingestHeaders }),
                 options.telemetry?.logs,
               ),
             ),
@@ -349,7 +351,7 @@ export function initStrada(options: StradaOptions): void {
       ...(exportTelemetry
         ? [
             new BatchSpanProcessor(
-              new OTLPTraceExporter({ url: `${endpoint}/v1/traces` }),
+              new OTLPTraceExporter({ url: `${endpoint}/v1/traces`, headers: ingestHeaders }),
               options.telemetry?.traces,
             ),
             new AutoFlushSpanProcessor(),

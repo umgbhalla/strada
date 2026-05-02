@@ -4,7 +4,7 @@
 // through the full pipeline: SDK → collector → Tinybird/ClickHouse.
 //
 // Run with:
-//   STRADA_PROJECT_ID=<id> pnpm vitest run
+//   STRADA_PROJECT_ID=<id> STRADA_TOKEN=<token> pnpm vitest run
 //
 // After running, use `strada issues list -p <slug>` to verify the data landed.
 
@@ -33,6 +33,7 @@ describe.skipIf(!projectId)("example-app telemetry", () => {
     initStrada({
       projectId: projectId!,
       endpoint: endpoint!,
+      token: process.env.STRADA_TOKEN,
       service: "example-app-test",
       version: "0.0.1-test",
       environment: "test",

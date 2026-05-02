@@ -9,6 +9,7 @@ import type { ProjectConfig } from "./env.ts";
 const RESOLVE_SQL = `
   SELECT
     p.id AS project_id,
+    p.org_id,
     d.backend,
     d.tinybird_endpoint,
     d.tinybird_admin_token,
@@ -24,6 +25,7 @@ const RESOLVE_SQL = `
 
 type ProjectConfigRow = {
   project_id: string;
+  org_id: string;
   backend: "tinybird" | "clickhouse";
   tinybird_endpoint: string | null;
   tinybird_admin_token: string | null;
@@ -36,6 +38,7 @@ type ProjectConfigRow = {
 function toProjectConfig(row: ProjectConfigRow): ProjectConfig {
   return {
     projectId: row.project_id,
+    orgId: row.org_id,
     backend: row.backend,
     tinybirdEndpoint: row.tinybird_endpoint,
     tinybirdAdminToken: row.tinybird_admin_token,

@@ -129,11 +129,13 @@ projectsCli
 
     output.log(bold("Project created!"));
     output.log("");
-    output.log(`  ID:     ${cyan(res.id)}`);
-    output.log(`  Slug:   ${res.slug}`);
-    output.log(`  Ingest: ${res.ingestEndpoint.toLowerCase()}`);
+    output.log(`  ID:              ${cyan(res.id)}`);
+    output.log(`  Slug:            ${res.slug}`);
+    output.log(`  Ingest endpoint: ${res.ingestEndpoint.toLowerCase()}`);
+    output.log(`  Token:           ${cyan(res.token)}`);
     output.log("");
-    output.log(dim("Configure your SDK with this endpoint to start sending data."));
+    output.log(dim("Use this ingest-scoped token only in server-side SDKs. Browser ingest should omit it."));
+    output.log(dim("Manage tokens with `strada tokens list` and `strada tokens create <name>`."));
   });
 
 projectsCli

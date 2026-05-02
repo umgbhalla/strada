@@ -159,31 +159,25 @@ export async function getAccessibleProject({
   })
 }
 
-export async function getAccessibleProjectToken(userId: string, tokenId: string) {
+export async function getAccessibleOrgToken(userId: string, tokenId: string) {
   const db = getDb()
-  const token = await db.query.projectToken.findFirst({
+  const token = await db.query.orgToken.findFirst({
     where: {
       id: tokenId,
-      project: {
-        org: {
-          members: {
-            userId,
-          },
+      org: {
+        members: {
+          userId,
         },
       },
     },
     with: {
-      project: {
+      org: {
+        columns: {},
         with: {
-          org: {
-            columns: {},
-            with: {
-              members: {
-                columns: { role: true },
-                where: { userId },
-                limit: 1,
-              },
-            },
+          members: {
+            columns: { role: true },
+            where: { userId },
+            limit: 1,
           },
         },
       },
@@ -192,9 +186,7 @@ export async function getAccessibleProjectToken(userId: string, tokenId: string)
 
   if (!token) return null
 
-  return Object.assign(token, {
-    accessRole: token.project?.org?.members[0]?.role ?? null,
-  })
+  return token
 }
 
 // ── Token hashing ───────────────────────────────────────────────────
@@ -206,7 +198,7 @@ export async function hashToken(token: string): Promise<string> {
   return Array.from(new Uint8Array(hash)).map((b) => b.toString(16).padStart(2, '0')).join('')
 }
 
-export function generateProjectToken(): { fullKey: string; prefix: string } {
+export function generateIngestToken(): { fullKey: string; prefix: string } {
   const raw = crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, '')
   const fullKey = `str_${raw}`
   const prefix = raw.slice(0, 12)
