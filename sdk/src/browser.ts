@@ -48,6 +48,7 @@ import {
   resetContext,
   resolveUserId,
   resolveEndpoint,
+  resolveReleaseAttributes,
   shouldExportTelemetry,
   ATTR,
   createStradaBaggage,
@@ -389,7 +390,7 @@ export function initStrada(options: StradaOptions): void {
 
   const resource = resourceFromAttributes({
     [ATTR["service.name"]]: options.service,
-    ...(options.version ? { [ATTR["service.version"]]: options.version } : {}),
+    ...resolveReleaseAttributes(options),
     ...(options.environment ? { [ATTR["deployment.environment.name"]]: options.environment } : {}),
     ...browserAttrs,
   });

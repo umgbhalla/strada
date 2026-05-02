@@ -43,6 +43,10 @@
       "types": "./dist/shared.d.ts",
       "default": "./dist/shared.js"
     },
+    "./vite": {
+      "types": "./dist/vite.d.ts",
+      "default": "./dist/vite.js"
+    },
     "./src": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
@@ -97,6 +101,7 @@
   "devDependencies": {
     "@types/node": "^25.5.0",
     "esbuild": "^0.28.0",
-    "rimraf": "^6.0.1"
+    "rimraf": "^6.0.1",
+    "vite": "^8.0.2"
   }
 }

@@ -79,6 +79,12 @@ export interface StradaOptions {
   version?: string;
   /** deployment.environment.name resource attribute */
   environment?: string;
+  /** vcs.ref.head.revision resource attribute, usually the full git commit SHA. */
+  releaseCommit?: string;
+  /** vcs.ref.head.name resource attribute, usually the git branch or tag name. */
+  releaseBranch?: string;
+  /** deployment.id resource attribute, usually the platform deployment or build id. */
+  deploymentId?: string;
   /** Drop errors whose message matches any of these patterns */
   ignoreErrors?: Array<string | RegExp>;
   /** Drop errors whose top stack frame URL matches any of these patterns */
@@ -107,6 +113,89 @@ export interface StradaOptions {
    * Default: `"strada_uid"`. Set to `false` to disable cookie reading.
    */
   userIdCookie?: string | false;
+}
+
+export interface StradaReleaseMetadata {
+  version?: string;
+  commit?: string;
+  branch?: string;
+  deploymentId?: string;
+}
+
+declare global {
+  var STRADA_RELEASE: StradaReleaseMetadata | undefined;
+}
+
+type EnvLike = Record<string, string | undefined>;
+
+function firstEnv(env: EnvLike | undefined, keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = env?.[key];
+    if (value) return value;
+  }
+  return undefined;
+}
+
+export function getInjectedStradaRelease(): StradaReleaseMetadata | undefined {
+  return globalThis.STRADA_RELEASE;
+}
+
+export function resolveReleaseAttributes(
+  options: StradaOptions,
+  env?: EnvLike,
+): Record<string, string> {
+  const injected = getInjectedStradaRelease();
+  const version =
+    options.version ??
+    firstEnv(env, [
+      "STRADA_RELEASE_VERSION",
+      "STRADA_RELEASE",
+      "SENTRY_RELEASE",
+      "npm_package_version",
+    ]) ??
+    injected?.version;
+  const commit =
+    options.releaseCommit ??
+    firstEnv(env, [
+      "STRADA_RELEASE_COMMIT",
+      "VERCEL_GIT_COMMIT_SHA",
+      "RENDER_GIT_COMMIT",
+      "CF_PAGES_COMMIT_SHA",
+      "WORKERS_CI_COMMIT_SHA",
+      "GITHUB_SHA",
+      "GIT_COMMIT",
+      "CI_COMMIT_SHA",
+    ]) ??
+    injected?.commit;
+  const branch =
+    options.releaseBranch ??
+    firstEnv(env, [
+      "STRADA_RELEASE_BRANCH",
+      "VERCEL_GIT_COMMIT_REF",
+      "RENDER_GIT_BRANCH",
+      "CF_PAGES_BRANCH",
+      "WORKERS_CI_BRANCH",
+      "GITHUB_REF_NAME",
+      "CI_COMMIT_BRANCH",
+    ]) ??
+    injected?.branch;
+  const deploymentId =
+    options.deploymentId ??
+    firstEnv(env, [
+      "STRADA_DEPLOYMENT_ID",
+      "VERCEL_DEPLOYMENT_ID",
+      "WORKERS_CI_BUILD_UUID",
+      "RENDER_INSTANCE_ID",
+      "FLY_MACHINE_VERSION",
+    ]) ??
+    injected?.deploymentId;
+
+  return {
+    ...(version ? { [ATTR["service.version"]]: version } : {}),
+    ...(commit ? { [ATTR["vcs.ref.head.revision"]]: commit } : {}),
+    ...(branch ? { [ATTR["vcs.ref.head.name"]]: branch } : {}),
+    ...(deploymentId ? { [ATTR["deployment.id"]]: deploymentId } : {}),
+  };
 }
 
 export interface CaptureExceptionOptions {

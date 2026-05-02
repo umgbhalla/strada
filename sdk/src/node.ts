@@ -56,6 +56,7 @@ import {
   resetContext,
   resolveMetricReaderOptions,
   resolveEndpoint,
+  resolveReleaseAttributes,
   shouldExportTelemetry,
   ATTR,
   BAGGAGE_SESSION_ID,
@@ -314,13 +315,15 @@ export function initStrada(options: StradaOptions): void {
   // 3. Our custom service.* attributes take highest priority (last merge wins)
   const resource = defaultResource()
     .merge(detectResources({ detectors: [envDetector, processDetector, hostDetector] }))
-    .merge(resourceFromAttributes({
-      [ATTR["service.name"]]: options.service,
-      ...(options.version ? { [ATTR["service.version"]]: options.version } : {}),
-      ...(options.environment
-        ? { [ATTR["deployment.environment.name"]]: options.environment }
-        : {}),
-    }));
+    .merge(
+      resourceFromAttributes({
+        [ATTR["service.name"]]: options.service,
+        ...resolveReleaseAttributes(options, process.env),
+        ...(options.environment
+          ? { [ATTR["deployment.environment.name"]]: options.environment }
+          : {}),
+      }),
+    );
 
   const exportTelemetry = shouldExportTelemetry(options);
   const endpoint = exportTelemetry ? resolveEndpoint(options) : undefined;

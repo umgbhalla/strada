@@ -95,4 +95,10 @@ export const ATTR = {
   "service.version": "service.version",
   /** Deployment environment, e.g. "production", "staging". Standard OTel resource attribute. */
   "deployment.environment.name": "deployment.environment.name",
+  /** Deployment/build identifier from the hosting platform, e.g. Vercel deployment id or Cloudflare build uuid. */
+  "deployment.id": "deployment.id",
+  /** VCS revision that produced this deployment, usually a full git commit SHA. */
+  "vcs.ref.head.revision": "vcs.ref.head.revision",
+  /** VCS branch or ref name that produced this deployment, e.g. "main". */
+  "vcs.ref.head.name": "vcs.ref.head.name",
 } as const;

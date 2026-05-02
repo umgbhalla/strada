@@ -13,6 +13,7 @@ import {
   normalizeLogInput,
   applyBeforeSend,
   resolveMetricReaderOptions,
+  resolveReleaseAttributes,
   resolveUserId,
   readCookie,
   setTags,
@@ -374,6 +375,61 @@ describe("resolveMetricReaderOptions", () => {
       {
         "exportIntervalMillis": 2500,
         "exportTimeoutMillis": 1500,
+      }
+    `);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// release metadata
+// ---------------------------------------------------------------------------
+
+describe("resolveReleaseAttributes", () => {
+  it("prefers explicit options over platform env vars", () => {
+    expect(
+      resolveReleaseAttributes(
+        {
+          projectId: "test",
+          service: "frontend",
+          version: "frontend@1.2.3",
+          releaseCommit: "option-commit",
+          releaseBranch: "option-branch",
+          deploymentId: "option-deploy",
+        },
+        {
+          VERCEL_GIT_COMMIT_SHA: "env-commit",
+          VERCEL_GIT_COMMIT_REF: "env-branch",
+          VERCEL_DEPLOYMENT_ID: "env-deploy",
+        },
+      ),
+    ).toMatchInlineSnapshot(`
+      {
+        "deployment.id": "option-deploy",
+        "service.version": "frontend@1.2.3",
+        "vcs.ref.head.name": "option-branch",
+        "vcs.ref.head.revision": "option-commit",
+      }
+    `);
+  });
+
+  it("uses platform env vars when options are absent", () => {
+    expect(
+      resolveReleaseAttributes(
+        {
+          projectId: "test",
+          service: "frontend",
+        },
+        {
+          RENDER_GIT_COMMIT: "render-commit",
+          RENDER_GIT_BRANCH: "main",
+          RENDER_INSTANCE_ID: "srv-instance",
+        },
+      ),
+    ).toMatchInlineSnapshot(`
+      {
+        "deployment.id": "srv-instance",
+        "vcs.ref.head.name": "main",
+        "vcs.ref.head.revision": "render-commit",
       }
     `);
   });
