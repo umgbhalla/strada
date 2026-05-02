@@ -139,6 +139,59 @@ function getSpanBadge(span: SpanNode): SpanBadge | null {
   return null
 }
 
+// ─── Inline attribute tags (max 2, priority-ordered) ────────────
+
+type AttrTagColor = "blue" | "purple" | "amber" | "teal" | "rose" | "gray"
+
+interface AttrTag {
+  value: string
+  color: AttrTagColor
+}
+
+const tagColorStyles: Record<AttrTagColor, string> = {
+  blue:   "bg-blue-500/10 text-blue-700 dark:text-blue-400",
+  purple: "bg-purple-500/10 text-purple-700 dark:text-purple-400",
+  amber:  "bg-amber-500/10 text-amber-700 dark:text-amber-400",
+  teal:   "bg-teal-500/10 text-teal-700 dark:text-teal-400",
+  rose:   "bg-rose-500/10 text-rose-700 dark:text-rose-400",
+  gray:   "bg-muted text-muted-foreground",
+}
+
+/** Priority list of attributes to show inline. First 2 matches win. */
+function getInlineAttrs(span: SpanNode): AttrTag[] {
+  const a = span.spanAttributes
+  const tags: AttrTag[] = []
+
+  // User identity
+  if (a["user.id"]) tags.push({ value: a["user.id"], color: "purple" })
+
+  // Custom event name
+  if (a["event.name"]) tags.push({ value: a["event.name"], color: "teal" })
+
+  // AI model / tool
+  if (a["ai.model.id"]) tags.push({ value: a["ai.model.id"], color: "purple" })
+  if (a["ai.toolCall.name"]) tags.push({ value: a["ai.toolCall.name"], color: "blue" })
+
+  // Peer service (Stripe, SendGrid, etc.)
+  if (a["peer.service"]) tags.push({ value: a["peer.service"], color: "blue" })
+
+  // DB system
+  if (a["db.system"]) tags.push({ value: a["db.system"], color: "amber" })
+
+  // Messaging destination
+  if (a["messaging.destination.name"]) tags.push({ value: a["messaging.destination.name"], color: "rose" })
+
+  // gRPC service
+  if (a["rpc.service"]) tags.push({ value: a["rpc.service"], color: "teal" })
+
+  // HTTP method (only if not already obvious from span name)
+  if (a["http.method"] && !span.spanName.toUpperCase().startsWith(a["http.method"])) {
+    tags.push({ value: a["http.method"], color: "gray" })
+  }
+
+  return tags.slice(0, 2)
+}
+
 // ─── Count all descendants ──────────────────────────────────────
 
 function countDescendants(span: SpanNode): number {
@@ -170,6 +223,7 @@ function SpanRow({
   const isSelected = selectedSpanId === span.spanId
   const descendantCount = hasChildren ? countDescendants(span) : 0
   const badge = getSpanBadge(span)
+  const inlineAttrs = getInlineAttrs(span)
 
   return (
     <div className="flex flex-col">
@@ -209,6 +263,19 @@ function SpanRow({
         <span className="shrink-0 text-xs text-muted-foreground font-mono">
           {formatDuration(span.durationMs)}
         </span>
+
+        {/* Inline attribute tags */}
+        {inlineAttrs.map((tag) => (
+          <span
+            key={tag.value}
+            className={cn(
+              "hidden sm:inline-flex shrink-0 items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium truncate max-w-[10rem]",
+              tagColorStyles[tag.color],
+            )}
+          >
+            {tag.value}
+          </span>
+        ))}
 
         {/* Child count badge */}
         {hasChildren && (
