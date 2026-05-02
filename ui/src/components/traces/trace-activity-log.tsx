@@ -198,16 +198,10 @@ function SpanRow({
         )}
 
         {/* Span type icon */}
-        <Icon className={cn(
-          "size-4 shrink-0",
-          span.statusCode === "Error" ? "text-destructive" : "text-muted-foreground",
-        )} />
+        <Icon className="size-4 shrink-0 text-muted-foreground" />
 
         {/* Span name — truncated */}
-        <span className={cn(
-          "min-w-0 truncate text-sm font-medium",
-          span.statusCode === "Error" && "text-destructive",
-        )}>
+        <span className="min-w-0 truncate text-sm font-medium">
           {span.spanName}
         </span>
 
