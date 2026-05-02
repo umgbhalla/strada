@@ -3,6 +3,7 @@
 
 import { goke } from "goke";
 import dedent from "string-dedent";
+import { z } from "zod";
 import { bold, cyan, dim } from "./colors.ts";
 import { getApiClient } from "./api-client.ts";
 import { resolveCurrentOrg } from "./orgs.ts";
@@ -12,7 +13,7 @@ export const tokensCli = goke();
 
 tokensCli
   .command(
-    "tokens create <name> <scope>",
+    "tokens create <name>",
     dedent`
       Create an org-wide token with an explicit scope.
 
@@ -22,25 +23,23 @@ tokensCli
       other trusted server runtimes.
 
       The only supported scope today is "ingest". The scope is still required
-      so command usage will stay stable when more token scopes are added later.
+      as --scope so command usage will stay stable when more token scopes are
+      added later.
 
       Browser SDKs should not use tokens. Browser ingest stays
       anonymous and is protected by the collector's anonymous rate limit.
     `,
   )
+  .option("--scope <scope>", z.enum(["ingest"]).describe("Token scope. Currently only ingest is supported"))
   .option("--org [name-or-id]", "Organization override (defaults to folder setup)")
-  .action(async (name, scope, options, { console: output }) => {
-    if (scope !== "ingest") {
-      throw new Error(`Unsupported token scope "${scope}". The only supported scope is "ingest".`);
-    }
-
+  .action(async (name, options, { console: output }) => {
     const { safeFetch } = getApiClient();
     const org = await resolveCurrentOrg({ org: options.org || undefined });
 
     const res = await safeFetch("/api/v0/orgs/:orgId/tokens", {
       method: "POST",
       params: { orgId: org.id },
-      body: { name, scope },
+      body: { name, scope: options.scope },
     });
     if (res instanceof Error) throw res;
 
@@ -77,7 +76,7 @@ tokensCli
     if (res instanceof Error) throw res;
 
     if (res.tokens.length === 0) {
-      output.log("No tokens yet. Create one with `strada tokens create <name> ingest`");
+      output.log("No tokens yet. Create one with `strada tokens create <name> --scope ingest`");
       return;
     }
 
