@@ -7,9 +7,9 @@ import { trace } from '@strada.sh/sdk'
 import { Spiceflow } from 'spiceflow'
 import { Head, Link } from 'spiceflow/react'
 import { ChartsDemoPage } from './components/charts-demo.tsx'
-import { TraceTimelineDemo } from './components/traces/trace-timeline-demo.tsx'
+import { TraceTimelineDemo } from './components/traces-graph/trace-timeline-demo.tsx'
 import { TraceActivityLogDemo } from './components/traces/trace-activity-log-demo.tsx'
-import { ThemeToggle } from './components/traces/theme-toggle.tsx'
+import { ThemeToggle } from './components/traces-graph/theme-toggle.tsx'
 
 const tracer = trace.getTracer('strada-ui')
 

@@ -1,23 +1,20 @@
 // Public exports for the @strada.sh/ui component package.
 
-export { TraceTimeline } from "./components/traces/trace-timeline.tsx";
-export type { TraceTimelineProps } from "./components/traces/trace-timeline.tsx";
-export { TraceTimelineDemo } from "./components/traces/trace-timeline-demo.tsx";
+export { TraceTimeline } from "./components/traces-graph/trace-timeline.tsx";
+export type { TraceTimelineProps } from "./components/traces-graph/trace-timeline.tsx";
+export { TraceTimelineDemo } from "./components/traces-graph/trace-timeline-demo.tsx";
 export {
   TraceTimelineConnectors,
   TraceTimelineRows,
   TraceTimelineSearch,
   TraceTimelineTimeAxis,
   TraceTimelineTooltipContent,
-} from "./components/traces/trace-timeline-parts.tsx";
-export type { BarSearchState } from "./components/traces/trace-timeline-parts.tsx";
-export { TraceViewProvider } from "./components/traces/trace-timeline-state.tsx";
-export type { TraceViewContextValue, TimelineBar, ViewportState } from "./components/traces/trace-timeline-state.tsx";
-export { TraceTimelineMinimap } from "./components/traces/trace-timeline-minimap.tsx";
-export { TraceActivityLog } from "./components/traces/trace-activity-log.tsx";
-export type { TraceActivityLogProps } from "./components/traces/trace-activity-log.tsx";
-export { TraceActivityLogDemo } from "./components/traces/trace-activity-log-demo.tsx";
-export { ThemeToggle } from "./components/traces/theme-toggle.tsx";
+} from "./components/traces-graph/trace-timeline-parts.tsx";
+export type { BarSearchState } from "./components/traces-graph/trace-timeline-parts.tsx";
+export { TraceViewProvider } from "./components/traces-graph/trace-timeline-state.tsx";
+export type { TraceViewContextValue, TimelineBar, ViewportState } from "./components/traces-graph/trace-timeline-state.tsx";
+export { TraceTimelineMinimap } from "./components/traces-graph/trace-timeline-minimap.tsx";
+export { ThemeToggle } from "./components/traces-graph/theme-toggle.tsx";
 export { Chart, ChartLegend, TimeseriesChart } from "./components/charts.tsx";
 export type { ChartEvents, ChartProps, TimeseriesChartProps } from "./components/charts.tsx";
 export { DataTable } from "./components/data-table.tsx";
