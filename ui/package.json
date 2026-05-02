@@ -63,7 +63,7 @@
     "tailwindcss": "^4.2.2"
   },
   "devDependencies": {
-    "@napi-rs/canvas": "^0.1.100",
+    "@resvg/resvg-wasm": "^2.6.2",
     "@types/node": "^25.6.0",
     "@vitejs/plugin-react": "^6.0.1",
     "echarts": "^6.0.0",

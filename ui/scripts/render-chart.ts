@@ -1,12 +1,13 @@
 /**
- * Renders a shared Strada UI ECharts option to PNG in Node.js using
- * @napi-rs/canvas. This proves the chart config can be reused by CLI code.
+ * Renders a shared Strada UI ECharts option to SVG, then PNG.
+ * The SVG → PNG step uses resvg's wasm build so the same flow can run in Cloudflare Workers.
  */
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { createRequire } from 'node:module'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { Canvas, Image, createCanvas } from '@napi-rs/canvas'
+import { Resvg, initWasm } from '@resvg/resvg-wasm'
 import { BarChart, LineChart } from 'echarts/charts'
 import {
   AriaComponent,
@@ -17,14 +18,19 @@ import {
   TooltipComponent,
 } from 'echarts/components'
 import * as echarts from 'echarts/core'
-import { CanvasRenderer } from 'echarts/renderers'
+import { SVGRenderer } from 'echarts/renderers'
 
 import { getDefaultChartColors } from '../src/lib/chart-palette.ts'
 import { buildTimeseriesChartOption, prepareChartOptions, type TimeseriesData } from '../src/lib/echarts-options.ts'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const require = createRequire(import.meta.url)
 const repoRoot = path.resolve(__dirname, '../..')
 const outputPath = path.join(repoRoot, 'tmp/strada-ui-chart-example.png')
+const svgOutputPath = path.join(repoRoot, 'tmp/strada-ui-chart-example.svg')
+const resvgWasmPath = require.resolve('@resvg/resvg-wasm/index_bg.wasm')
+
+await initWasm(await readFile(resvgWasmPath))
 
 echarts.use([
   LineChart,
@@ -34,21 +40,18 @@ echarts.use([
   GridComponent,
   ToolboxComponent,
   TooltipComponent,
-  CanvasRenderer,
+  SVGRenderer,
   AriaComponent,
 ])
-
-installCanvasGlobals()
 
 const width = 960
 const height = 420
 const isDarkMode = true
 
-console.log(`Creating ${width}x${height} canvas`)
-const canvas = createCanvas(width, height)
-// @ts-expect-error @napi-rs/canvas implements the browser canvas methods ECharts uses in Node.
-const chart = echarts.init(canvas, { color: getDefaultChartColors(isDarkMode) }, {
-  renderer: 'canvas',
+console.log(`Creating ${width}x${height} SVG chart`)
+const chart = echarts.init(null, { color: getDefaultChartColors(isDarkMode) }, {
+  renderer: 'svg',
+  ssr: true,
   devicePixelRatio: 2,
   width,
   height,
@@ -70,37 +73,23 @@ try {
   })
   options.backgroundColor = 'transparent'
 
-  console.log('Rendering ECharts option to canvas')
+  console.log('Rendering ECharts option to SVG')
   chart.setOption(prepareChartOptions(options), { notMerge: true, lazyUpdate: false })
+  const svg = chart.renderToSVGString()
+
+  console.log(`Writing ${svgOutputPath}`)
+  await mkdir(path.dirname(svgOutputPath), { recursive: true })
+  await writeFile(svgOutputPath, svg)
+
+  console.log('Rendering SVG to PNG with resvg wasm')
+  const png = new Resvg(svg, { fitTo: { mode: 'width', value: width } })
 
   console.log(`Writing ${outputPath}`)
-  await mkdir(path.dirname(outputPath), { recursive: true })
-  await writeFile(outputPath, await canvas.encode('png'))
+  await writeFile(outputPath, png.render().asPng())
 
   console.log(`Rendered chart image: ${outputPath}`)
 } finally {
   chart.dispose()
-}
-
-function installCanvasGlobals() {
-  Object.assign(globalThis, {
-    Canvas,
-    HTMLCanvasElement: Canvas,
-    Image,
-    HTMLImageElement: Image,
-  })
-
-  echarts.setPlatformAPI({
-    // @ts-expect-error @napi-rs/canvas is compatible with ECharts' platform canvas contract.
-    createCanvas: () => createCanvas(32, 32),
-    loadImage(src, onload, onerror) {
-      const image = new Image()
-      image.onload = onload.bind(image)
-      image.onerror = onerror.bind(image)
-      image.src = src
-      return image
-    },
-  })
 }
 
 function buildExampleData(): TimeseriesData[] {
