@@ -11,6 +11,7 @@
 import { useState } from "react"
 import type { SpanNode } from "../../lib/utils.ts"
 import { cn, formatDuration } from "../../lib/utils.ts"
+import { Badge } from "../ui/badge.tsx"
 import {
   Eye,
   Globe,
@@ -96,6 +97,48 @@ function getSpanIcon(span: SpanNode): LucideIcon {
   return CircleDot
 }
 
+// ─── Status badge resolver ──────────────────────────────────────
+
+interface SpanBadge {
+  label: string
+  variant: "destructive" | "warning" | "secondary" | "outline"
+}
+
+function getSpanBadge(span: SpanNode): SpanBadge | null {
+  const attrs = span.spanAttributes
+  const rawStatus = attrs["http.status_code"] || attrs["http.response.status_code"]
+  const httpCode = rawStatus ? parseInt(rawStatus, 10) : null
+
+  // HTTP 5xx — server error
+  if (httpCode && httpCode >= 500) {
+    return { label: String(httpCode), variant: "destructive" }
+  }
+
+  // HTTP 4xx — client error
+  if (httpCode && httpCode >= 400) {
+    return { label: String(httpCode), variant: "warning" }
+  }
+
+  // gRPC non-zero status
+  const grpcCode = attrs["rpc.grpc.status_code"]
+  if (grpcCode && grpcCode !== "0") {
+    const grpcNames: Record<string, string> = {
+      "1": "CANCELLED", "2": "UNKNOWN", "3": "INVALID_ARGUMENT",
+      "4": "DEADLINE_EXCEEDED", "5": "NOT_FOUND", "7": "PERMISSION_DENIED",
+      "8": "RESOURCE_EXHAUSTED", "13": "INTERNAL", "14": "UNAVAILABLE",
+      "16": "UNAUTHENTICATED",
+    }
+    return { label: grpcNames[grpcCode] ?? `gRPC ${grpcCode}`, variant: "destructive" }
+  }
+
+  // OTel StatusCode = Error (no HTTP code already shown)
+  if (span.statusCode === "Error") {
+    return { label: "Error", variant: "destructive" }
+  }
+
+  return null
+}
+
 // ─── Count all descendants ──────────────────────────────────────
 
 function countDescendants(span: SpanNode): number {
@@ -126,6 +169,7 @@ function SpanRow({
   const Icon = getSpanIcon(span)
   const isSelected = selectedSpanId === span.spanId
   const descendantCount = hasChildren ? countDescendants(span) : 0
+  const badge = getSpanBadge(span)
 
   return (
     <div className="flex flex-col">
@@ -177,6 +221,13 @@ function SpanRow({
           <span className="shrink-0 inline-flex items-center rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
             {descendantCount}
           </span>
+        )}
+
+        {/* Status badge — pushed to the right */}
+        {badge && (
+          <Badge variant={badge.variant} className="ml-auto shrink-0 text-[10px] px-1.5 py-0">
+            {badge.label}
+          </Badge>
         )}
       </button>
 

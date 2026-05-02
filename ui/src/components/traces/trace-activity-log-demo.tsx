@@ -144,10 +144,18 @@ const UNKNOWN_ROWS: OtelTraceRow[] = [
   makeRow("t4", "u01", "", "process_batch_job_2847", "batch-worker", "SPAN_KIND_UNSPECIFIED", 0, 5200, "Ok"),
   // Child with empty kind string
   makeRow("t4", "u02", "u01", "step_1_validate", "batch-worker", "", 50, 800),
-  // gRPC call
-  makeRow("t4", "u03", "u01", "grpc.payment.v1.PaymentService/ChargeCard", "batch-worker", "SPAN_KIND_CLIENT", 900, 1200, "Ok", {
+  // gRPC call — deadline exceeded
+  makeRow("t4", "u03", "u01", "grpc.payment.v1.PaymentService/ChargeCard", "batch-worker", "SPAN_KIND_CLIENT", 900, 1200, "Error", {
     "rpc.system": "grpc", "rpc.service": "payment.v1.PaymentService",
-    "rpc.method": "ChargeCard", "rpc.grpc.status_code": "0",
+    "rpc.method": "ChargeCard", "rpc.grpc.status_code": "4",
+  }),
+  // HTTP 404 — not found
+  makeRow("t4", "u03b", "u01", "GET /api/legacy/config", "batch-worker", "SPAN_KIND_CLIENT", 850, 45, "Ok", {
+    "http.method": "GET", "http.status_code": "404",
+  }),
+  // HTTP 429 — rate limited
+  makeRow("t4", "u03c", "u01", "POST /api/webhook/notify", "batch-worker", "SPAN_KIND_CLIENT", 870, 30, "Ok", {
+    "http.method": "POST", "http.status_code": "429",
   }),
   // Kafka producer
   makeRow("t4", "u04", "u01", "orders.completed send", "batch-worker", "SPAN_KIND_PRODUCER", 2200, 180, "Ok", {
@@ -200,9 +208,9 @@ const CHECKOUT_ROWS: OtelTraceRow[] = [
   }),
   makeRow("t5", "c11", "c01", "send_confirmation", "storefront", "SPAN_KIND_INTERNAL", 2550, 800),
   makeRow("t5", "c12", "c11", "render_email_template", "storefront", "SPAN_KIND_INTERNAL", 2555, 120),
-  makeRow("t5", "c13", "c11", "POST https://api.sendgrid.com/v3/mail/send", "storefront", "SPAN_KIND_CLIENT", 2700, 620, "Ok", {
+  makeRow("t5", "c13", "c11", "POST https://api.sendgrid.com/v3/mail/send", "storefront", "SPAN_KIND_CLIENT", 2700, 620, "Error", {
     "http.method": "POST", "http.url": "https://api.sendgrid.com/v3/mail/send",
-    "http.status_code": "202", "peer.service": "sendgrid",
+    "http.status_code": "502", "peer.service": "sendgrid",
   }),
 ]
 
