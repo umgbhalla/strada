@@ -33,6 +33,7 @@ export interface GridItemProps {
 export interface GridLineExtensionsProps {
   side?: "top" | "bottom" | "both";
   length?: GridSize;
+  padding?: GridSize;
   className?: string;
   style?: CSSProperties;
   __gridColumns?: number;
@@ -141,6 +142,7 @@ function GridItem({
 function GridLineExtensions({
   side = "both",
   length = 40,
+  padding = 8,
   className,
   style,
   __gridColumns,
@@ -150,6 +152,7 @@ function GridLineExtensions({
   if (!__gridColumns || !__gridRows) return null;
 
   const lengthValue = cssSize(length);
+  const paddingValue = cssSize(padding);
   const sides = side === "both" ? ["top", "bottom"] : [side];
 
   return sides.flatMap((currentSide) => {
@@ -159,13 +162,12 @@ function GridLineExtensions({
         key={`${currentSide}-${dot.column}`}
         aria-hidden
         className={cn(
-          "absolute w-px bg-border",
-          currentSide === "top" && "top-0 -translate-y-full",
-          currentSide === "bottom" && "bottom-0 translate-y-full",
+          "absolute z-20 w-px bg-border",
           className,
         )}
         style={{
           left: linePosition(dot.column, __gridColumns),
+          top: currentSide === "top" ? `calc(-1 * (${lengthValue} + ${paddingValue}))` : `calc(100% + ${paddingValue})`,
           height: lengthValue,
           ...style,
         }}
@@ -344,6 +346,6 @@ function getGridLineSegments({ columns, rows, placements }: { columns: number; r
 
 function linePosition(index: number, tracks: number) {
   if (index === 0) return "0%";
-  if (index === tracks) return "100%";
+  if (index === tracks) return "calc(100% - 1px)";
   return `${(index / tracks) * 100}%`;
 }

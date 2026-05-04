@@ -20,9 +20,8 @@ export function GridDemoPage() {
         <ThemeToggle />
       </div>
 
-      <div className="relative w-full max-w-6xl">
+      <div className="relative w-full max-w-6xl pb-10">
         <div aria-hidden className="absolute left-1/2 top-0 h-px w-screen -translate-x-1/2 bg-border" />
-        <div aria-hidden className="absolute bottom-0 left-1/2 h-px w-screen -translate-x-1/2 bg-border" />
         <Grid columns={12} rows={4} rowHeight={112} cellPadding={32} lines>
           <Grid.LineExtensions />
           <Grid.Item columnSpan={5} rowSpan={2}>
