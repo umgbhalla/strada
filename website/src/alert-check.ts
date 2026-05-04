@@ -163,6 +163,48 @@ async function checkProjectAlerts(ctx: {
       ? new Date(state.lastAlertedAt).getTime()
       : 0
 
+    // ── Resolved issue regression detection ──
+    // When an issue is resolved, we store the deployment.id values that were
+    // active at resolve time. If new errors come from the SAME deployment,
+    // it's just old code still running; suppress the alert. If errors come
+    // from a DIFFERENT deployment, it's a regression: reopen the issue and alert.
+    // Requires deployment.id to be set in the SDK (via VERCEL_DEPLOYMENT_ID,
+    // WORKERS_CI_BUILD_UUID, etc.). Without it, resolved issues alert normally.
+    if (state?.status === 'resolved' && state.resolvedInDeploymentIds) {
+      const resolvedIds = new Set(state.resolvedInDeploymentIds.split(',').filter(Boolean))
+      const currentIds = await queryErrorDeploymentIds({
+        project, dbConfig, fingerprintHash: error.fingerprintHash, windowMinutes: rule.windowMinutes,
+      })
+
+      if (currentIds.length > 0) {
+        const allFromSameDeployment = currentIds.every((id) => resolvedIds.has(id))
+        if (allFromSameDeployment) {
+          logger.debug({ message: 'resolved issue, same deployment still erroring, suppressing', fingerprintHash: error.fingerprintHash, deploymentIds: currentIds })
+          continue
+        }
+        // Different deployment.id → regression detected
+        logger.info({ message: 'regression detected via deployment.id', fingerprintHash: error.fingerprintHash, resolvedIds: [...resolvedIds], currentIds })
+
+        // Reopen the issue
+        await writeIssueStateRow({
+          project, dbConfig,
+          row: {
+            project_id: project.id,
+            fingerprint_hash: error.fingerprintHash,
+            status: 'open',
+            assignee_member_id: state.assigneeMemberId || '',
+            resolved_at: null,
+            resolved_by_member_id: '',
+            last_alerted_at: new Date(now).toISOString(),
+            resolved_in_deployment_ids: '',
+            version: now,
+            updated_at: new Date(now).toISOString(),
+          },
+        })
+      }
+      // No deployment.id on current errors → can't determine, fall through to alert
+    }
+
     // Skip if within cooldown
     if (lastAlertedAt > 0 && now - lastAlertedAt < cooldownMs) {
       logger.debug({ message: `skipping, within cooldown`, fingerprintHash: error.fingerprintHash, lastAlertedAt: new Date(lastAlertedAt).toISOString(), cooldownMinutes: rule.cooldownMinutes })
@@ -252,6 +294,8 @@ interface IssueStateInfo {
   assigneeMemberId: string
   resolvedAt: string | null
   resolvedByMemberId: string
+  /** Comma-separated deployment.id values that were active when the issue was resolved. Empty string if unavailable. */
+  resolvedInDeploymentIds: string
 }
 
 async function queryIssueStates(ctx: {
@@ -276,7 +320,8 @@ async function queryIssueStates(ctx: {
     '    argMax(LastAlertedAt, Version) AS LastAlertedAt,',
     '    argMax(AssigneeMemberId, Version) AS AssigneeMemberId,',
     '    argMax(ResolvedAt, Version) AS ResolvedAt,',
-    '    argMax(ResolvedByMemberId, Version) AS ResolvedByMemberId',
+    '    argMax(ResolvedByMemberId, Version) AS ResolvedByMemberId,',
+    '    argMax(ResolvedInDeploymentIds, Version) AS ResolvedInDeploymentIds',
     'FROM otel_issue_state',
     `WHERE ${projectFilter}FingerprintHash IN (${inList})`,
     'GROUP BY FingerprintHash',
@@ -294,6 +339,7 @@ async function queryIssueStates(ctx: {
         assigneeMemberId: String(row.AssigneeMemberId ?? ''),
         resolvedAt: row.ResolvedAt ? String(row.ResolvedAt) : null,
         resolvedByMemberId: String(row.ResolvedByMemberId ?? ''),
+        resolvedInDeploymentIds: String(row.ResolvedInDeploymentIds ?? ''),
       })
     }
     return map
@@ -321,6 +367,7 @@ async function writeLastAlertedAt(ctx: {
     resolved_at: currentState?.resolvedAt || null,
     resolved_by_member_id: currentState?.resolvedByMemberId || '',
     last_alerted_at: nowIso,
+    resolved_in_deployment_ids: currentState?.resolvedInDeploymentIds || '',
     version: now,
     updated_at: nowIso,
   }
@@ -347,6 +394,7 @@ async function writeLastAlertedAt(ctx: {
       ResolvedAt: row.resolved_at,
       ResolvedByMemberId: row.resolved_by_member_id,
       LastAlertedAt: row.last_alerted_at,
+      ResolvedInDeploymentIds: row.resolved_in_deployment_ids,
       Version: row.version,
       UpdatedAt: row.updated_at,
     }
@@ -412,6 +460,104 @@ async function sendNotification(
     }
   } else {
     console.warn(`[alert-check] unknown channel: ${dest.channel}`)
+  }
+}
+
+// ── Deployment regression helpers ──────────────────────────────────
+//
+// These helpers query otel_errors to determine if recent errors are from
+// the same deployment as when an issue was resolved, or a new one (regression).
+
+/**
+ * Query distinct deployment.id values from recent errors for a fingerprint.
+ * Returns an array of non-empty deployment ID strings.
+ */
+async function queryErrorDeploymentIds(ctx: {
+  project: ProjectWithJwt
+  dbConfig: DbConfig
+  fingerprintHash: string
+  windowMinutes: number
+}): Promise<string[]> {
+  const { project, dbConfig, fingerprintHash, windowMinutes } = ctx
+  const sql = [
+    "SELECT DISTINCT ResourceAttributes['deployment.id'] AS deployment_id",
+    'FROM otel_errors',
+    `WHERE FingerprintHash = '${fingerprintHash}'`,
+    `AND Timestamp >= now() - INTERVAL ${windowMinutes} MINUTE`,
+    "AND ResourceAttributes['deployment.id'] != ''",
+    'LIMIT 50',
+    'FORMAT JSON',
+  ].join('\n')
+
+  try {
+    const result = await executeQuery({ project, dbConfig, sql })
+    return (result.data ?? [])
+      .map((row) => String(row.deployment_id ?? ''))
+      .filter(Boolean)
+  } catch (err) {
+    logger.error({ message: 'queryErrorDeploymentIds failed', error: String(err) })
+    return []
+  }
+}
+
+/**
+ * Write a full issue state row to ClickHouse/Tinybird. Used by the regression
+ * detection logic to reopen issues when a new deployment triggers the same error.
+ */
+async function writeIssueStateRow(ctx: {
+  project: ProjectWithJwt
+  dbConfig: DbConfig
+  row: {
+    project_id: string
+    fingerprint_hash: string
+    status: string
+    assignee_member_id: string
+    resolved_at: string | null
+    resolved_by_member_id: string
+    last_alerted_at: string | null
+    resolved_in_deployment_ids: string
+    version: number
+    updated_at: string
+  }
+}): Promise<void> {
+  const { project, dbConfig, row } = ctx
+  const ndjson = JSON.stringify(row)
+
+  if (dbConfig.backend === 'tinybird') {
+    if (!dbConfig.tinybirdEndpoint || !dbConfig.tinybirdAdminToken) return
+    await fetch(`${dbConfig.tinybirdEndpoint}/v0/events?name=otel_issue_state&wait=true`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-ndjson',
+        Authorization: `Bearer ${dbConfig.tinybirdAdminToken}`,
+      },
+      body: ndjson,
+    })
+  } else if (dbConfig.backend === 'clickhouse') {
+    if (!dbConfig.clickhouseUrl) return
+    const chRow = {
+      ProjectId: row.project_id,
+      FingerprintHash: row.fingerprint_hash,
+      Status: row.status,
+      AssigneeMemberId: row.assignee_member_id,
+      ResolvedAt: row.resolved_at,
+      ResolvedByMemberId: row.resolved_by_member_id,
+      LastAlertedAt: row.last_alerted_at,
+      ResolvedInDeploymentIds: row.resolved_in_deployment_ids,
+      Version: row.version,
+      UpdatedAt: row.updated_at,
+    }
+    const insertSql = `INSERT INTO otel_issue_state FORMAT JSONEachRow`
+    const endpoint = `${dbConfig.clickhouseUrl}/?database=${encodeURIComponent(dbConfig.clickhouseDatabase || 'default')}&query=${encodeURIComponent(insertSql)}`
+    await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-ClickHouse-User': dbConfig.clickhouseUser || 'default',
+        'X-ClickHouse-Key': dbConfig.clickhousePassword || '',
+      },
+      body: JSON.stringify(chRow),
+    })
   }
 }
 

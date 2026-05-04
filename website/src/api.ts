@@ -138,6 +138,8 @@ interface IssueStateRow {
   resolved_at: string | null
   resolved_by_member_id: string
   last_alerted_at: string | null
+  /** Comma-separated deployment.id values active when the issue was resolved. Used to suppress alerts for old deployments and detect regressions in new ones. */
+  resolved_in_deployment_ids: string
   version: number
   updated_at: string
 }
@@ -205,7 +207,7 @@ async function readCurrentIssueState(ctx: Omit<QueryTinybirdCtx, 'sql'> & { fing
   const projectFilter = dbConfig.backend === 'clickhouse' ? ` AND ProjectId = '${projectId}'` : ''
   // Use argMax() instead of FINAL. Tinybird wraps JWT queries in a subquery
   // and FINAL is not supported on subqueries.
-  const sql = `SELECT argMax(Status, Version) AS Status, argMax(AssigneeMemberId, Version) AS AssigneeMemberId, argMax(ResolvedAt, Version) AS ResolvedAt, argMax(ResolvedByMemberId, Version) AS ResolvedByMemberId, argMax(LastAlertedAt, Version) AS LastAlertedAt FROM otel_issue_state WHERE FingerprintHash = '${fingerprintHash}'${projectFilter} GROUP BY FingerprintHash LIMIT 1 FORMAT JSON`
+  const sql = `SELECT argMax(Status, Version) AS Status, argMax(AssigneeMemberId, Version) AS AssigneeMemberId, argMax(ResolvedAt, Version) AS ResolvedAt, argMax(ResolvedByMemberId, Version) AS ResolvedByMemberId, argMax(LastAlertedAt, Version) AS LastAlertedAt, argMax(ResolvedInDeploymentIds, Version) AS ResolvedInDeploymentIds FROM otel_issue_state WHERE FingerprintHash = '${fingerprintHash}'${projectFilter} GROUP BY FingerprintHash LIMIT 1 FORMAT JSON`
   try {
     const result = await queryIssueState({ dbConfig, proj, projectId, sql })
     const row = result.data?.[0]
@@ -218,6 +220,7 @@ async function readCurrentIssueState(ctx: Omit<QueryTinybirdCtx, 'sql'> & { fing
         resolved_at: (row.ResolvedAt as string) || null,
         resolved_by_member_id: (row.ResolvedByMemberId as string) || '',
         last_alerted_at: (row.LastAlertedAt as string) || null,
+        resolved_in_deployment_ids: (row.ResolvedInDeploymentIds as string) || '',
         version: 0,
         updated_at: '',
       }
@@ -233,8 +236,34 @@ async function readCurrentIssueState(ctx: Omit<QueryTinybirdCtx, 'sql'> & { fing
     resolved_at: null,
     resolved_by_member_id: '',
     last_alerted_at: null,
+    resolved_in_deployment_ids: '',
     version: 0,
     updated_at: '',
+  }
+}
+
+/**
+ * Query distinct deployment.id values from recent errors for a fingerprint.
+ * Returns a comma-separated string of deployment IDs, stored in otel_issue_state
+ * when resolving an issue. Used later by the alert check to distinguish "old
+ * deployment still erroring" (suppress) from "new deployment regression" (reopen).
+ *
+ * If no deployment.id is set on any error (user didn't configure it), returns ''.
+ */
+async function queryActiveDeploymentIds(ctx: Omit<QueryTinybirdCtx, 'sql'> & { fingerprintHash: string }): Promise<string> {
+  const { dbConfig, proj, projectId, fingerprintHash } = ctx
+  const projectFilter = dbConfig.backend === 'clickhouse' ? ` AND ProjectId = '${projectId}'` : ''
+  const sql = `SELECT DISTINCT ResourceAttributes['deployment.id'] AS deployment_id FROM otel_errors WHERE FingerprintHash = '${fingerprintHash}'${projectFilter} AND Timestamp >= now() - INTERVAL 24 HOUR AND ResourceAttributes['deployment.id'] != '' LIMIT 50 FORMAT JSON`
+
+  try {
+    const result = await queryIssueState({ dbConfig, proj, projectId, sql })
+    const ids = (result.data ?? [])
+      .map((row) => String(row.deployment_id ?? ''))
+      .filter(Boolean)
+    return ids.join(',')
+  } catch (err) {
+    console.error('queryActiveDeploymentIds failed:', err)
+    return ''
   }
 }
 
@@ -291,6 +320,7 @@ async function writeIssueState(ctx: { dbConfig: QueryTinybirdCtx['dbConfig']; ro
       ResolvedAt: row.resolved_at,
       ResolvedByMemberId: row.resolved_by_member_id,
       LastAlertedAt: row.last_alerted_at,
+      ResolvedInDeploymentIds: row.resolved_in_deployment_ids,
       Version: row.version,
       UpdatedAt: row.updated_at,
     }
@@ -918,14 +948,24 @@ export const api = new Spiceflow({ tracer })
 
         // Resolve the current user's orgMember ID for this project's org
         let resolvedByMemberId = current.resolved_by_member_id
+        let resolvedInDeploymentIds = current.resolved_in_deployment_ids
         if (body.status === 'resolved') {
           const member = await db.query.orgMember.findFirst({
             where: { orgId: proj.orgId, userId: session.userId },
           })
           resolvedByMemberId = member?.id ?? ''
+
+          // Query the distinct deployment.id values currently producing this error.
+          // When new errors arrive with a DIFFERENT deployment.id, we know it's a
+          // regression (new deploy, same bug). Same deployment.id = old code still
+          // running, safe to suppress alerts.
+          resolvedInDeploymentIds = await queryActiveDeploymentIds({
+            dbConfig, proj, projectId: params.projectId, fingerprintHash: params.fingerprintHash,
+          })
         } else {
           // Clear resolved info when moving to non-resolved status
           resolvedByMemberId = ''
+          resolvedInDeploymentIds = ''
         }
         const resolvedAt = body.status === 'resolved' ? new Date(now).toISOString() : null
 
@@ -939,6 +979,7 @@ export const api = new Spiceflow({ tracer })
             resolved_at: resolvedAt,
             resolved_by_member_id: resolvedByMemberId,
             last_alerted_at: current.last_alerted_at,
+            resolved_in_deployment_ids: resolvedInDeploymentIds,
             version: now,
             updated_at: new Date(now).toISOString(),
           },
@@ -991,6 +1032,7 @@ export const api = new Spiceflow({ tracer })
             resolved_at: current.resolved_at,
             resolved_by_member_id: current.resolved_by_member_id,
             last_alerted_at: current.last_alerted_at,
+            resolved_in_deployment_ids: current.resolved_in_deployment_ids,
             version: now,
             updated_at: new Date(now).toISOString(),
           },

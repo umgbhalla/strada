@@ -528,6 +528,8 @@ CREATE TABLE IF NOT EXISTS otel_issue_state
     `AssigneeMemberId`    String                 CODEC(ZSTD(1)),
     `ResolvedAt`          Nullable(DateTime64(3)) CODEC(ZSTD(1)),
     `ResolvedByMemberId`  String                 CODEC(ZSTD(1)),
+    `LastAlertedAt`       Nullable(DateTime64(3)) CODEC(ZSTD(1)),
+    `ResolvedInDeploymentIds` String             CODEC(ZSTD(1)),
     `Version`             UInt64                 CODEC(ZSTD(1)),
     `UpdatedAt`           DateTime64(3)          CODEC(ZSTD(1))
 )
