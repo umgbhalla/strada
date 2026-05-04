@@ -30,11 +30,26 @@ export interface GridItemProps {
   style?: CSSProperties;
 }
 
+export interface GridLineExtensionsProps {
+  side?: "top" | "bottom" | "both";
+  length?: GridSize;
+  className?: string;
+  style?: CSSProperties;
+  __gridColumns?: number;
+  __gridRows?: number;
+  __gridDots?: GridDot[];
+}
+
 interface GridPlacement {
   column: number;
   row: number;
   columnSpan: number;
   rowSpan: number;
+}
+
+interface GridDot {
+  column: number;
+  row: number;
 }
 
 function cssSize(value: GridSize) {
@@ -51,10 +66,15 @@ function GridRoot({
   className,
   style,
 }: GridProps) {
+  const childArray = Children.toArray(children);
+  const extensionChildren = childArray.filter(isGridLineExtensionsElement);
   const cellPaddingValue = cssSize(cellPadding);
   const rowHeightValue = cssSize(rowHeight);
-  const placements = rows ? placeGridItems({ children, columns, rows }) : [];
+  const placements = rows ? placeGridItems({ children: childArray, columns, rows }) : [];
   const showLines = lines && rows != null;
+  const lineSegments = rows && (showLines || extensionChildren.length > 0)
+    ? getGridLineSegments({ columns, rows, placements })
+    : undefined;
   const gridStyle: CSSProperties = {
     display: "grid",
     gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
@@ -68,7 +88,15 @@ function GridRoot({
       className={cn("relative w-full", className)}
       style={gridStyle}
     >
-      {showLines && <GridLines columns={columns} rows={rows} placements={placements} />}
+      {showLines && lineSegments && <GridLines columns={columns} rows={rows} segments={lineSegments} />}
+      {lineSegments && extensionChildren.map((child, index) => (
+        cloneElement(child, {
+          key: child.key ?? `line-extension-${index}`,
+          __gridColumns: columns,
+          __gridRows: rows,
+          __gridDots: lineSegments.dots,
+        })
+      ))}
       {placements.length > 0 ? placements.map(({ child, ...placement }, index) => (
         cloneElement(child, { key: child.key ?? index, __gridPlacement: placement, __gridCellPadding: cellPaddingValue })
       )) : children}
@@ -110,10 +138,46 @@ function GridItem({
   );
 }
 
-export const Grid = Object.assign(GridRoot, { Item: GridItem });
+function GridLineExtensions({
+  side = "both",
+  length = 40,
+  className,
+  style,
+  __gridColumns,
+  __gridRows,
+  __gridDots = [],
+}: GridLineExtensionsProps) {
+  if (!__gridColumns || !__gridRows) return null;
 
-function GridLines({ columns, rows, placements }: { columns: number; rows: number; placements: GridPlacement[] }) {
-  const { verticalSegments, horizontalSegments, dots } = getGridLineSegments({ columns, rows, placements });
+  const lengthValue = cssSize(length);
+  const sides = side === "both" ? ["top", "bottom"] : [side];
+
+  return sides.flatMap((currentSide) => {
+    const row = currentSide === "top" ? 0 : __gridRows;
+    return __gridDots.filter((dot) => dot.row === row).map((dot) => (
+      <div
+        key={`${currentSide}-${dot.column}`}
+        aria-hidden
+        className={cn(
+          "absolute w-px bg-border",
+          currentSide === "top" && "top-0 -translate-y-full",
+          currentSide === "bottom" && "bottom-0 translate-y-full",
+          className,
+        )}
+        style={{
+          left: linePosition(dot.column, __gridColumns),
+          height: lengthValue,
+          ...style,
+        }}
+      />
+    ));
+  });
+}
+
+export const Grid = Object.assign(GridRoot, { Item: GridItem, LineExtensions: GridLineExtensions });
+
+function GridLines({ columns, rows, segments }: { columns: number; rows: number; segments: GridLineSegments }) {
+  const { verticalSegments, horizontalSegments, dots } = segments;
 
   return (
     <div aria-hidden className="pointer-events-none absolute inset-0 z-10">
@@ -155,7 +219,7 @@ function placeGridItems({ children, columns, rows }: { children: ReactNode; colu
   const placements: Array<GridPlacement & { child: ReactElement<GridItemProps> }> = [];
 
   Children.forEach(children, (child) => {
-    if (!isValidElement<GridItemProps>(child)) return;
+    if (!isValidElement<GridItemProps>(child) || child.type !== GridItem) return;
 
     const columnSpan = child.props.columnSpan ?? 1;
     const rowSpan = child.props.rowSpan ?? 1;
@@ -171,6 +235,10 @@ function placeGridItems({ children, columns, rows }: { children: ReactNode; colu
   });
 
   return placements;
+}
+
+function isGridLineExtensionsElement(child: ReactNode): child is ReactElement<GridLineExtensionsProps> {
+  return isValidElement<GridLineExtensionsProps>(child) && child.type === GridLineExtensions;
 }
 
 function findOpenPlacement({
@@ -211,7 +279,13 @@ function markOccupied(occupied: boolean[][], placement: GridPlacement) {
   }
 }
 
-function getGridLineSegments({ columns, rows, placements }: { columns: number; rows: number; placements: GridPlacement[] }) {
+interface GridLineSegments {
+  verticalSegments: Array<{ column: number; row: number }>;
+  horizontalSegments: Array<{ column: number; row: number }>;
+  dots: GridDot[];
+}
+
+function getGridLineSegments({ columns, rows, placements }: { columns: number; rows: number; placements: GridPlacement[] }): GridLineSegments {
   const owners = Array.from({ length: rows }, () => Array.from({ length: columns }, () => ""));
   placements.forEach((placement, index) => {
     const owner = String(index + 1);

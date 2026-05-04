@@ -9,7 +9,7 @@ import { cn } from "../lib/utils.ts";
 
 export function GridDemoPage() {
   return (
-    <div className="flex w-full flex-col items-center gap-10 overflow-hidden">
+    <div className="flex w-full flex-col items-center gap-10 overflow-x-hidden">
       <div className="flex w-full max-w-6xl items-center justify-between gap-4">
         <div className="flex flex-col gap-2">
           <h1 className="text-3xl font-bold tracking-tight">Grid</h1>
@@ -23,11 +23,8 @@ export function GridDemoPage() {
       <div className="relative w-full max-w-6xl">
         <div aria-hidden className="absolute left-1/2 top-0 h-px w-screen -translate-x-1/2 bg-border" />
         <div aria-hidden className="absolute bottom-0 left-1/2 h-px w-screen -translate-x-1/2 bg-border" />
-        <div aria-hidden className="absolute left-0 top-0 h-10 w-px -translate-y-full bg-border" />
-        <div aria-hidden className="absolute right-0 top-0 h-10 w-px -translate-y-full bg-border" />
-        <div aria-hidden className="absolute bottom-0 left-0 h-10 w-px translate-y-full bg-border" />
-        <div aria-hidden className="absolute bottom-0 right-0 h-10 w-px translate-y-full bg-border" />
         <Grid columns={12} rows={4} rowHeight={112} cellPadding={32} lines>
+          <Grid.LineExtensions />
           <Grid.Item columnSpan={5} rowSpan={2}>
             <DemoPanel className="h-full justify-between">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
