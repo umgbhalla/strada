@@ -24,7 +24,7 @@ import {
 import {
   executeBackendQuery,
   insertBackendRow,
-  injectProjectFilter,
+  appendProjectFilterSettings,
   type DbConfig,
   type QueryResult,
 } from './query-backend.ts'
@@ -690,7 +690,7 @@ export const api = new Spiceflow({ tracer })
           if (!dbConfig.clickhouseUrl) {
             throw json({ error: 'clickhouse not configured' }, { status: 400 })
           }
-          const filteredSql = injectProjectFilter(sqlToSend, params.projectId)
+          const filteredSql = appendProjectFilterSettings(sqlToSend, params.projectId)
           const endpoint = `${dbConfig.clickhouseUrl}/?database=${encodeURIComponent(dbConfig.clickhouseDatabase || 'default')}&query=${encodeURIComponent(filteredSql)}`
           const res = await fetch(endpoint, {
             headers: {

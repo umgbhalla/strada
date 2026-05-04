@@ -45,30 +45,95 @@ export interface QueryResult {
 // Both backends enforce project isolation, but via different mechanisms:
 //
 // - Tinybird: JWT row-level filtering. The JWT has `filter: "ProjectId = '...'"`,
-//   and Tinybird wraps every query in a subquery internally:
-//   SELECT * FROM (SELECT * FROM table WHERE ProjectId = '...') AS table
+//   and Tinybird wraps every query in a subquery internally.
 //
-// - ClickHouse: No JWT support. executeBackendQuery() wraps each FROM table
-//   reference with a ProjectId-filtered subquery, mirroring Tinybird's approach:
-//   FROM otel_errors → FROM (SELECT * FROM otel_errors WHERE ProjectId = '...') AS otel_errors
+// - ClickHouse: uses `additional_table_filters` setting (available since v22.7).
+//   This tells ClickHouse to inject a WHERE filter on every read from the listed
+//   tables, including inside subqueries and JOINs. It works at the engine level
+//   so there's no SQL rewriting, no regex, and no edge cases with aliases, JOINs,
+//   EXTRACT FROM, or user-provided SQL.
 //
 // Callers never mention ProjectId in their SQL. It's handled automatically.
 
+/** All Strada tables that have a ProjectId column and need project-scoped filtering. */
+const STRADA_TABLES = [
+  'otel_traces',
+  'otel_traces_trace_id_ts',
+  'otel_logs',
+  'otel_errors',
+  'otel_metrics_gauge',
+  'otel_metrics_sum',
+  'otel_metrics_histogram',
+  'otel_metrics_exponential_histogram',
+  'otel_analytics_pages',
+  'otel_analytics_sessions',
+  'otel_issue_state',
+]
+
+/** Escape a string for use inside a ClickHouse single-quoted string literal. */
+function chEscape(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/'/g, "\\'")
+}
+
 /**
- * Wrap each `FROM tablename` reference with a ProjectId-filtered subquery.
- * Mirrors Tinybird's JWT row-level filtering for ClickHouse.
+ * Build the ClickHouse `additional_table_filters` setting value for a project.
+ * Returns the map literal: {'otel_errors': 'ProjectId = \'xxx\'', ...}
  *
- * FROM otel_errors → FROM (SELECT * FROM otel_errors WHERE ProjectId = '01...') AS otel_errors
+ * This setting tells ClickHouse to inject `WHERE ProjectId = '...'` on every
+ * read from the listed tables. It works transparently with JOINs, subqueries,
+ * aliases, and any SQL the user writes.
  *
- * Only matches bare table names (word chars), not existing subqueries like FROM (...).
- * Used internally by executeBackendQuery and also by the query bridge (which has its
- * own JWT retry logic and can't delegate to executeBackendQuery for Tinybird).
+ * Used by both executeBackendQuery (internal queries) and the query bridge
+ * (user-facing arbitrary SQL).
  */
-export function injectProjectFilter(sql: string, projectId: string): string {
-  return sql.replace(
-    /\bFROM\s+(\w+)\b/gi,
-    (_match, table) => `FROM (SELECT * FROM ${table} WHERE ProjectId = '${projectId}') AS ${table}`,
-  )
+export function buildClickHouseTableFilters(projectId: string): string {
+  const filter = `ProjectId = '${chEscape(projectId)}'`
+  const entries = STRADA_TABLES
+    .map((t) => `'${chEscape(t)}': '${chEscape(filter)}'`)
+    .join(', ')
+  return `{${entries}}`
+}
+
+/**
+ * Append `additional_table_filters` SETTINGS to a SQL query for ClickHouse.
+ *
+ * ClickHouse syntax requires SETTINGS before FORMAT:
+ *   SELECT ... SETTINGS key = value FORMAT JSON
+ *
+ * This function detects a trailing FORMAT clause and inserts SETTINGS before it.
+ * If no FORMAT clause is found, SETTINGS is appended at the end.
+ *
+ * Any user-provided `additional_table_filters` in the SQL is stripped to prevent
+ * overriding the server-enforced project filter.
+ */
+export function appendProjectFilterSettings(sql: string, projectId: string): string {
+  const setting = `additional_table_filters = ${buildClickHouseTableFilters(projectId)}`
+
+  // Strip any user-provided additional_table_filters to prevent bypass.
+  // Also clean up a leftover empty SETTINGS keyword if it was the only setting.
+  let cleaned = sql.replace(/additional_table_filters\s*=\s*\{[^}]*\},?\s*/gi, '')
+  cleaned = cleaned.replace(/\bSETTINGS\s*(?=FORMAT\b|$)/i, '')
+
+  // Detect trailing FORMAT clause: FORMAT <word> at the end of the SQL
+  const formatMatch = cleaned.match(/\s+FORMAT\s+\w+\s*$/i)
+
+  // Check if there's an existing SETTINGS clause (after stripping our target setting)
+  const hasSettings = /\bSETTINGS\s/i.test(formatMatch ? cleaned.slice(0, cleaned.length - formatMatch[0].length) : cleaned)
+
+  if (formatMatch) {
+    const formatIdx = cleaned.length - formatMatch[0].length
+    const beforeFormat = cleaned.slice(0, formatIdx)
+    const formatClause = cleaned.slice(formatIdx)
+    if (hasSettings) {
+      return `${beforeFormat}, ${setting}${formatClause}`
+    }
+    return `${beforeFormat} SETTINGS ${setting}${formatClause}`
+  }
+
+  if (hasSettings) {
+    return `${cleaned}, ${setting}`
+  }
+  return `${cleaned} SETTINGS ${setting}`
 }
 
 // ── Query execution ────────────────────────────────────────────────
@@ -119,7 +184,7 @@ export async function executeBackendQuery(ctx: {
     if (!dbConfig.clickhouseUrl) {
       throw new Error('clickhouse not configured')
     }
-    const filteredSql = injectProjectFilter(sql, project.id)
+    const filteredSql = appendProjectFilterSettings(sql, project.id)
     const endpoint = `${dbConfig.clickhouseUrl}/?database=${encodeURIComponent(dbConfig.clickhouseDatabase || 'default')}&query=${encodeURIComponent(filteredSql)}`
     const res = await fetch(endpoint, {
       headers: {
