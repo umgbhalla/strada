@@ -24,7 +24,7 @@ import {
 import {
   executeBackendQuery,
   insertBackendRow,
-  projectFilter as getProjectFilter,
+  injectProjectFilter,
   type DbConfig,
   type QueryResult,
 } from './query-backend.ts'
@@ -155,8 +155,7 @@ export interface IssueStateRow {
  */
 async function readCurrentIssueState(ctx: { dbConfig: DbConfig; proj: { id: string; tinybirdJwt: string | null; tinybirdJwtDatasources: string | null }; projectId: string; fingerprintHash: string }): Promise<IssueStateRow> {
   const { dbConfig, proj, projectId, fingerprintHash } = ctx
-  const pf = getProjectFilter(dbConfig, projectId)
-  const sql = `SELECT argMax(Status, Version) AS Status, argMax(AssigneeMemberId, Version) AS AssigneeMemberId, argMax(ResolvedAt, Version) AS ResolvedAt, argMax(ResolvedByMemberId, Version) AS ResolvedByMemberId, argMax(LastAlertedAt, Version) AS LastAlertedAt, argMax(ResolvedInDeploymentIds, Version) AS ResolvedInDeploymentIds FROM otel_issue_state WHERE ${pf}FingerprintHash = '${fingerprintHash}' GROUP BY FingerprintHash LIMIT 1 FORMAT JSON`
+  const sql = `SELECT argMax(Status, Version) AS Status, argMax(AssigneeMemberId, Version) AS AssigneeMemberId, argMax(ResolvedAt, Version) AS ResolvedAt, argMax(ResolvedByMemberId, Version) AS ResolvedByMemberId, argMax(LastAlertedAt, Version) AS LastAlertedAt, argMax(ResolvedInDeploymentIds, Version) AS ResolvedInDeploymentIds FROM otel_issue_state WHERE FingerprintHash = '${fingerprintHash}' GROUP BY FingerprintHash LIMIT 1 FORMAT JSON`
   try {
     const result = await executeBackendQuery({ dbConfig, project: { id: projectId, tinybirdJwt: proj.tinybirdJwt, tinybirdJwtDatasources: proj.tinybirdJwtDatasources }, sql })
     const row = result.data?.[0]
@@ -201,8 +200,7 @@ async function readCurrentIssueState(ctx: { dbConfig: DbConfig; proj: { id: stri
  */
 async function queryActiveDeploymentIds(ctx: { dbConfig: DbConfig; proj: { id: string; tinybirdJwt: string | null; tinybirdJwtDatasources: string | null }; projectId: string; fingerprintHash: string }): Promise<string> {
   const { dbConfig, proj, projectId, fingerprintHash } = ctx
-  const pf = getProjectFilter(dbConfig, projectId)
-  const sql = `SELECT DISTINCT ResourceAttributes['deployment.id'] AS deployment_id FROM otel_errors WHERE ${pf}FingerprintHash = '${fingerprintHash}' AND Timestamp >= now() - INTERVAL 24 HOUR AND ResourceAttributes['deployment.id'] != '' LIMIT 50 FORMAT JSON`
+  const sql = `SELECT DISTINCT ResourceAttributes['deployment.id'] AS deployment_id FROM otel_errors WHERE FingerprintHash = '${fingerprintHash}' AND Timestamp >= now() - INTERVAL 24 HOUR AND ResourceAttributes['deployment.id'] != '' LIMIT 50 FORMAT JSON`
 
   try {
     const result = await executeBackendQuery({ dbConfig, project: { id: projectId, tinybirdJwt: proj.tinybirdJwt, tinybirdJwtDatasources: proj.tinybirdJwtDatasources }, sql })
@@ -692,7 +690,8 @@ export const api = new Spiceflow({ tracer })
           if (!dbConfig.clickhouseUrl) {
             throw json({ error: 'clickhouse not configured' }, { status: 400 })
           }
-          const endpoint = `${dbConfig.clickhouseUrl}/?database=${encodeURIComponent(dbConfig.clickhouseDatabase || 'default')}&query=${encodeURIComponent(sqlToSend)}`
+          const filteredSql = injectProjectFilter(sqlToSend, params.projectId)
+          const endpoint = `${dbConfig.clickhouseUrl}/?database=${encodeURIComponent(dbConfig.clickhouseDatabase || 'default')}&query=${encodeURIComponent(filteredSql)}`
           const res = await fetch(endpoint, {
             headers: {
               'X-ClickHouse-User': dbConfig.clickhouseUser || 'default',
@@ -740,15 +739,12 @@ export const api = new Spiceflow({ tracer })
         const url = new URL(request.url)
         const fingerprintFilter = url.searchParams.get('fingerprintHash')
 
-        const pf = getProjectFilter(dbConfig, params.projectId)
-
         let sql: string
         if (fingerprintFilter) {
           // Use argMax() instead of FINAL (Tinybird JWT subquery doesn't support FINAL)
-          sql = `SELECT FingerprintHash, argMax(Status, Version) AS Status, argMax(AssigneeMemberId, Version) AS AssigneeMemberId, argMax(ResolvedAt, Version) AS ResolvedAt, argMax(ResolvedByMemberId, Version) AS ResolvedByMemberId, argMax(UpdatedAt, Version) AS UpdatedAt FROM otel_issue_state WHERE ${pf}FingerprintHash = '${fingerprintFilter}' GROUP BY FingerprintHash LIMIT 1 FORMAT JSON`
+          sql = `SELECT FingerprintHash, argMax(Status, Version) AS Status, argMax(AssigneeMemberId, Version) AS AssigneeMemberId, argMax(ResolvedAt, Version) AS ResolvedAt, argMax(ResolvedByMemberId, Version) AS ResolvedByMemberId, argMax(UpdatedAt, Version) AS UpdatedAt FROM otel_issue_state WHERE FingerprintHash = '${fingerprintFilter}' GROUP BY FingerprintHash LIMIT 1 FORMAT JSON`
         } else {
-          const where = pf ? `WHERE ${pf.replace(/ AND $/, '')}` : ''
-          sql = `SELECT FingerprintHash, argMax(Status, Version) AS Status, argMax(AssigneeMemberId, Version) AS AssigneeMemberId, argMax(ResolvedAt, Version) AS ResolvedAt, argMax(ResolvedByMemberId, Version) AS ResolvedByMemberId, argMax(UpdatedAt, Version) AS UpdatedAt FROM otel_issue_state ${where} GROUP BY FingerprintHash ORDER BY UpdatedAt DESC LIMIT 500 FORMAT JSON`
+          sql = `SELECT FingerprintHash, argMax(Status, Version) AS Status, argMax(AssigneeMemberId, Version) AS AssigneeMemberId, argMax(ResolvedAt, Version) AS ResolvedAt, argMax(ResolvedByMemberId, Version) AS ResolvedByMemberId, argMax(UpdatedAt, Version) AS UpdatedAt FROM otel_issue_state GROUP BY FingerprintHash ORDER BY UpdatedAt DESC LIMIT 500 FORMAT JSON`
         }
 
         const result = await executeBackendQuery({ dbConfig, project: { id: params.projectId, tinybirdJwt: proj.tinybirdJwt, tinybirdJwtDatasources: proj.tinybirdJwtDatasources }, sql })

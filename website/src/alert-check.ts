@@ -19,7 +19,6 @@ import { buildAlertSubject, buildAlertEmailHtml } from './alert-email.tsx'
 import {
   executeBackendQuery,
   insertBackendRow,
-  projectFilter as getProjectFilter,
   type DbConfig,
   type ProjectJwtInfo,
 } from './query-backend.ts'
@@ -248,7 +247,6 @@ async function queryErrorsAboveThreshold(ctx: {
 }): Promise<AlertableError[]> {
   const { project, dbConfig, threshold, windowMinutes } = ctx
 
-  const pf = getProjectFilter(dbConfig, project.id)
   const sql = [
     'SELECT',
     '    FingerprintHash,',
@@ -260,7 +258,7 @@ async function queryErrorsAboveThreshold(ctx: {
     '    anyLast(ServiceName) AS service_name,',
     "    uniqExact(Tags['user.id']) AS users_impacted",
     'FROM otel_errors',
-    `WHERE ${pf}Timestamp >= now() - INTERVAL ${windowMinutes} MINUTE`,
+    `WHERE Timestamp >= now() - INTERVAL ${windowMinutes} MINUTE`,
     'GROUP BY FingerprintHash',
     `HAVING error_count >= ${threshold}`,
     'ORDER BY error_count DESC',
@@ -302,7 +300,6 @@ async function queryIssueStates(ctx: {
   if (fingerprints.length === 0) return new Map()
 
   const inList = fingerprints.map((f) => `'${f}'`).join(', ')
-  const pf = getProjectFilter(dbConfig, project.id)
 
   // Use argMax() deduplication instead of FINAL. Tinybird wraps JWT queries
   // in a subquery and FINAL is not supported on subqueries.
@@ -316,7 +313,7 @@ async function queryIssueStates(ctx: {
     '    argMax(ResolvedByMemberId, Version) AS ResolvedByMemberId,',
     '    argMax(ResolvedInDeploymentIds, Version) AS ResolvedInDeploymentIds',
     'FROM otel_issue_state',
-    `WHERE ${pf}FingerprintHash IN (${inList})`,
+    `WHERE FingerprintHash IN (${inList})`,
     'GROUP BY FingerprintHash',
     `LIMIT ${fingerprints.length}`,
     'FORMAT JSON',
@@ -437,11 +434,10 @@ async function queryErrorDeploymentIds(ctx: {
   windowMinutes: number
 }): Promise<string[]> {
   const { project, dbConfig, fingerprintHash, windowMinutes } = ctx
-  const pf = getProjectFilter(dbConfig, project.id)
   const sql = [
     "SELECT DISTINCT ResourceAttributes['deployment.id'] AS deployment_id",
     'FROM otel_errors',
-    `WHERE ${pf}FingerprintHash = '${fingerprintHash}'`,
+    `WHERE FingerprintHash = '${fingerprintHash}'`,
     `AND Timestamp >= now() - INTERVAL ${windowMinutes} MINUTE`,
     "AND ResourceAttributes['deployment.id'] != ''",
     'LIMIT 50',

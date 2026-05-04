@@ -40,12 +40,45 @@ export interface QueryResult {
   contentType?: string
 }
 
+// ── ProjectId isolation ─────────────────────────────────────────────
+//
+// Both backends enforce project isolation, but via different mechanisms:
+//
+// - Tinybird: JWT row-level filtering. The JWT has `filter: "ProjectId = '...'"`,
+//   and Tinybird wraps every query in a subquery internally:
+//   SELECT * FROM (SELECT * FROM table WHERE ProjectId = '...') AS table
+//
+// - ClickHouse: No JWT support. executeBackendQuery() wraps each FROM table
+//   reference with a ProjectId-filtered subquery, mirroring Tinybird's approach:
+//   FROM otel_errors → FROM (SELECT * FROM otel_errors WHERE ProjectId = '...') AS otel_errors
+//
+// Callers never mention ProjectId in their SQL. It's handled automatically.
+
+/**
+ * Wrap each `FROM tablename` reference with a ProjectId-filtered subquery.
+ * Mirrors Tinybird's JWT row-level filtering for ClickHouse.
+ *
+ * FROM otel_errors → FROM (SELECT * FROM otel_errors WHERE ProjectId = '01...') AS otel_errors
+ *
+ * Only matches bare table names (word chars), not existing subqueries like FROM (...).
+ * Used internally by executeBackendQuery and also by the query bridge (which has its
+ * own JWT retry logic and can't delegate to executeBackendQuery for Tinybird).
+ */
+export function injectProjectFilter(sql: string, projectId: string): string {
+  return sql.replace(
+    /\bFROM\s+(\w+)\b/gi,
+    (_match, table) => `FROM (SELECT * FROM ${table} WHERE ProjectId = '${projectId}') AS ${table}`,
+  )
+}
+
 // ── Query execution ────────────────────────────────────────────────
 
 /**
  * Execute a SQL query against the configured backend.
- * For Tinybird, uses a project-scoped JWT (auto-generated if needed).
- * For ClickHouse, uses basic auth headers.
+ *
+ * **Project isolation is automatic.** Callers should NOT include ProjectId
+ * in their SQL. For Tinybird, the JWT filter handles it. For ClickHouse,
+ * this function wraps table references with ProjectId-filtered subqueries.
  *
  * Returns the parsed JSON response. Throws on HTTP errors.
  */
@@ -86,7 +119,8 @@ export async function executeBackendQuery(ctx: {
     if (!dbConfig.clickhouseUrl) {
       throw new Error('clickhouse not configured')
     }
-    const endpoint = `${dbConfig.clickhouseUrl}/?database=${encodeURIComponent(dbConfig.clickhouseDatabase || 'default')}&query=${encodeURIComponent(sql)}`
+    const filteredSql = injectProjectFilter(sql, project.id)
+    const endpoint = `${dbConfig.clickhouseUrl}/?database=${encodeURIComponent(dbConfig.clickhouseDatabase || 'default')}&query=${encodeURIComponent(filteredSql)}`
     const res = await fetch(endpoint, {
       headers: {
         'X-ClickHouse-User': dbConfig.clickhouseUser || 'default',
@@ -177,19 +211,4 @@ export async function insertBackendRow(ctx: {
   throw new Error(`unknown backend "${dbConfig.backend}"`)
 }
 
-// ── ProjectId filter helper ────────────────────────────────────────
 
-/**
- * Returns a SQL fragment for explicit ProjectId filtering.
- * Tinybird handles this via JWT row-level filtering, so returns empty string.
- * ClickHouse needs an explicit WHERE clause.
- *
- * Usage:
- *   const pf = projectFilter(dbConfig, projectId)
- *   const sql = `SELECT ... FROM table WHERE ${pf}FingerprintHash = '...'`
- *   // Tinybird:   "... WHERE FingerprintHash = '...'"
- *   // ClickHouse: "... WHERE ProjectId = '01...' AND FingerprintHash = '...'"
- */
-export function projectFilter(dbConfig: DbConfig, projectId: string): string {
-  return dbConfig.backend === 'clickhouse' ? `ProjectId = '${projectId}' AND ` : ''
-}
