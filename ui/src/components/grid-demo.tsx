@@ -26,7 +26,7 @@ export function GridDemoPage() {
 
   return (
     <div className="flex w-full flex-col items-center gap-10 overflow-x-hidden">
-      <div className="flex w-full max-w-6xl items-center justify-between gap-4">
+      <div className="flex w-full max-w-7xl items-center justify-between gap-4">
         <div className="flex flex-col gap-2">
           <h1 className="text-3xl font-bold tracking-tight">Grid</h1>
           <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
@@ -36,24 +36,26 @@ export function GridDemoPage() {
         <ThemeToggle />
       </div>
 
-      <div className="relative w-full max-w-6xl pb-10">
+      <div className="relative w-full max-w-7xl pb-10">
         <div aria-hidden className="absolute left-1/2 top-0 h-px w-screen -translate-x-1/2 bg-border" />
-        <Grid columns={12} rows={4} rowHeight={112} cellPadding={32} lines>
+        <Grid columns={12} rows={4} rowHeight={180} cellPadding={20} lines>
           <Grid.LineExtensions />
           <Grid.Item columnSpan={5} rowSpan={2}>
-            <DemoPanel className="h-full justify-between">
+            <DemoPanel className="h-full justify-center">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Globe className="size-4" />
                 Browser analytics
               </div>
-              <div className="flex items-end justify-between gap-4">
+              <div className="flex items-end justify-center gap-4">
                 <div className="flex flex-col gap-2">
                   <div className="text-4xl font-semibold tracking-tight">18.4k</div>
                   <p className="max-w-sm text-sm leading-6 text-muted-foreground">Pageviews grouped by route and session.</p>
                 </div>
                 <ChartLegend.SmallItem name="Visitors" value="8.1k" color="blue" />
               </div>
-              <TimeseriesChart echarts={echarts} data={chartData.pageviews} height={96} gradient />
+              <div className="shrink-0">
+                <TimeseriesChart echarts={echarts} data={chartData.pageviews} height={180} gradient />
+              </div>
             </DemoPanel>
           </Grid.Item>
 
@@ -71,7 +73,9 @@ export function GridDemoPage() {
                 <ChartLegend.SmallItem name="api" value="184ms" color="blue" />
                 <ChartLegend.SmallItem name="db" value="72ms" color="amber" />
               </div>
-              <TimeseriesChart echarts={echarts} data={chartData.latency} height={142} type="bar" yAxisTickFormat={(value) => `${value}ms`} />
+              <div className="shrink-0">
+                <TimeseriesChart echarts={echarts} data={chartData.latency} height={240} type="bar" yAxisTickFormat={(value) => `${value}ms`} />
+              </div>
             </DemoPanel>
           </Grid.Item>
 
@@ -182,12 +186,12 @@ const gridTraceRows: OtelTraceRow[] = [
 ];
 
 function DemoPanel({ className, ...props }: React.ComponentProps<"div">) {
-  return <div className={cn("flex flex-col gap-4 rounded-2xl", className)} {...props} />;
+  return <div className={cn("flex flex-col justify-between gap-2 rounded-2xl", className)} {...props} />;
 }
 
 function MetricPanel({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   return (
-    <DemoPanel className="h-full justify-between">
+    <DemoPanel className="h-full justify-center">
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         {icon}
         {label}

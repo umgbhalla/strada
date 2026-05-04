@@ -169,6 +169,7 @@ function GridLineExtensions({
           left: linePosition(dot.column, __gridColumns),
           top: currentSide === "top" ? `calc(-1 * (${lengthValue} + ${paddingValue}))` : `calc(100% + ${paddingValue})`,
           height: lengthValue,
+          opacity: isEdgeLine(dot.column, __gridColumns) ? 0.55 : undefined,
           ...style,
         }}
       />
@@ -191,6 +192,7 @@ function GridLines({ columns, rows, segments }: { columns: number; rows: number;
             left: linePosition(column, columns),
             top: linePosition(row, rows),
             bottom: `calc(100% - ${linePosition(row + 1, rows)})`,
+            opacity: isEdgeLine(column, columns) ? 0.55 : undefined,
           }}
         />
       ))}
@@ -348,4 +350,8 @@ function linePosition(index: number, tracks: number) {
   if (index === 0) return "0%";
   if (index === tracks) return "calc(100% - 1px)";
   return `${(index / tracks) * 100}%`;
+}
+
+function isEdgeLine(index: number, tracks: number) {
+  return index === 0 || index === tracks;
 }
