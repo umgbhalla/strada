@@ -21,6 +21,13 @@ import {
   requireOrgMember,
   requireSession,
 } from './db.ts'
+import {
+  executeBackendQuery,
+  insertBackendRow,
+  projectFilter as getProjectFilter,
+  type DbConfig,
+  type QueryResult,
+} from './query-backend.ts'
 
 const createOrgRequestSchema = z.object({ name: z.string().min(1) })
 
@@ -96,14 +103,7 @@ const issueAssigneeResponseSchema = z.object({
   ok: z.literal(true),
 })
 
-export interface QueryResponse {
-  data?: Record<string, unknown>[]
-  rows?: number
-  meta?: { name: string; type: string }[]
-  statistics?: { elapsed: number; rows_read: number; bytes_read: number }
-  raw?: string
-  contentType?: string
-}
+export type { QueryResult as QueryResponse } from './query-backend.ts'
 
 function stripSemicolons(sql: string) {
   return sql.trim().replace(/;+\s*$/, '').trimEnd()
@@ -129,116 +129,65 @@ function detectFormat(sql: string): string | null {
 // force deduplication at query time. Writes use wait=true on Tinybird
 // to guarantee read-after-write consistency (important because status
 // and assignee updates do read-before-write to preserve the other field).
+//
+// Rows use PascalCase keys matching the ClickHouse/Tinybird column names
+// directly. The Tinybird datasource's json:$ mappings also use PascalCase
+// (json:$.ProjectId, json:$.Status, etc.) so no snake→Pascal remapping
+// is needed for either backend.
 
-interface IssueStateRow {
-  project_id: string
-  fingerprint_hash: string
-  status: string
-  assignee_member_id: string
-  resolved_at: string | null
-  resolved_by_member_id: string
-  last_alerted_at: string | null
+export interface IssueStateRow {
+  ProjectId: string
+  FingerprintHash: string
+  Status: string
+  AssigneeMemberId: string
+  ResolvedAt: string | null
+  ResolvedByMemberId: string
+  LastAlertedAt: string | null
   /** Comma-separated deployment.id values active when the issue was resolved. Used to suppress alerts for old deployments and detect regressions in new ones. */
-  resolved_in_deployment_ids: string
-  version: number
-  updated_at: string
-}
-
-interface QueryTinybirdCtx {
-  dbConfig: { backend: string; tinybirdEndpoint: string | null; tinybirdAdminToken: string | null; clickhouseUrl: string | null; clickhouseDatabase: string | null; clickhouseUser: string | null; clickhousePassword: string | null }
-  proj: { tinybirdJwt: string | null; tinybirdJwtDatasources: string | null }
-  projectId: string
-  sql: string
-}
-
-/** Run a SQL query against Tinybird/ClickHouse using the project JWT. Throws on failure. */
-async function queryIssueState(ctx: QueryTinybirdCtx): Promise<QueryResponse> {
-  const { dbConfig, proj, projectId, sql } = ctx
-  if (dbConfig.backend === 'tinybird') {
-    if (!dbConfig.tinybirdEndpoint || !dbConfig.tinybirdAdminToken) {
-      throw json({ error: 'tinybird not configured' }, { status: 400 })
-    }
-    const jwtCtx = {
-      projectId,
-      tinybirdEndpoint: dbConfig.tinybirdEndpoint,
-      tinybirdAdminToken: dbConfig.tinybirdAdminToken,
-      tinybirdJwt: proj.tinybirdJwt,
-      tinybirdJwtDatasources: proj.tinybirdJwtDatasources,
-    }
-    const jwt = await getOrCreateProjectJwt(jwtCtx)
-    const res = await fetch(`${dbConfig.tinybirdEndpoint}/v0/sql`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${jwt}` },
-      body: JSON.stringify({ q: sql }),
-    })
-    if (!res.ok) {
-      const text = await res.text()
-      throw json({ error: `issue state query failed: ${text}` }, { status: res.status })
-    }
-    return await res.json()
-  }
-  if (dbConfig.backend === 'clickhouse') {
-    if (!dbConfig.clickhouseUrl) {
-      throw json({ error: 'clickhouse not configured' }, { status: 400 })
-    }
-    const endpoint = `${dbConfig.clickhouseUrl}/?database=${encodeURIComponent(dbConfig.clickhouseDatabase || 'default')}&query=${encodeURIComponent(sql)}`
-    const res = await fetch(endpoint, {
-      headers: {
-        'X-ClickHouse-User': dbConfig.clickhouseUser || 'default',
-        'X-ClickHouse-Key': dbConfig.clickhousePassword || '',
-      },
-    })
-    if (!res.ok) {
-      const text = await res.text()
-      throw json({ error: `issue state query failed: ${text}` }, { status: res.status })
-    }
-    return await res.json()
-  }
-  throw json({ error: 'unknown backend' }, { status: 500 })
+  ResolvedInDeploymentIds: string
+  Version: number
+  UpdatedAt: string
 }
 
 /**
  * Read current issue state for a fingerprint. Returns defaults if no row exists yet.
  * Used by both status and assignee routes to preserve the other field on partial updates.
  */
-async function readCurrentIssueState(ctx: Omit<QueryTinybirdCtx, 'sql'> & { fingerprintHash: string }): Promise<IssueStateRow> {
+async function readCurrentIssueState(ctx: { dbConfig: DbConfig; proj: { id: string; tinybirdJwt: string | null; tinybirdJwtDatasources: string | null }; projectId: string; fingerprintHash: string }): Promise<IssueStateRow> {
   const { dbConfig, proj, projectId, fingerprintHash } = ctx
-  // For ClickHouse backend, add explicit ProjectId filter since there's no JWT row-level filtering
-  const projectFilter = dbConfig.backend === 'clickhouse' ? ` AND ProjectId = '${projectId}'` : ''
-  // Use argMax() instead of FINAL. Tinybird wraps JWT queries in a subquery
-  // and FINAL is not supported on subqueries.
-  const sql = `SELECT argMax(Status, Version) AS Status, argMax(AssigneeMemberId, Version) AS AssigneeMemberId, argMax(ResolvedAt, Version) AS ResolvedAt, argMax(ResolvedByMemberId, Version) AS ResolvedByMemberId, argMax(LastAlertedAt, Version) AS LastAlertedAt, argMax(ResolvedInDeploymentIds, Version) AS ResolvedInDeploymentIds FROM otel_issue_state WHERE FingerprintHash = '${fingerprintHash}'${projectFilter} GROUP BY FingerprintHash LIMIT 1 FORMAT JSON`
+  const pf = getProjectFilter(dbConfig, projectId)
+  const sql = `SELECT argMax(Status, Version) AS Status, argMax(AssigneeMemberId, Version) AS AssigneeMemberId, argMax(ResolvedAt, Version) AS ResolvedAt, argMax(ResolvedByMemberId, Version) AS ResolvedByMemberId, argMax(LastAlertedAt, Version) AS LastAlertedAt, argMax(ResolvedInDeploymentIds, Version) AS ResolvedInDeploymentIds FROM otel_issue_state WHERE ${pf}FingerprintHash = '${fingerprintHash}' GROUP BY FingerprintHash LIMIT 1 FORMAT JSON`
   try {
-    const result = await queryIssueState({ dbConfig, proj, projectId, sql })
+    const result = await executeBackendQuery({ dbConfig, project: { id: projectId, tinybirdJwt: proj.tinybirdJwt, tinybirdJwtDatasources: proj.tinybirdJwtDatasources }, sql })
     const row = result.data?.[0]
     if (row) {
       return {
-        project_id: projectId,
-        fingerprint_hash: fingerprintHash,
-        status: (row.Status as string) || 'open',
-        assignee_member_id: (row.AssigneeMemberId as string) || '',
-        resolved_at: (row.ResolvedAt as string) || null,
-        resolved_by_member_id: (row.ResolvedByMemberId as string) || '',
-        last_alerted_at: (row.LastAlertedAt as string) || null,
-        resolved_in_deployment_ids: (row.ResolvedInDeploymentIds as string) || '',
-        version: 0,
-        updated_at: '',
+        ProjectId: projectId,
+        FingerprintHash: fingerprintHash,
+        Status: (row.Status as string) || 'open',
+        AssigneeMemberId: (row.AssigneeMemberId as string) || '',
+        ResolvedAt: (row.ResolvedAt as string) || null,
+        ResolvedByMemberId: (row.ResolvedByMemberId as string) || '',
+        LastAlertedAt: (row.LastAlertedAt as string) || null,
+        ResolvedInDeploymentIds: (row.ResolvedInDeploymentIds as string) || '',
+        Version: 0,
+        UpdatedAt: '',
       }
     }
   } catch {
     // No existing state; return defaults for a new issue
   }
   return {
-    project_id: projectId,
-    fingerprint_hash: fingerprintHash,
-    status: 'open',
-    assignee_member_id: '',
-    resolved_at: null,
-    resolved_by_member_id: '',
-    last_alerted_at: null,
-    resolved_in_deployment_ids: '',
-    version: 0,
-    updated_at: '',
+    ProjectId: projectId,
+    FingerprintHash: fingerprintHash,
+    Status: 'open',
+    AssigneeMemberId: '',
+    ResolvedAt: null,
+    ResolvedByMemberId: '',
+    LastAlertedAt: null,
+    ResolvedInDeploymentIds: '',
+    Version: 0,
+    UpdatedAt: '',
   }
 }
 
@@ -250,13 +199,13 @@ async function readCurrentIssueState(ctx: Omit<QueryTinybirdCtx, 'sql'> & { fing
  *
  * If no deployment.id is set on any error (user didn't configure it), returns ''.
  */
-async function queryActiveDeploymentIds(ctx: Omit<QueryTinybirdCtx, 'sql'> & { fingerprintHash: string }): Promise<string> {
+async function queryActiveDeploymentIds(ctx: { dbConfig: DbConfig; proj: { id: string; tinybirdJwt: string | null; tinybirdJwtDatasources: string | null }; projectId: string; fingerprintHash: string }): Promise<string> {
   const { dbConfig, proj, projectId, fingerprintHash } = ctx
-  const projectFilter = dbConfig.backend === 'clickhouse' ? ` AND ProjectId = '${projectId}'` : ''
-  const sql = `SELECT DISTINCT ResourceAttributes['deployment.id'] AS deployment_id FROM otel_errors WHERE FingerprintHash = '${fingerprintHash}'${projectFilter} AND Timestamp >= now() - INTERVAL 24 HOUR AND ResourceAttributes['deployment.id'] != '' LIMIT 50 FORMAT JSON`
+  const pf = getProjectFilter(dbConfig, projectId)
+  const sql = `SELECT DISTINCT ResourceAttributes['deployment.id'] AS deployment_id FROM otel_errors WHERE ${pf}FingerprintHash = '${fingerprintHash}' AND Timestamp >= now() - INTERVAL 24 HOUR AND ResourceAttributes['deployment.id'] != '' LIMIT 50 FORMAT JSON`
 
   try {
-    const result = await queryIssueState({ dbConfig, proj, projectId, sql })
+    const result = await executeBackendQuery({ dbConfig, project: { id: projectId, tinybirdJwt: proj.tinybirdJwt, tinybirdJwtDatasources: proj.tinybirdJwtDatasources }, sql })
     const ids = (result.data ?? [])
       .map((row) => String(row.deployment_id ?? ''))
       .filter(Boolean)
@@ -267,83 +216,14 @@ async function queryActiveDeploymentIds(ctx: Omit<QueryTinybirdCtx, 'sql'> & { f
   }
 }
 
-/**
- * Write a row to otel_issue_state via Tinybird Events API or ClickHouse INSERT.
- * Tinybird writes use wait=true for read-after-write consistency.
- */
-async function writeIssueState(ctx: { dbConfig: QueryTinybirdCtx['dbConfig']; row: IssueStateRow }): Promise<void> {
-  const { dbConfig, row } = ctx
-  const ndjson = JSON.stringify(row)
-
-  if (dbConfig.backend === 'tinybird') {
-    if (!dbConfig.tinybirdEndpoint || !dbConfig.tinybirdAdminToken) {
-      throw json({ error: 'tinybird not configured' }, { status: 400 })
-    }
-    // wait=true ensures the row is visible to subsequent reads before we return.
-    // Without it, a quick status change followed by an assignee update could
-    // read stale state and overwrite the status.
-    const res = await fetch(`${dbConfig.tinybirdEndpoint}/v0/events?name=otel_issue_state&wait=true`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-ndjson',
-        Authorization: `Bearer ${dbConfig.tinybirdAdminToken}`,
-      },
-      body: ndjson,
-    })
-    if (!res.ok) {
-      const text = await res.text()
-      console.error(`Failed to write issue state to Tinybird: ${res.status} ${text}`)
-      throw json({ error: 'failed to write issue state' }, { status: 500 })
-    }
-    // Validate the row actually landed (not quarantined)
-    const resBody = await res.json().catch(() => null) as null | {
-      successful_rows?: number
-      quarantined_rows?: number
-    }
-    if (resBody && ((resBody.quarantined_rows ?? 0) > 0 || (resBody.successful_rows ?? 0) !== 1)) {
-      console.error(`Tinybird issue state write warning: ${JSON.stringify(resBody)}`)
-      throw json({ error: 'failed to write issue state' }, { status: 500 })
-    }
-    return
+/** Write a row to otel_issue_state via the shared insertBackendRow helper. */
+async function writeIssueState(ctx: { dbConfig: DbConfig; row: IssueStateRow }): Promise<void> {
+  try {
+    await insertBackendRow({ dbConfig: ctx.dbConfig, table: 'otel_issue_state', row: { ...ctx.row } })
+  } catch (err) {
+    console.error('writeIssueState failed:', err)
+    throw json({ error: 'failed to write issue state' }, { status: 500 })
   }
-
-  if (dbConfig.backend === 'clickhouse') {
-    if (!dbConfig.clickhouseUrl) {
-      throw json({ error: 'clickhouse not configured' }, { status: 400 })
-    }
-    // For ClickHouse, remap to PascalCase and INSERT
-    const chRow = {
-      ProjectId: row.project_id,
-      FingerprintHash: row.fingerprint_hash,
-      Status: row.status,
-      AssigneeMemberId: row.assignee_member_id,
-      ResolvedAt: row.resolved_at,
-      ResolvedByMemberId: row.resolved_by_member_id,
-      LastAlertedAt: row.last_alerted_at,
-      ResolvedInDeploymentIds: row.resolved_in_deployment_ids,
-      Version: row.version,
-      UpdatedAt: row.updated_at,
-    }
-    const insertSql = `INSERT INTO otel_issue_state FORMAT JSONEachRow`
-    const endpoint = `${dbConfig.clickhouseUrl}/?database=${encodeURIComponent(dbConfig.clickhouseDatabase || 'default')}&query=${encodeURIComponent(insertSql)}`
-    const res = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-ClickHouse-User': dbConfig.clickhouseUser || 'default',
-        'X-ClickHouse-Key': dbConfig.clickhousePassword || '',
-      },
-      body: JSON.stringify(chRow),
-    })
-    if (!res.ok) {
-      const text = await res.text()
-      console.error(`Failed to write issue state to ClickHouse: ${res.status} ${text}`)
-      throw json({ error: 'failed to write issue state' }, { status: 500 })
-    }
-    return
-  }
-
-  throw json({ error: 'unknown backend' }, { status: 500 })
 }
 
 async function createOrgForUser(userId: string, name: string) {
@@ -756,6 +636,10 @@ export const api = new Spiceflow({ tracer })
         const sqlToSend = format ? normalizedSql : `${normalizedSql} FORMAT JSON`
         const hasExplicitFormat = format !== null
 
+        // The query bridge needs special handling beyond executeBackendQuery:
+        // - Tinybird: JWT retry on 403 (stale JWT → regenerate and retry)
+        // - Both: explicit FORMAT passthrough (raw response instead of JSON)
+        // - Both: secret redaction in error messages
         if (dbConfig.backend === 'tinybird') {
           if (!dbConfig.tinybirdEndpoint || !dbConfig.tinybirdAdminToken) {
             throw json({ error: 'tinybird not configured' }, { status: 400 })
@@ -799,7 +683,7 @@ export const api = new Spiceflow({ tracer })
           if (hasExplicitFormat) {
             const raw = redact(await res.text())
             const contentType = res.headers.get('content-type') ?? 'text/plain'
-            return { raw, contentType } satisfies QueryResponse
+            return { raw, contentType } satisfies QueryResult
           }
           return await res.json()
         }
@@ -825,7 +709,7 @@ export const api = new Spiceflow({ tracer })
           if (hasExplicitFormat) {
             const raw = redact(await res.text())
             const contentType = res.headers.get('content-type') ?? 'text/plain'
-            return { raw, contentType } satisfies QueryResponse
+            return { raw, contentType } satisfies QueryResult
           }
           return await res.json()
         }
@@ -856,19 +740,18 @@ export const api = new Spiceflow({ tracer })
         const url = new URL(request.url)
         const fingerprintFilter = url.searchParams.get('fingerprintHash')
 
-        // For ClickHouse backend, add explicit ProjectId filter (no JWT row-level filtering)
-        const projectFilter = dbConfig.backend === 'clickhouse' ? `ProjectId = '${params.projectId}' AND ` : ''
+        const pf = getProjectFilter(dbConfig, params.projectId)
 
         let sql: string
         if (fingerprintFilter) {
           // Use argMax() instead of FINAL (Tinybird JWT subquery doesn't support FINAL)
-          sql = `SELECT FingerprintHash, argMax(Status, Version) AS Status, argMax(AssigneeMemberId, Version) AS AssigneeMemberId, argMax(ResolvedAt, Version) AS ResolvedAt, argMax(ResolvedByMemberId, Version) AS ResolvedByMemberId, argMax(UpdatedAt, Version) AS UpdatedAt FROM otel_issue_state WHERE ${projectFilter}FingerprintHash = '${fingerprintFilter}' GROUP BY FingerprintHash LIMIT 1 FORMAT JSON`
+          sql = `SELECT FingerprintHash, argMax(Status, Version) AS Status, argMax(AssigneeMemberId, Version) AS AssigneeMemberId, argMax(ResolvedAt, Version) AS ResolvedAt, argMax(ResolvedByMemberId, Version) AS ResolvedByMemberId, argMax(UpdatedAt, Version) AS UpdatedAt FROM otel_issue_state WHERE ${pf}FingerprintHash = '${fingerprintFilter}' GROUP BY FingerprintHash LIMIT 1 FORMAT JSON`
         } else {
-          const where = projectFilter ? `WHERE ${projectFilter.replace(/ AND $/, '')}` : ''
+          const where = pf ? `WHERE ${pf.replace(/ AND $/, '')}` : ''
           sql = `SELECT FingerprintHash, argMax(Status, Version) AS Status, argMax(AssigneeMemberId, Version) AS AssigneeMemberId, argMax(ResolvedAt, Version) AS ResolvedAt, argMax(ResolvedByMemberId, Version) AS ResolvedByMemberId, argMax(UpdatedAt, Version) AS UpdatedAt FROM otel_issue_state ${where} GROUP BY FingerprintHash ORDER BY UpdatedAt DESC LIMIT 500 FORMAT JSON`
         }
 
-        const result = await queryIssueState({ dbConfig, proj, projectId: params.projectId, sql })
+        const result = await executeBackendQuery({ dbConfig, project: { id: params.projectId, tinybirdJwt: proj.tinybirdJwt, tinybirdJwtDatasources: proj.tinybirdJwtDatasources }, sql })
         const rows = result.data ?? []
 
         // Batch-resolve assignee and resolver names from D1
@@ -947,8 +830,8 @@ export const api = new Spiceflow({ tracer })
         const current = await readCurrentIssueState({ dbConfig, proj, projectId: params.projectId, fingerprintHash: params.fingerprintHash })
 
         // Resolve the current user's orgMember ID for this project's org
-        let resolvedByMemberId = current.resolved_by_member_id
-        let resolvedInDeploymentIds = current.resolved_in_deployment_ids
+        let resolvedByMemberId = current.ResolvedByMemberId
+        let resolvedInDeploymentIds = current.ResolvedInDeploymentIds
         if (body.status === 'resolved') {
           const member = await db.query.orgMember.findFirst({
             where: { orgId: proj.orgId, userId: session.userId },
@@ -972,16 +855,16 @@ export const api = new Spiceflow({ tracer })
         await writeIssueState({
           dbConfig,
           row: {
-            project_id: params.projectId,
-            fingerprint_hash: params.fingerprintHash,
-            status: body.status,
-            assignee_member_id: current.assignee_member_id,
-            resolved_at: resolvedAt,
-            resolved_by_member_id: resolvedByMemberId,
-            last_alerted_at: current.last_alerted_at,
-            resolved_in_deployment_ids: resolvedInDeploymentIds,
-            version: now,
-            updated_at: new Date(now).toISOString(),
+            ProjectId: params.projectId,
+            FingerprintHash: params.fingerprintHash,
+            Status: body.status,
+            AssigneeMemberId: current.AssigneeMemberId,
+            ResolvedAt: resolvedAt,
+            ResolvedByMemberId: resolvedByMemberId,
+            LastAlertedAt: current.LastAlertedAt,
+            ResolvedInDeploymentIds: resolvedInDeploymentIds,
+            Version: now,
+            UpdatedAt: new Date(now).toISOString(),
           },
         })
 
@@ -1025,16 +908,16 @@ export const api = new Spiceflow({ tracer })
         await writeIssueState({
           dbConfig,
           row: {
-            project_id: current.project_id,
-            fingerprint_hash: current.fingerprint_hash,
-            status: current.status,
-            assignee_member_id: body.assigneeMemberId ?? '',
-            resolved_at: current.resolved_at,
-            resolved_by_member_id: current.resolved_by_member_id,
-            last_alerted_at: current.last_alerted_at,
-            resolved_in_deployment_ids: current.resolved_in_deployment_ids,
-            version: now,
-            updated_at: new Date(now).toISOString(),
+            ProjectId: current.ProjectId,
+            FingerprintHash: current.FingerprintHash,
+            Status: current.Status,
+            AssigneeMemberId: body.assigneeMemberId ?? '',
+            ResolvedAt: current.ResolvedAt,
+            ResolvedByMemberId: current.ResolvedByMemberId,
+            LastAlertedAt: current.LastAlertedAt,
+            ResolvedInDeploymentIds: current.ResolvedInDeploymentIds,
+            Version: now,
+            UpdatedAt: new Date(now).toISOString(),
           },
         })
 

@@ -14,8 +14,15 @@ import * as orm from 'drizzle-orm'
 import * as schema from 'db/src/schema.ts'
 import { env } from 'cloudflare:workers'
 import { getLogger, flush } from '@strada.sh/sdk'
-import { getDb, getOrCreateProjectJwt } from './db.ts'
+import { getDb } from './db.ts'
 import { buildAlertSubject, buildAlertEmailHtml } from './alert-email.tsx'
+import {
+  executeBackendQuery,
+  insertBackendRow,
+  projectFilter as getProjectFilter,
+  type DbConfig,
+  type ProjectJwtInfo,
+} from './query-backend.ts'
 
 const logger = getLogger('alert-check')
 
@@ -30,21 +37,8 @@ interface AlertableError {
   usersImpacted: number
 }
 
-interface DbConfig {
-  backend: string
-  tinybirdEndpoint: string | null
-  tinybirdAdminToken: string | null
-  clickhouseUrl: string | null
-  clickhouseDatabase: string | null
-  clickhouseUser: string | null
-  clickhousePassword: string | null
-}
-
-interface ProjectWithJwt {
-  id: string
+interface ProjectWithJwt extends ProjectJwtInfo {
   slug: string
-  tinybirdJwt: string | null
-  tinybirdJwtDatasources: string | null
 }
 
 /** Main scheduled handler. Called by the cron trigger every 5 minutes. */
@@ -189,16 +183,16 @@ async function checkProjectAlerts(ctx: {
         await writeIssueStateRow({
           project, dbConfig,
           row: {
-            project_id: project.id,
-            fingerprint_hash: error.fingerprintHash,
-            status: 'open',
-            assignee_member_id: state.assigneeMemberId || '',
-            resolved_at: null,
-            resolved_by_member_id: '',
-            last_alerted_at: new Date(now).toISOString(),
-            resolved_in_deployment_ids: '',
-            version: now,
-            updated_at: new Date(now).toISOString(),
+            ProjectId: project.id,
+            FingerprintHash: error.fingerprintHash,
+            Status: 'open',
+            AssigneeMemberId: state.assigneeMemberId || '',
+            ResolvedAt: null,
+            ResolvedByMemberId: '',
+            LastAlertedAt: new Date(now).toISOString(),
+            ResolvedInDeploymentIds: '',
+            Version: now,
+            UpdatedAt: new Date(now).toISOString(),
           },
         })
       }
@@ -273,7 +267,7 @@ async function queryErrorsAboveThreshold(ctx: {
     'FORMAT JSON',
   ].join('\n')
 
-  const result = await executeQuery({ project, dbConfig, sql })
+  const result = await executeBackendQuery({ dbConfig, project, sql })
   const rows = result.data ?? []
 
   return rows.map((row) => ({
@@ -307,9 +301,7 @@ async function queryIssueStates(ctx: {
   if (fingerprints.length === 0) return new Map()
 
   const inList = fingerprints.map((f) => `'${f}'`).join(', ')
-  const projectFilter = dbConfig.backend === 'clickhouse'
-    ? `ProjectId = '${project.id}' AND `
-    : ''
+  const pf = getProjectFilter(dbConfig, project.id)
 
   // Use argMax() deduplication instead of FINAL. Tinybird wraps JWT queries
   // in a subquery and FINAL is not supported on subqueries.
@@ -323,14 +315,14 @@ async function queryIssueStates(ctx: {
     '    argMax(ResolvedByMemberId, Version) AS ResolvedByMemberId,',
     '    argMax(ResolvedInDeploymentIds, Version) AS ResolvedInDeploymentIds',
     'FROM otel_issue_state',
-    `WHERE ${projectFilter}FingerprintHash IN (${inList})`,
+    `WHERE ${pf}FingerprintHash IN (${inList})`,
     'GROUP BY FingerprintHash',
     `LIMIT ${fingerprints.length}`,
     'FORMAT JSON',
   ].join('\n')
 
   try {
-    const result = await executeQuery({ project, dbConfig, sql })
+    const result = await executeBackendQuery({ dbConfig, project, sql })
     const map = new Map<string, IssueStateInfo>()
     for (const row of result.data ?? []) {
       map.set(String(row.FingerprintHash), {
@@ -359,57 +351,22 @@ async function writeLastAlertedAt(ctx: {
   const now = Date.now()
   const nowIso = new Date(now).toISOString()
 
-  const row = {
-    project_id: project.id,
-    fingerprint_hash: fingerprintHash,
-    status: currentState?.status || 'open',
-    assignee_member_id: currentState?.assigneeMemberId || '',
-    resolved_at: currentState?.resolvedAt || null,
-    resolved_by_member_id: currentState?.resolvedByMemberId || '',
-    last_alerted_at: nowIso,
-    resolved_in_deployment_ids: currentState?.resolvedInDeploymentIds || '',
-    version: now,
-    updated_at: nowIso,
-  }
-
-  const ndjson = JSON.stringify(row)
-
-  if (dbConfig.backend === 'tinybird') {
-    if (!dbConfig.tinybirdEndpoint || !dbConfig.tinybirdAdminToken) return
-    await fetch(`${dbConfig.tinybirdEndpoint}/v0/events?name=otel_issue_state&wait=true`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-ndjson',
-        Authorization: `Bearer ${dbConfig.tinybirdAdminToken}`,
-      },
-      body: ndjson,
-    })
-  } else if (dbConfig.backend === 'clickhouse') {
-    if (!dbConfig.clickhouseUrl) return
-    const chRow = {
-      ProjectId: row.project_id,
-      FingerprintHash: row.fingerprint_hash,
-      Status: row.status,
-      AssigneeMemberId: row.assignee_member_id,
-      ResolvedAt: row.resolved_at,
-      ResolvedByMemberId: row.resolved_by_member_id,
-      LastAlertedAt: row.last_alerted_at,
-      ResolvedInDeploymentIds: row.resolved_in_deployment_ids,
-      Version: row.version,
-      UpdatedAt: row.updated_at,
-    }
-    const insertSql = `INSERT INTO otel_issue_state FORMAT JSONEachRow`
-    const endpoint = `${dbConfig.clickhouseUrl}/?database=${encodeURIComponent(dbConfig.clickhouseDatabase || 'default')}&query=${encodeURIComponent(insertSql)}`
-    await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-ClickHouse-User': dbConfig.clickhouseUser || 'default',
-        'X-ClickHouse-Key': dbConfig.clickhousePassword || '',
-      },
-      body: JSON.stringify(chRow),
-    })
-  }
+  await insertBackendRow({
+    dbConfig,
+    table: 'otel_issue_state',
+    row: {
+      ProjectId: project.id,
+      FingerprintHash: fingerprintHash,
+      Status: currentState?.status || 'open',
+      AssigneeMemberId: currentState?.assigneeMemberId || '',
+      ResolvedAt: currentState?.resolvedAt || null,
+      ResolvedByMemberId: currentState?.resolvedByMemberId || '',
+      LastAlertedAt: nowIso,
+      ResolvedInDeploymentIds: currentState?.resolvedInDeploymentIds || '',
+      Version: now,
+      UpdatedAt: nowIso,
+    },
+  })
 }
 
 async function sendNotification(
@@ -490,7 +447,7 @@ async function queryErrorDeploymentIds(ctx: {
   ].join('\n')
 
   try {
-    const result = await executeQuery({ project, dbConfig, sql })
+    const result = await executeBackendQuery({ dbConfig, project, sql })
     return (result.data ?? [])
       .map((row) => String(row.deployment_id ?? ''))
       .filter(Boolean)
@@ -508,115 +465,21 @@ async function writeIssueStateRow(ctx: {
   project: ProjectWithJwt
   dbConfig: DbConfig
   row: {
-    project_id: string
-    fingerprint_hash: string
-    status: string
-    assignee_member_id: string
-    resolved_at: string | null
-    resolved_by_member_id: string
-    last_alerted_at: string | null
-    resolved_in_deployment_ids: string
-    version: number
-    updated_at: string
+    ProjectId: string
+    FingerprintHash: string
+    Status: string
+    AssigneeMemberId: string
+    ResolvedAt: string | null
+    ResolvedByMemberId: string
+    LastAlertedAt: string | null
+    ResolvedInDeploymentIds: string
+    Version: number
+    UpdatedAt: string
   }
 }): Promise<void> {
-  const { project, dbConfig, row } = ctx
-  const ndjson = JSON.stringify(row)
-
-  if (dbConfig.backend === 'tinybird') {
-    if (!dbConfig.tinybirdEndpoint || !dbConfig.tinybirdAdminToken) return
-    await fetch(`${dbConfig.tinybirdEndpoint}/v0/events?name=otel_issue_state&wait=true`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-ndjson',
-        Authorization: `Bearer ${dbConfig.tinybirdAdminToken}`,
-      },
-      body: ndjson,
-    })
-  } else if (dbConfig.backend === 'clickhouse') {
-    if (!dbConfig.clickhouseUrl) return
-    const chRow = {
-      ProjectId: row.project_id,
-      FingerprintHash: row.fingerprint_hash,
-      Status: row.status,
-      AssigneeMemberId: row.assignee_member_id,
-      ResolvedAt: row.resolved_at,
-      ResolvedByMemberId: row.resolved_by_member_id,
-      LastAlertedAt: row.last_alerted_at,
-      ResolvedInDeploymentIds: row.resolved_in_deployment_ids,
-      Version: row.version,
-      UpdatedAt: row.updated_at,
-    }
-    const insertSql = `INSERT INTO otel_issue_state FORMAT JSONEachRow`
-    const endpoint = `${dbConfig.clickhouseUrl}/?database=${encodeURIComponent(dbConfig.clickhouseDatabase || 'default')}&query=${encodeURIComponent(insertSql)}`
-    await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-ClickHouse-User': dbConfig.clickhouseUser || 'default',
-        'X-ClickHouse-Key': dbConfig.clickhousePassword || '',
-      },
-      body: JSON.stringify(chRow),
-    })
-  }
+  await insertBackendRow({ dbConfig: ctx.dbConfig, table: 'otel_issue_state', row: ctx.row })
 }
 
 // ── Query helpers ──────────────────────────────────────────────────
-
-interface QueryResult {
-  data?: Record<string, unknown>[]
-}
-
-async function executeQuery(ctx: {
-  project: ProjectWithJwt
-  dbConfig: DbConfig
-  sql: string
-}): Promise<QueryResult> {
-  const { project, dbConfig, sql } = ctx
-
-  if (dbConfig.backend === 'tinybird') {
-    if (!dbConfig.tinybirdEndpoint || !dbConfig.tinybirdAdminToken) {
-      throw new Error('tinybird not configured')
-    }
-    const jwt = await getOrCreateProjectJwt({
-      projectId: project.id,
-      tinybirdEndpoint: dbConfig.tinybirdEndpoint,
-      tinybirdAdminToken: dbConfig.tinybirdAdminToken,
-      tinybirdJwt: project.tinybirdJwt,
-      tinybirdJwtDatasources: project.tinybirdJwtDatasources,
-    })
-    const res = await fetch(`${dbConfig.tinybirdEndpoint}/v0/sql`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${jwt}`,
-      },
-      body: JSON.stringify({ q: sql }),
-    })
-    if (!res.ok) {
-      const text = await res.text()
-      throw new Error(`Tinybird query failed: ${res.status} ${text}`)
-    }
-    return await res.json()
-  }
-
-  if (dbConfig.backend === 'clickhouse') {
-    if (!dbConfig.clickhouseUrl) {
-      throw new Error('clickhouse not configured')
-    }
-    const endpoint = `${dbConfig.clickhouseUrl}/?database=${encodeURIComponent(dbConfig.clickhouseDatabase || 'default')}&query=${encodeURIComponent(sql)}`
-    const res = await fetch(endpoint, {
-      headers: {
-        'X-ClickHouse-User': dbConfig.clickhouseUser || 'default',
-        'X-ClickHouse-Key': dbConfig.clickhousePassword || '',
-      },
-    })
-    if (!res.ok) {
-      const text = await res.text()
-      throw new Error(`ClickHouse query failed: ${res.status} ${text}`)
-    }
-    return await res.json()
-  }
-
-  throw new Error('unknown backend')
-}
+// All query execution now goes through executeBackendQuery() from query-backend.ts.
+// The queryErrorsAboveThreshold() function above calls it directly.

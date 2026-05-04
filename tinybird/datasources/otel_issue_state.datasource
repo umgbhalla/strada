@@ -9,16 +9,16 @@ DESCRIPTION >
     Use FINAL in queries to guarantee deduplication at read time.
 
 SCHEMA >
-    `ProjectId` LowCardinality(String) `json:$.project_id` CODEC(ZSTD(1)),
-    `FingerprintHash` String `json:$.fingerprint_hash` CODEC(ZSTD(1)),
-    `Status` LowCardinality(String) `json:$.status` CODEC(ZSTD(1)),
-    `AssigneeMemberId` String `json:$.assignee_member_id` CODEC(ZSTD(1)),
-    `ResolvedAt` Nullable(DateTime64(3)) `json:$.resolved_at` CODEC(ZSTD(1)),
-    `ResolvedByMemberId` String `json:$.resolved_by_member_id` CODEC(ZSTD(1)),
-    `LastAlertedAt` Nullable(DateTime64(3)) `json:$.last_alerted_at` CODEC(ZSTD(1)),
-    `ResolvedInDeploymentIds` String `json:$.resolved_in_deployment_ids` CODEC(ZSTD(1)),
-    `Version` UInt64 `json:$.version` CODEC(ZSTD(1)),
-    `UpdatedAt` DateTime64(3) `json:$.updated_at` CODEC(ZSTD(1))
+    `ProjectId` LowCardinality(String) `json:$.ProjectId` CODEC(ZSTD(1)),
+    `FingerprintHash` String `json:$.FingerprintHash` CODEC(ZSTD(1)),
+    `Status` LowCardinality(String) `json:$.Status` CODEC(ZSTD(1)),
+    `AssigneeMemberId` String `json:$.AssigneeMemberId` CODEC(ZSTD(1)),
+    `ResolvedAt` Nullable(DateTime64(3)) `json:$.ResolvedAt` CODEC(ZSTD(1)),
+    `ResolvedByMemberId` String `json:$.ResolvedByMemberId` CODEC(ZSTD(1)),
+    `LastAlertedAt` Nullable(DateTime64(3)) `json:$.LastAlertedAt` CODEC(ZSTD(1)),
+    `ResolvedInDeploymentIds` String `json:$.ResolvedInDeploymentIds` CODEC(ZSTD(1)),
+    `Version` UInt64 `json:$.Version` CODEC(ZSTD(1)),
+    `UpdatedAt` DateTime64(3) `json:$.UpdatedAt` CODEC(ZSTD(1))
 
 ENGINE "ReplacingMergeTree"
 ENGINE_VER "Version"
