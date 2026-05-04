@@ -1,5 +1,43 @@
 # Changelog
 
+## 0.2.0
+
+1. **Vite release metadata plugin** -- new `@strada.sh/sdk/vite` export injects commit, branch, and deployment info into browser builds automatically. No manual `initStrada({ release })` needed:
+
+   ```ts
+   // vite.config.ts
+   import { stradaVitePlugin } from '@strada.sh/sdk/vite'
+
+   export default {
+     plugins: [stradaVitePlugin()],
+   }
+   ```
+
+   Reads platform-provided variables (Vercel, Cloudflare Pages, GitHub Actions, Netlify) at build time, falls back to local git. Injects `service.version`, `vcs.ref.head.revision`, `vcs.ref.head.name`, and `deployment.id` as OTel resource attributes.
+
+2. **Server-side ingest token support** -- `initStrada({ token })` sends an `Authorization: Bearer` header on every OTLP export request. Server SDKs (Node, Cloudflare Workers) use this for authenticated ingest. Browser builds intentionally ignore `token` to avoid leaking secrets:
+
+   ```ts
+   // Node / Workers
+   initStrada({
+     projectId: '...',
+     token: process.env.STRADA_TOKEN,
+   })
+   ```
+
+3. **`enabled` flag to disable telemetry export** -- initialize with `enabled: false` to keep OTel providers active without attaching OTLP exporters. Useful for dev servers where HMR traffic shouldn't pollute ingest:
+
+   ```ts
+   initStrada({
+     projectId: '...',
+     enabled: !import.meta.hot,
+   })
+   ```
+
+4. **Unhandled errors now annotate the active span** -- `captureException()` still emits a log record (the primary path), but unhandled errors also set `ERROR` status and record an `exception` event on the active span. This keeps trace views honest when an operation fails. Browser falls back to the pageview span when no child span is active.
+
+5. **GitHub Actions release metadata improvements** -- PR workflows now prefer `GITHUB_HEAD_REF` over `GITHUB_REF_NAME` for the branch name, and `GITHUB_RUN_ID` is used as `deployment.id` when available.
+
 ## 0.1.0
 
 1. **Initial release** -- OTel-first SDK for error tracking, tracing, logs, metrics, and browser analytics. One `initStrada()` call configures all OTel providers; standard APIs (`trace.getTracer()`, `logs.getLogger()`, `metrics.getMeter()`) work immediately after.
