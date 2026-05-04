@@ -46,16 +46,11 @@ export function GridDemoPage() {
                 <Globe className="size-4" />
                 Browser analytics
               </div>
-              <div className="flex items-end justify-center gap-4">
-                <div className="flex flex-col gap-2">
-                  <div className="text-4xl font-semibold tracking-tight">18.4k</div>
-                  <p className="max-w-sm text-sm leading-6 text-muted-foreground">Pageviews grouped by route and session.</p>
-                </div>
-                <ChartLegend.SmallItem name="Visitors" value="8.1k" color="blue" />
+              <div className="flex flex-wrap gap-4">
+                <ChartLegend.LargeItem name="Pageviews" value="18.4k" color="blue" />
+                <ChartLegend.LargeItem name="Visitors" value="8.1k" color="blue" />
               </div>
-              <div className="shrink-0">
-                <TimeseriesChart echarts={echarts} data={chartData.pageviews} height={180} gradient />
-              </div>
+              <TimeseriesChart echarts={echarts} data={chartData.pageviews} gradient />
             </DemoPanel>
           </Grid.Item>
 
@@ -73,9 +68,7 @@ export function GridDemoPage() {
                 <ChartLegend.SmallItem name="api" value="184ms" color="blue" />
                 <ChartLegend.SmallItem name="db" value="72ms" color="amber" />
               </div>
-              <div className="shrink-0">
-                <TimeseriesChart echarts={echarts} data={chartData.latency} height={240} type="bar" yAxisTickFormat={(value) => `${value}ms`} />
-              </div>
+              <TimeseriesChart echarts={echarts} data={chartData.latency} type="bar" yAxisTickFormat={(value) => `${value}ms`} />
             </DemoPanel>
           </Grid.Item>
 

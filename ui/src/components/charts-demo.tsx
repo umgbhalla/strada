@@ -62,6 +62,7 @@ export function ChartsDemoPage() {
         <TimeseriesChart
           echarts={echarts}
           data={data.basicLine}
+          height={350}
           isDarkMode={isDark}
           xAxisName="Time (UTC)"
           yAxisName="Count"
@@ -72,6 +73,7 @@ export function ChartsDemoPage() {
         <TimeseriesChart
           echarts={echarts}
           data={data.customAxis}
+          height={350}
           isDarkMode={isDark}
           xAxisName="Time (UTC)"
           yAxisName="Requests"
@@ -86,6 +88,7 @@ export function ChartsDemoPage() {
         <TimeseriesChart
           echarts={echarts}
           data={data.gradient}
+          height={350}
           gradient
           isDarkMode={isDark}
           xAxisName="Time (UTC)"
@@ -97,6 +100,7 @@ export function ChartsDemoPage() {
         <TimeseriesChart
           echarts={echarts}
           data={data.incomplete.series}
+          height={350}
           incomplete={{ after: data.incomplete.after }}
           isDarkMode={isDark}
           xAxisName="Time (UTC)"
@@ -108,6 +112,7 @@ export function ChartsDemoPage() {
         <TimeseriesChart
           echarts={echarts}
           data={data.rangeSelection.series}
+          height={350}
           isDarkMode={isDark}
           xAxisName="Time (UTC)"
           yAxisName="%"
@@ -133,6 +138,7 @@ export function ChartsDemoPage() {
         <TimeseriesChart
           echarts={echarts}
           data={[]}
+          height={350}
           isDarkMode={isDark}
           xAxisName="Time (UTC)"
           yAxisName="Count"

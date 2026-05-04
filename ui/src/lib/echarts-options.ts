@@ -199,6 +199,7 @@ export function buildTimeseriesChartOption({
       splitNumber: xAxisTickCount ?? 5,
       axisLabel: {
         color: theme.mutedForeground,
+        hideOverlap: true,
         ...(xAxisTickFormat && { formatter: (value: number) => xAxisTickFormat(value) }),
       },
     },

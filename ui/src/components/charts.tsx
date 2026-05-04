@@ -80,7 +80,7 @@ export interface ChartProps {
   optionUpdateBehavior?: SetOptionOpts
   className?: string
   isDarkMode?: boolean
-  height?: number
+  height?: number | string
   onEvents?: Partial<ChartEvents>
 }
 
@@ -198,13 +198,15 @@ export function Chart({
 
 export interface TimeseriesChartProps extends Omit<BuildTimeseriesChartOptionOptions, 'echarts'> {
   echarts: typeof echarts
-  height?: number
+  height?: number | string
+  className?: string
   onTimeRangeChange?: (from: number, to: number) => void
   loading?: boolean
 }
 
 export function TimeseriesChart({
   echarts,
+  className,
   type = 'line',
   data,
   xAxisName,
@@ -216,7 +218,7 @@ export function TimeseriesChart({
   yAxisTickCount,
   tooltipValueFormat,
   onTimeRangeChange,
-  height = 350,
+  height = '100%',
   incomplete,
   isDarkMode,
   gradient,
@@ -291,8 +293,8 @@ export function TimeseriesChart({
   }, [hasTimeRangeCallback, loading])
 
   return (
-    <div className="relative w-full" style={{ height }}>
-      {loading && <ChartWaveLoader height={height} isDarkMode={resolvedIsDark} />}
+    <div className={cn('relative min-h-0 w-full grow', className)} style={{ height }}>
+      {loading && <ChartWaveLoader height={typeof height === 'number' ? height : 350} isDarkMode={resolvedIsDark} />}
       {!loading && <Chart echarts={echarts} ref={chartRef} options={options} height={height} isDarkMode={resolvedIsDark} onEvents={events} />}
     </div>
   )
