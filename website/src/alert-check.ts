@@ -248,6 +248,7 @@ async function queryErrorsAboveThreshold(ctx: {
 }): Promise<AlertableError[]> {
   const { project, dbConfig, threshold, windowMinutes } = ctx
 
+  const pf = getProjectFilter(dbConfig, project.id)
   const sql = [
     'SELECT',
     '    FingerprintHash,',
@@ -259,7 +260,7 @@ async function queryErrorsAboveThreshold(ctx: {
     '    anyLast(ServiceName) AS service_name,',
     "    uniqExact(Tags['user.id']) AS users_impacted",
     'FROM otel_errors',
-    `WHERE Timestamp >= now() - INTERVAL ${windowMinutes} MINUTE`,
+    `WHERE ${pf}Timestamp >= now() - INTERVAL ${windowMinutes} MINUTE`,
     'GROUP BY FingerprintHash',
     `HAVING error_count >= ${threshold}`,
     'ORDER BY error_count DESC',
@@ -436,10 +437,11 @@ async function queryErrorDeploymentIds(ctx: {
   windowMinutes: number
 }): Promise<string[]> {
   const { project, dbConfig, fingerprintHash, windowMinutes } = ctx
+  const pf = getProjectFilter(dbConfig, project.id)
   const sql = [
     "SELECT DISTINCT ResourceAttributes['deployment.id'] AS deployment_id",
     'FROM otel_errors',
-    `WHERE FingerprintHash = '${fingerprintHash}'`,
+    `WHERE ${pf}FingerprintHash = '${fingerprintHash}'`,
     `AND Timestamp >= now() - INTERVAL ${windowMinutes} MINUTE`,
     "AND ResourceAttributes['deployment.id'] != ''",
     'LIMIT 50',
