@@ -1,5 +1,57 @@
 # Changelog
 
+## 0.3.0
+
+1. **New `traces` commands** -- inspect distributed traces from the terminal:
+
+   ```bash
+   # List recent traces with root span summary
+   strada traces list -p my-app --since 1h
+
+   # Render a trace as a parent-child span tree
+   strada traces view <traceId> -p my-app
+
+   # Expand specific spans inline with full attributes
+   strada traces view <traceId> -p my-app --expand-span ab3f
+
+   # Show a single span in full detail (attributes, events, links)
+   strada traces span <traceId> <spanId> -p my-app
+   ```
+
+   The tree view shows short span IDs, compact attribute previews, event summaries, and `[ERROR]` badges on errored spans. Use `--expand-span` (repeatable) to expand specific spans inline by their short ID prefix.
+
+2. **New `services list` command** -- discover active `service.name` values in a project:
+
+   ```bash
+   strada services list -p my-app --since 24h
+   ```
+
+   Queries both `otel_logs` and `otel_traces`, merges counts by ServiceName, and shows separate log/span error counts plus last seen time. Useful before filtering logs, issues, or SQL queries by service.
+
+3. **New `tokens` commands** -- manage org-scoped ingest tokens:
+
+   ```bash
+   # Create a token for server-side SDK authentication
+   strada tokens create my-server-token --scope ingest
+
+   # List all tokens in the current org
+   strada tokens list
+
+   # Delete a token
+   strada tokens delete <tokenId>
+   ```
+
+   Tokens authenticate server-side SDK writes to the collector across all projects in an org. The initial token is also printed during `strada projects create`.
+
+4. **Directory-scoped project setup** -- run `strada setup` once per app folder to configure the default org and project:
+
+   ```bash
+   cd my-app/
+   strada setup
+   ```
+
+   After setup, all commands (`logs`, `issues`, `traces`, `analytics`, `services`, `query`) use the configured project automatically without `--project`. Config is stored in `~/.strada/config.json` with closest-parent matching, so nested package directories inherit the parent's config.
+
 ## 0.2.0
 
 1. **New `logs` command** -- browse and search OTel log records with colored output:
