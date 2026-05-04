@@ -20,7 +20,7 @@ import { useMemo, useState } from 'react'
 
 import { Chart, ChartLegend, TimeseriesChart } from './charts.tsx'
 import { DataTable } from './data-table.tsx'
-import { ThemeToggle } from './traces/theme-toggle.tsx'
+import { ThemeToggle } from './traces-graph/theme-toggle.tsx'
 import type { StradaChartOption } from '../lib/echarts-options.ts'
 import { useIsDark } from '../lib/utils.ts'
 

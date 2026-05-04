@@ -25,6 +25,8 @@ export type {
   DataTableRow,
   TableCellFormat,
 } from "./components/data-table.tsx";
+export { Grid } from "./components/grid.tsx";
+export type { GridItemProps, GridProps } from "./components/grid.tsx";
 export {
   Table,
   TableBody,
