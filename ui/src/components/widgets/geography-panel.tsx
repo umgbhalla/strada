@@ -27,7 +27,7 @@ export interface LocationData {
   lng: number;
   value: number;
   label: string;
-  flagSrc: string;
+  icon: React.ReactNode;
   demographics: { label: string; value: number }[];
 }
 
@@ -60,13 +60,7 @@ export function GeographyPanel({
         value={highlightedLocation.value.toLocaleString()}
         badge={
           <span className='flex items-center gap-1'>
-            <img
-              src={highlightedLocation.flagSrc}
-              alt=''
-              className='size-4 shrink-0'
-              width={16}
-              height={16}
-            />
+            <span className='shrink-0 text-sm leading-none'>{highlightedLocation.icon}</span>
             {highlightedLocation.label}
           </span>
         }

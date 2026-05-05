@@ -179,11 +179,11 @@ const heatmapData = Array.from({ length: 12 }, (_, rowIndex) =>
 );
 
 const geographyData = [
-  { id: 1, lat: 41.0082, lng: 28.9784, value: 1500, label: 'Turkey', flagSrc: '/flags/TR.svg', demographics: [{ label: 'Men', value: 32 }, { label: 'Women', value: 60 }, { label: 'Other', value: 8 }] },
-  { id: 2, lat: 48.8566, lng: 2.3522, value: 800, label: 'France', flagSrc: '/flags/FR.svg', demographics: [{ label: 'Men', value: 45 }, { label: 'Women', value: 50 }, { label: 'Other', value: 5 }] },
-  { id: 3, lat: 51.5074, lng: -0.1278, value: 1200, label: 'United Kingdom', flagSrc: '/flags/GB.svg', demographics: [{ label: 'Men', value: 48 }, { label: 'Women', value: 47 }, { label: 'Other', value: 5 }] },
-  { id: 4, lat: 52.52, lng: 13.405, value: 900, label: 'Germany', flagSrc: '/flags/DE.svg', demographics: [{ label: 'Men', value: 42 }, { label: 'Women', value: 53 }, { label: 'Other', value: 5 }] },
-  { id: 5, lat: 45.4642, lng: 9.19, value: 600, label: 'Italy', flagSrc: '/flags/IT.svg', demographics: [{ label: 'Men', value: 38 }, { label: 'Women', value: 55 }, { label: 'Other', value: 7 }] },
+  { id: 1, lat: 41.0082, lng: 28.9784, value: 1500, label: 'Turkey', icon: '🇹🇷', demographics: [{ label: 'Men', value: 32 }, { label: 'Women', value: 60 }, { label: 'Other', value: 8 }] },
+  { id: 2, lat: 48.8566, lng: 2.3522, value: 800, label: 'France', icon: '🇫🇷', demographics: [{ label: 'Men', value: 45 }, { label: 'Women', value: 50 }, { label: 'Other', value: 5 }] },
+  { id: 3, lat: 51.5074, lng: -0.1278, value: 1200, label: 'United Kingdom', icon: '🇬🇧', demographics: [{ label: 'Men', value: 48 }, { label: 'Women', value: 47 }, { label: 'Other', value: 5 }] },
+  { id: 4, lat: 52.52, lng: 13.405, value: 900, label: 'Germany', icon: '🇩🇪', demographics: [{ label: 'Men', value: 42 }, { label: 'Women', value: 53 }, { label: 'Other', value: 5 }] },
+  { id: 5, lat: 45.4642, lng: 9.19, value: 600, label: 'Italy', icon: '🇮🇹', demographics: [{ label: 'Men', value: 38 }, { label: 'Women', value: 55 }, { label: 'Other', value: 7 }] },
 ];
 
 export function WidgetsGridDemoPage() {
