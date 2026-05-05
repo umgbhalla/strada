@@ -17,7 +17,13 @@
     "isolatedModules": true,
     "jsx": "react-jsx",
     "noImplicitAny": false,
-    "types": ["vite/client", "node"]
+    "types": ["vite/client", "node"],
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"],
+      "next/dynamic": ["src/shims/next-dynamic.ts"],
+      "next-themes": ["src/shims/next-themes.ts"]
+    }
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"],
   "exclude": ["node_modules", "dist"]

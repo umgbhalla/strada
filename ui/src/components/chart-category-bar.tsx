@@ -2,8 +2,8 @@ import * as React from 'react';
 import { Slot, Slottable } from '@radix-ui/react-slot';
 import { scaleLinear } from 'd3-scale';
 
-import { cn } from '@/utils/cn';
-import { LegendDot } from '@/components/legend-dot';
+import { cn } from '../lib/utils.ts';
+import { LegendDot } from './legend-dot.tsx';
 
 export const COLORS = ['bg-primary', 'bg-yellow-500', 'bg-teal-500'];
 

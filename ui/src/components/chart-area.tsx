@@ -58,7 +58,7 @@ export function ChartArea({
   className,
 }: ChartAreaProps) {
   return (
-    <ResponsiveContainer width='100%' height={height} className={className}>
+    <ResponsiveContainer width='100%' height={height as number} className={className}>
       <AreaChart data={data} margin={margin}>
         <XAxis
           dataKey='date'

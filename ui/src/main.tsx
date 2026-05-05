@@ -10,6 +10,7 @@ import { ChartsDemoPage } from './components/charts-demo.tsx'
 import { GridDemoPage } from './components/grid-demo.tsx'
 import { TraceTimelineDemo } from './components/traces-graph/trace-timeline-demo.tsx'
 import { TraceActivityLogDemo } from './components/traces/trace-activity-log-demo.tsx'
+import { WidgetsGridDemoPage } from './components/widgets-grid-demo.tsx'
 import { ThemeToggle } from './components/traces-graph/theme-toggle.tsx'
 
 const tracer = trace.getTracer('strada-ui')
@@ -39,6 +40,11 @@ const demos = [
     href: '/charts#tables',
     title: 'Tables',
     description: 'SQL result tables with observability formatters and hashed badges.',
+  },
+  {
+    href: '/widgets',
+    title: 'Widgets',
+    description: 'Dashboard widgets: charts, metrics, breakdowns in a bento grid.',
   },
 ]
 
@@ -129,6 +135,9 @@ export const app = new Spiceflow({ tracer })
   })
   .page('/grid', async function GridDemo() {
     return <GridDemoPage />
+  })
+  .page('/widgets', async function WidgetsDemo() {
+    return <WidgetsGridDemoPage />
   })
 
 void app.listen(Number(process.env.PORT || 3456))

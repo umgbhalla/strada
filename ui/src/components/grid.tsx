@@ -76,11 +76,12 @@ function GridRoot({
   const lineSegments = rows && (showLines || extensionChildren.length > 0)
     ? getGridLineSegments({ columns, rows, placements })
     : undefined;
+  const rowTrack = `minmax(${rowHeightValue}, auto)`;
   const gridStyle: CSSProperties = {
     display: "grid",
     gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
-    gridTemplateRows: rows ? `repeat(${rows}, ${rowHeightValue})` : undefined,
-    gridAutoRows: rowHeightValue,
+    gridTemplateRows: rows ? `repeat(${rows}, ${rowTrack})` : undefined,
+    gridAutoRows: rowTrack,
     ...style,
   };
 

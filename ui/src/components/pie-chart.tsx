@@ -65,8 +65,10 @@ export default function PieChart({
           endAngle={450}
           paddingAngle={2}
           cornerRadius={2}
-          activeIndex={data.findIndex((d) => d.id === 'others')}
-          activeShape={renderActiveShape}
+          {...{
+            activeIndex: data.findIndex((d: any) => d.id === 'others'),
+            activeShape: renderActiveShape,
+          } as any}
         >
           {data.map((entry: any) => (
             <Cell

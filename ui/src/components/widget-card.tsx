@@ -20,7 +20,7 @@ export function WidgetCard({
   return (
     <div
       className={cn(
-        'relative flex w-full flex-col gap-5 rounded-2xl bg-background p-5 shadow-regular-xs ring-1 ring-inset ring-border',
+        'relative flex w-full flex-col gap-5',
         className,
       )}
       {...rest}

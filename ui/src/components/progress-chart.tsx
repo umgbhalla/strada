@@ -1,9 +1,8 @@
 'use client';
 
 import * as React from 'react';
-import { useMeasure } from '@uidotdev/usehooks';
 
-import { cn } from '@/utils/cn';
+import { cn, useContainerSize } from '../lib/utils.ts';
 
 function ChartSegmentedProgress({
   value,
@@ -18,15 +17,16 @@ function ChartSegmentedProgress({
   segmentSize: number;
   maskImage: string;
 }) {
-  const [containerRef, { width }] = useMeasure();
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  const { width } = useContainerSize(containerRef);
 
   const computedProgress = React.useMemo(() => {
-    const progressWidth = (value / max) * width!;
+    const progressWidth = (value / max) * width;
     return Math.round(progressWidth / segmentSize) * segmentSize;
   }, [value, max, width, segmentSize]);
 
   const computedWidth = React.useMemo(() => {
-    return Math.round(width! / segmentSize) * segmentSize;
+    return Math.round(width / segmentSize) * segmentSize;
   }, [width, segmentSize]);
 
   return (

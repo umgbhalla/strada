@@ -1,4 +1,4 @@
-import { cn } from '@/utils/cn';
+import { cn } from '../lib/utils.ts';
 
 export function DashedDivider({ className }: { className?: string }) {
   return (

@@ -6,7 +6,7 @@
 import * as React from 'react';
 import * as ToggleGroup from '@radix-ui/react-toggle-group';
 
-import { cn } from '@/utils/cn';
+import { cn } from '../lib/utils.ts';
 
 export type ChipToggleItem = {
   value: string;

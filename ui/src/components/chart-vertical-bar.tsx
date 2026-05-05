@@ -6,7 +6,7 @@
 import * as React from 'react';
 import { scaleLinear } from 'd3-scale';
 
-import { cn } from '@/utils/cn';
+import { cn } from '../lib/utils.ts';
 
 export type VerticalBarDataPoint = {
   label: string;
