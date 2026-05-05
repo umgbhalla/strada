@@ -172,7 +172,7 @@ export function ProductCategories() {
   );
 }
 
-export function WidgetProductCategories() {
+export function ProgressNavPanel() {
   return (
     <WidgetCard>
       <ProductCategoriesContent />

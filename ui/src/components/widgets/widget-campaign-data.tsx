@@ -5,7 +5,7 @@ import * as React from 'react';
 import { ChartArea, type AreaChartDataPoint } from '@/components/chart-area';
 import { WidgetCard, WidgetHeader } from '@/components/widget-card';
 
-export function WidgetCampaignData() {
+export function SparkAreaPanel() {
   const generateData = (): AreaChartDataPoint[] => {
     const data: AreaChartDataPoint[] = [];
     const startDate = new Date('2023-06-01');

@@ -2,13 +2,13 @@
 
 import * as React from 'react';
 
-import BubbleChart, { SalesData } from '@/components/bubble-chart';
+import BubbleChart, { BubbleDataPoint } from '@/components/bubble-chart';
 import IconArrowTrendDown from '@/components/icons/arrow-trend-down';
 import IconArrowTrendUp from '@/components/icons/arrow-trend-up';
 import { LegendDot } from '@/components/legend-dot';
 import { WidgetCard, WidgetHeader } from '@/components/widget-card';
 
-const data: SalesData[] = [
+const data: BubbleDataPoint[] = [
   {
     category: 'Europe',
     percentage: 48,
@@ -29,7 +29,7 @@ const data: SalesData[] = [
   },
 ];
 
-export function WidgetRealTime() {
+export function BubblePanel() {
   return (
     <WidgetCard>
       <WidgetHeader

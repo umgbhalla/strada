@@ -46,7 +46,7 @@ const productPerformanceData: Record<Range, VerticalBarDataPoint[]> = {
   ],
 };
 
-export function WidgetProductPerformance() {
+export function BarRankingPanel() {
   const [selectedRange, setSelectedRange] = React.useState<Range>('1w');
   const currentData = productPerformanceData[selectedRange];
 

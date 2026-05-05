@@ -93,7 +93,7 @@ function StackedAreaChartComponent() {
   );
 }
 
-export function WidgetConversionRate() {
+export function MetricRowsPanel() {
   return (
     <WidgetCard>
       <WidgetHeader

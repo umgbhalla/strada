@@ -150,7 +150,7 @@ export function MarketingChannels() {
   return <MarketingChannelsContent />;
 }
 
-export function WidgetMarketingChannels() {
+export function ProportionPanel() {
   return (
     <WidgetCard>
       <MarketingChannelsContent categoryBarClassName='h-3' dashedDividerClassName='h-1' />

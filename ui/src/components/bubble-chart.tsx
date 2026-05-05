@@ -1,29 +1,27 @@
 import React from 'react';
 
-export interface SalesData {
+export interface BubbleDataPoint {
   category: string;
   percentage: number;
   color: string;
   textColor: string;
 }
 
-interface BubbleChartProps {
-  width?: number;
-  height?: number;
-  data: SalesData[];
-}
-
-const BubbleChart: React.FC<BubbleChartProps> = ({
+const BubbleChart = ({
   width = 600,
   height = 400,
   data,
+}: {
+  width?: number;
+  height?: number;
+  data: BubbleDataPoint[];
 }) => {
   const maxRadius = height * 0.45;
   const maxPercentage = Math.max(...data.map((d) => d.percentage));
   const getRadius = (percentage: number) =>
     (percentage / maxPercentage) * maxRadius;
 
-  const getBubblePositions = (data: SalesData[]) => {
+  const getBubblePositions = (data: BubbleDataPoint[]) => {
     const sortedData = [...data].sort((a, b) => b.percentage - a.percentage);
 
     return sortedData.map((item, index) => {

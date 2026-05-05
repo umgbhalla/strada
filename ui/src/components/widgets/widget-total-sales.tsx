@@ -28,7 +28,7 @@ const weeklySalesData = Array.from({ length: 40 }, (_, index) => {
   };
 });
 
-export function WidgetTotalSales() {
+export function SparklinePanel() {
   const [selectedRange, setSelectedRange] = React.useState('1w');
 
   return (

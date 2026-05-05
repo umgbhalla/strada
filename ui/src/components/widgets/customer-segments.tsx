@@ -122,7 +122,7 @@ export function CustomerSegments() {
   );
 }
 
-export function WidgetCustomerSegments() {
+export function DonutPanel() {
   return (
     <WidgetCard>
       <CustomerSegmentsContent circleSize={98} />

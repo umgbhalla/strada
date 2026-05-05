@@ -8,7 +8,7 @@ import { WidgetCard, WidgetHeader } from '@/components/widget-card';
 
 import { DashedDividerVertical } from '../dashed-divider';
 
-export function WidgetTotalVisitors() {
+export function SplitColumnsPanel() {
   return (
     <WidgetCard>
       <WidgetHeader

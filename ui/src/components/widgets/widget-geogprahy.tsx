@@ -10,9 +10,15 @@ if (typeof window !== 'undefined') {
   void import('leaflet/dist/leaflet.css');
 }
 
-const GeographyMap = dynamic(() => import('./widget-geography-map'), {
-  ssr: false,
-});
+const GeographyMap = dynamic(
+  () =>
+    import('./widget-geography-map').then((mod) => ({
+      default: mod.GeographyMap,
+    })),
+  {
+    ssr: false,
+  },
+);
 
 export interface LocationData {
   id: number;
@@ -110,7 +116,7 @@ const geographyData: LocationData[] = [
 
 const initialHighlightedId = 1;
 
-export function WidgetGeography() {
+export function GeographyPanel() {
   const [highlightedId, setHighlightedId] = React.useState<number>(
     initialHighlightedId ?? geographyData[0].id,
   );

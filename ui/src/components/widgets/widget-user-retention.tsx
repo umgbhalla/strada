@@ -50,7 +50,7 @@ const generateRetentionData = () => {
   });
 };
 
-export function WidgetUserRetention() {
+export function HeatmapPanel() {
   const retentionData = generateRetentionData();
 
   return (

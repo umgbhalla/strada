@@ -5,17 +5,17 @@
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 import { Grid } from "./grid.tsx";
 import { ThemeToggle } from "./traces-graph/theme-toggle.tsx";
-import { WidgetTotalVisitors } from "./widgets/widget-total-visitors.tsx";
-import { WidgetConversionRate } from "./widgets/widget-conversion-rate.tsx";
-import { WidgetProductPerformance } from "./widgets/widget-product-performance.tsx";
-import { WidgetRealTime } from "./widgets/widget-real-time.tsx";
-import { WidgetCampaignData } from "./widgets/widget-campaign-data.tsx";
-import { WidgetCustomerSegments } from "./widgets/customer-segments.tsx";
-import { WidgetMarketingChannels } from "./widgets/marketing-channels.tsx";
-import { WidgetUserRetention } from "./widgets/widget-user-retention.tsx";
-import { WidgetProductCategories } from "./widgets/product-categories.tsx";
-import { WidgetTotalSales } from "./widgets/widget-total-sales.tsx";
-import { WidgetGeography } from "./widgets/widget-geogprahy.tsx";
+import { SplitColumnsPanel } from "./widgets/widget-total-visitors.tsx";
+import { MetricRowsPanel } from "./widgets/widget-conversion-rate.tsx";
+import { BarRankingPanel } from "./widgets/widget-product-performance.tsx";
+import { BubblePanel } from "./widgets/widget-real-time.tsx";
+import { SparkAreaPanel } from "./widgets/widget-campaign-data.tsx";
+import { DonutPanel } from "./widgets/customer-segments.tsx";
+import { ProportionPanel } from "./widgets/marketing-channels.tsx";
+import { HeatmapPanel } from "./widgets/widget-user-retention.tsx";
+import { ProgressNavPanel } from "./widgets/product-categories.tsx";
+import { SparklinePanel } from "./widgets/widget-total-sales.tsx";
+import { GeographyPanel } from "./widgets/widget-geogprahy.tsx";
 
 export function WidgetsGridDemoPage() {
   return (
@@ -38,63 +38,63 @@ export function WidgetsGridDemoPage() {
 
           <Grid.Item columnSpan={8} rowSpan={2}>
             <WidgetPanel>
-              <WidgetTotalSales />
+              <SparklinePanel />
             </WidgetPanel>
           </Grid.Item>
 
           <Grid.Item columnSpan={4} rowSpan={2}>
             <WidgetPanel>
-              <WidgetTotalVisitors />
+              <SplitColumnsPanel />
             </WidgetPanel>
           </Grid.Item>
 
           <Grid.Item columnSpan={4} rowSpan={2}>
             <WidgetPanel>
-              <WidgetConversionRate />
+              <MetricRowsPanel />
             </WidgetPanel>
           </Grid.Item>
 
           <Grid.Item columnSpan={4} rowSpan={2}>
             <WidgetPanel>
-              <WidgetProductPerformance />
+              <BarRankingPanel />
             </WidgetPanel>
           </Grid.Item>
 
           <Grid.Item columnSpan={4} rowSpan={2}>
             <WidgetPanel>
-              <WidgetMarketingChannels />
+              <ProportionPanel />
             </WidgetPanel>
           </Grid.Item>
 
           <Grid.Item columnSpan={4} rowSpan={2}>
             <WidgetPanel>
-              <WidgetRealTime />
+              <BubblePanel />
             </WidgetPanel>
           </Grid.Item>
 
           <Grid.Item columnSpan={4} rowSpan={2}>
             <WidgetPanel>
-              <WidgetCustomerSegments />
+              <DonutPanel />
               <div className="h-px w-full bg-border" />
-              <WidgetProductCategories />
+              <ProgressNavPanel />
             </WidgetPanel>
           </Grid.Item>
 
           <Grid.Item columnSpan={4} rowSpan={1}>
             <WidgetPanel>
-              <WidgetCampaignData />
+              <SparkAreaPanel />
             </WidgetPanel>
           </Grid.Item>
 
           <Grid.Item columnSpan={4} rowSpan={2}>
             <WidgetPanel>
-              <WidgetUserRetention />
+              <HeatmapPanel />
             </WidgetPanel>
           </Grid.Item>
 
           <Grid.Item columnSpan={4} rowSpan={2}>
             <WidgetPanel>
-              <WidgetGeography />
+              <GeographyPanel />
             </WidgetPanel>
           </Grid.Item>
         </Grid>

@@ -8,7 +8,7 @@ import {
   RiSubtractLine,
 } from '@remixicon/react';
 import DottedMap from 'dotted-map/without-countries';
-import type { LatLngBoundsExpression, LatLngExpression } from 'leaflet';
+import type { LatLngBoundsExpression, LatLngExpression, LatLngTuple } from 'leaflet';
 import { useTheme } from 'next-themes';
 import {
   CircleMarker,
@@ -59,18 +59,14 @@ const CustomMapControls = () => {
   );
 };
 
-interface CenterControlProps {
-  center: LatLngExpression;
-}
-
-const CenterControl = ({ center }: CenterControlProps) => {
+const CenterControl = ({ center }: { center: LatLngTuple }) => {
   const map = useMap();
   const [isOffCenter, setIsOffCenter] = React.useState(false);
 
   // Check if map is centered
   const checkCenter = React.useCallback(() => {
     const currentCenter = map.getCenter();
-    const targetCenter = center as L.LatLngTuple;
+    const targetCenter = center;
     const threshold = 0.1; // Degree threshold for considering map "off center"
 
     const isOff =
@@ -131,7 +127,7 @@ const DottedMapOverlay = React.memo(() => {
 
 DottedMapOverlay.displayName = 'DottedMapOverlay';
 
-export default function WidgetGeographyMap({
+export function GeographyMap({
   data,
   highlightedId,
   setHighlightedId,
@@ -140,7 +136,7 @@ export default function WidgetGeographyMap({
   highlightedId: number;
   setHighlightedId: React.Dispatch<React.SetStateAction<number>>;
 }) {
-  const calculatedBounds: LatLngBoundsExpression = React.useMemo(() => {
+  const calculatedBounds = React.useMemo<[[number, number], [number, number]]>(() => {
     const lats = data.map((p) => p.lat);
     const lngs = data.map((p) => p.lng);
     const minLat = Math.min(...lats);
@@ -153,7 +149,7 @@ export default function WidgetGeographyMap({
     ];
   }, [data]);
 
-  const mapCenter: LatLngExpression = React.useMemo(
+  const mapCenter = React.useMemo<LatLngTuple>(
     () => [
       (calculatedBounds[0][0] + calculatedBounds[1][0]) / 2,
       (calculatedBounds[0][1] + calculatedBounds[1][1]) / 2,
