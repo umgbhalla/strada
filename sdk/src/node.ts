@@ -55,6 +55,7 @@ import {
   setTags,
   resetContext,
   resolveMetricReaderOptions,
+  resolveBatchOptions,
   resolveEndpoint,
   resolveIngestHeaders,
   resolveReleaseAttributes,
@@ -344,7 +345,7 @@ export function initStrada(options: StradaOptions): void {
             new BaggageLogProcessor(
               new BatchLogRecordProcessor(
                 new OTLPLogExporter({ url: `${endpoint}/v1/logs`, headers: ingestHeaders }),
-                options.telemetry?.logs,
+                resolveBatchOptions(options.telemetry?.logs),
               ),
             ),
           ),
@@ -364,7 +365,7 @@ export function initStrada(options: StradaOptions): void {
       ? [
           new BatchSpanProcessor(
             new OTLPTraceExporter({ url: `${endpoint}/v1/traces`, headers: ingestHeaders }),
-            options.telemetry?.traces,
+            resolveBatchOptions(options.telemetry?.traces),
           ),
           new AutoFlushSpanProcessor(),
         ]

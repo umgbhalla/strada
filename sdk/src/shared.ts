@@ -400,6 +400,43 @@ export function applyBeforeSend(
   return result ?? null;
 }
 
+// ---------------------------------------------------------------------------
+// Dev mode detection and fast-flush defaults
+// ---------------------------------------------------------------------------
+// When import.meta.hot is truthy (Vite, Webpack HMR, RSC dev servers),
+// batch processors use aggressive flush intervals so logs, traces, and
+// errors appear almost instantly during development. User-provided
+// telemetry options always take highest priority over dev defaults.
+//
+// Priority chain:  user telemetry options > dev defaults > OTel defaults
+
+const DEV_BATCH_DEFAULTS = {
+  scheduledDelayMillis: 500,
+} as const;
+
+const DEV_METRIC_DEFAULTS = {
+  exportIntervalMillis: 2_000,
+} as const;
+
+function isDevMode(): boolean {
+  try {
+    return !!(import.meta as any).hot;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Merge dev-mode fast-flush defaults underneath user-provided batch options.
+ * In production (no import.meta.hot), returns user options unchanged.
+ */
+export function resolveBatchOptions<T extends { scheduledDelayMillis?: number }>(
+  userOptions: T | undefined,
+): T | { scheduledDelayMillis: number } | undefined {
+  if (!isDevMode()) return userOptions;
+  return { ...DEV_BATCH_DEFAULTS, ...userOptions };
+}
+
 /**
  * Resolve metric reader options with the SDK default export interval.
  */
@@ -408,6 +445,7 @@ export function resolveMetricReaderOptions(
 ): StradaMetricReaderOptions {
   return {
     exportIntervalMillis: 10_000,
+    ...(isDevMode() ? DEV_METRIC_DEFAULTS : {}),
     ...options.telemetry?.metrics,
   };
 }

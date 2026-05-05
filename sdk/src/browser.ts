@@ -47,6 +47,7 @@ import {
   setTags,
   resetContext,
   resolveUserId,
+  resolveBatchOptions,
   resolveEndpoint,
   resolveReleaseAttributes,
   shouldExportTelemetry,
@@ -410,7 +411,7 @@ export function initStrada(options: StradaOptions): void {
         ? [
             new BatchSpanProcessor(
               new OTLPTraceExporter({ url: `${endpoint}/v1/traces` }),
-              options.telemetry?.traces,
+              resolveBatchOptions(options.telemetry?.traces),
             ),
           ]
         : []),
@@ -442,7 +443,7 @@ export function initStrada(options: StradaOptions): void {
             new FilteringLogProcessor(
               new BatchLogRecordProcessor(
                 new OTLPLogExporter({ url: `${endpoint}/v1/logs` }),
-                options.telemetry?.logs,
+                resolveBatchOptions(options.telemetry?.logs),
               ),
             ),
             () => _sessionId!,
