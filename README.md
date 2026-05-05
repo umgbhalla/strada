@@ -226,24 +226,24 @@ Strada is **100% OpenTelemetry**. The SDK is a thin wrapper around the official 
 
 ```
   your code ──► initStrada() + captureException() + track()
-                     │
-                     ▼
-  Strada SDK ────────────────► thin config wrapper ────────────────► OpenTelemetry SDK
-                                                                          │
-                                    TracerProvider ──► LoggerProvider ──► MeterProvider
-                                                                           │
-                                                                           │ OTLP HTTP/JSON
-                                                                          ▼
-                                                                   Strada Collector
-                                                                   (Cloudflare Worker)
-                                                                          │
-                    ┌─────────────────┬───────────────────┬───────────────┤
-                    │                 │                   │               │
-                    ▼                 ▼                   ▼               ▼
-              otel_traces         otel_logs         otel_errors     otel_metrics
-                                                                          │
-                                                          ClickHouse ◄────┘
-                                                        (your database)
+                       │
+                       │  configures standard OTel providers
+                       ▼
+          TracerProvider          LoggerProvider         MeterProvider
+                │                       │                      │
+                └───────────────────────┼──────────────────────┘
+                                        │
+                                        │  OTLP HTTP/JSON
+                                        ▼
+                                 Strada Collector
+                                (Cloudflare Worker)
+                                        │
+          ┌─────────────┬───────────────┼───────────────┬─────────────┐
+          ▼             ▼               ▼               ▼             ▼
+     otel_traces    otel_logs      otel_errors    otel_metrics  otel_analytics
+  ┌────────────────────────────────────────────────────────────────────────────────────────────┐
+  │                              ClickHouse (your database)                                    │
+  └────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 **If you already have OTel instrumentation**, point your OTLP exporter at your Strada ingest endpoint. No SDK swap needed.
