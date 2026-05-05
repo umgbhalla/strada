@@ -25,7 +25,7 @@ export function GridDemoPage() {
   const chartData = useMemo(() => buildGridChartData(), []);
 
   return (
-    <div className="flex w-full flex-col items-center gap-10 overflow-x-hidden">
+    <div className="flex w-full flex-col items-center gap-10 overflow-x-clip">
       <div className="flex w-full max-w-7xl items-center justify-between gap-4">
         <div className="flex flex-col gap-2">
           <h1 className="text-3xl font-bold tracking-tight">Grid</h1>

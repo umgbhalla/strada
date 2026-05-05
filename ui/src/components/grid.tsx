@@ -184,15 +184,15 @@ function GridLines({ columns, rows, segments }: { columns: number; rows: number;
   const { verticalSegments, horizontalSegments, dots } = segments;
 
   return (
-    <div aria-hidden className="pointer-events-none absolute inset-0 z-10">
+    <>
       {verticalSegments.map(({ column, row }) => (
         <div
           key={`vertical-${column}-${row}`}
-          className="absolute w-px bg-border"
+          aria-hidden
+          className="pointer-events-none z-10 w-px self-stretch bg-border"
           style={{
-            left: linePosition(column, columns),
-            top: linePosition(row, rows),
-            bottom: `calc(100% - ${linePosition(row + 1, rows)})`,
+            ...gridColumnLine(column, columns),
+            gridRow: `${row + 1} / ${row + 2}`,
             opacity: isEdgeLine(column, columns) ? 0.55 : undefined,
           }}
         />
@@ -200,23 +200,47 @@ function GridLines({ columns, rows, segments }: { columns: number; rows: number;
       {horizontalSegments.map(({ column, row }) => (
         <div
           key={`horizontal-${column}-${row}`}
-          className="absolute h-px bg-border"
+          aria-hidden
+          className="pointer-events-none z-10 h-px justify-self-stretch bg-border"
           style={{
-            left: linePosition(column, columns),
-            right: `calc(100% - ${linePosition(column + 1, columns)})`,
-            top: linePosition(row, rows),
+            gridColumn: `${column + 1} / ${column + 2}`,
+            ...gridRowLine(row, rows),
           }}
         />
       ))}
       {dots.map(({ column, row }) => (
         <div
           key={`dot-${column}-${row}`}
-          className="absolute flex size-5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-background after:block after:size-[2px] after:rounded-full after:bg-foreground after:content-['']"
-          style={{ left: linePosition(column, columns), top: linePosition(row, rows) }}
+          aria-hidden
+          className={cn(
+            "pointer-events-none z-20 flex size-5 items-center justify-center rounded-full bg-background after:block after:size-[2px] after:rounded-full after:bg-foreground after:content-['']",
+            column === columns ? "translate-x-1/2" : "-translate-x-1/2",
+            row === rows ? "translate-y-1/2" : "-translate-y-1/2",
+          )}
+          style={{
+            ...gridColumnLine(column, columns),
+            ...gridRowLine(row, rows),
+          }}
         />
       ))}
-    </div>
+    </>
   );
+}
+
+function gridColumnLine(column: number, columns: number): CSSProperties {
+  if (column === columns) {
+    return { gridColumn: `${columns} / ${columns + 1}`, justifySelf: "end" };
+  }
+
+  return { gridColumn: `${column + 1} / ${column + 2}`, justifySelf: "start" };
+}
+
+function gridRowLine(row: number, rows: number): CSSProperties {
+  if (row === rows) {
+    return { gridRow: `${rows} / ${rows + 1}`, alignSelf: "end" };
+  }
+
+  return { gridRow: `${row + 1} / ${row + 2}`, alignSelf: "start" };
 }
 
 function placeGridItems({ children, columns, rows }: { children: ReactNode; columns: number; rows: number }) {
