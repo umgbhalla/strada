@@ -1,34 +1,12 @@
-// Shared card wrapper for dashboard widgets.
-// Encapsulates the consistent rounded-2xl surface + shadow + ring pattern.
+// Shared dashboard widget header used by generic widget panels.
 
-import * as React from 'react';
+import type * as React from 'react';
 
 import { cn } from '@/utils/cn';
 import * as Badge from '@/components/alignui/badge';
 import * as Button from '@/components/alignui/button';
 import * as Tooltip from '@/components/alignui/tooltip';
 import IconInfoCustom from '@/components/icons/icon-info-custom-fill';
-
-export function WidgetCard({
-  children,
-  className,
-  ...rest
-}: {
-  children: React.ReactNode;
-  className?: string;
-} & React.HTMLAttributes<HTMLDivElement>) {
-  return (
-    <div
-      className={cn(
-        'relative flex w-full flex-col gap-5',
-        className,
-      )}
-      {...rest}
-    >
-      {children}
-    </div>
-  );
-}
 
 type WidgetHeaderProps = {
   title: React.ReactNode;

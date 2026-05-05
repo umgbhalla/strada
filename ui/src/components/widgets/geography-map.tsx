@@ -20,7 +20,7 @@ import {
 
 import * as CompactButton from '@/components/alignui/compact-button';
 
-import type { LocationData } from './widget-geogprahy';
+import type { LocationData } from './geography-panel';
 
 const CustomMapControls = () => {
   const map = useMap();
@@ -168,6 +168,7 @@ export function GeographyMap({
       zoomControl={false}
       dragging
       className='h-full w-full bg-background!'
+      style={{ height: 224, width: '100%' }}
     >
       <CustomMapControls />
       <CenterControl center={mapCenter} />
