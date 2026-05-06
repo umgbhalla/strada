@@ -11,6 +11,10 @@ import {
   RiTimeLine,
   RiUser6Line,
 } from '@remixicon/react';
+import { LineChart } from "echarts/charts";
+import { AriaComponent, GridComponent, TooltipComponent } from "echarts/components";
+import * as echarts from "echarts/core";
+import { CanvasRenderer } from "echarts/renderers";
 import { Grid } from "./grid.tsx";
 import { ThemeToggle } from "./traces-graph/theme-toggle.tsx";
 import { SplitColumnsPanel } from "./widgets/split-columns-panel.tsx";
@@ -25,13 +29,24 @@ import { ProgressNavPanel } from "./widgets/progress-nav-panel.tsx";
 import { SparklinePanel } from "./widgets/sparkline-panel.tsx";
 import { GeographyPanel } from "./widgets/geography-panel.tsx";
 
+echarts.use([LineChart, GridComponent, TooltipComponent, CanvasRenderer, AriaComponent]);
+
 const demoMonthDate = (startMonthIndex: number, offset: number) =>
   new Date(Date.UTC(2023, startMonthIndex + offset, 1)).toISOString().slice(0, 10);
 
-const sparklineData = Array.from({ length: 40 }, (_, index) => ({
-  date: `2024-${String(Math.floor(index / 4) + 1).padStart(2, '0')}-${String((index % 4) * 7 + 1).padStart(2, '0')}`,
-  value: 8200 + ((index * 719) % 3900),
-}));
+const sparklineData = (() => {
+  const base = Date.UTC(2024, 0, 1);
+  const day = 86_400_000;
+  return [
+    {
+      name: 'Sales',
+      data: Array.from({ length: 40 }, (_, i): [number, number] => [
+        base + i * 7 * day,
+        8200 + ((i * 719) % 3900),
+      ]),
+    },
+  ];
+})();
 
 const sparklineMetrics = [
   { label: 'Online Store', value: '$52.12', change: '+4.5%', direction: 'up' as const, icon: RiStore2Line },
@@ -212,7 +227,9 @@ export function WidgetsGridDemoPage() {
                 value='$128.32'
                 badge='+2%'
                 actionLabel='Report'
+                echarts={echarts}
                 data={sparklineData}
+                gradient
                 metrics={sparklineMetrics}
               />
             </WidgetPanel>

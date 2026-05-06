@@ -1,4 +1,5 @@
 // Generic sparkline panel with repeated source metrics below the chart.
+// Uses the ECharts-based TimeseriesChart for rendering.
 
 'use client';
 
@@ -8,8 +9,7 @@ import {
   RiArrowUpLine,
 } from '@remixicon/react';
 
-import { cn } from '@/utils/cn';
-import { ChartLine, type LineChartDataPoint } from '@/components/chart-line';
+import { TimeseriesChart, type TimeseriesChartProps } from '@/components/charts';
 import { TimeRangeToggle } from '@/components/time-range-toggle';
 import { WidgetHeader } from '@/components/widget-card';
 
@@ -25,7 +25,12 @@ export type SparklinePanelProps = Pick<
   React.ComponentProps<typeof WidgetHeader>,
   'title' | 'value' | 'badge' | 'badgeColor' | 'actionLabel' | 'action'
 > & {
-  data: LineChartDataPoint[];
+  /** ECharts instance (caller must register chart types and renderer). */
+  echarts: TimeseriesChartProps['echarts'];
+  /** Timeseries data for the ECharts chart. */
+  data: TimeseriesChartProps['data'];
+  /** Whether to show a gradient fill under the line. */
+  gradient?: boolean;
   metrics: SparklinePanelMetric[];
   defaultRange?: string;
 };
@@ -37,7 +42,9 @@ export function SparklinePanel({
   badgeColor,
   actionLabel,
   action,
+  echarts,
   data,
+  gradient,
   metrics,
   defaultRange = '1w',
 }: SparklinePanelProps) {
@@ -56,16 +63,12 @@ export function SparklinePanel({
 
       <TimeRangeToggle value={selectedRange} onValueChange={setSelectedRange} />
 
-      <ChartLine
+      <TimeseriesChart
+        echarts={echarts}
         data={data}
         height={180}
-        showGrid
-        className={cn(
-          '[&_.recharts-cartesian-grid-horizontal>line]:stroke-border [&_.recharts-cartesian-grid-horizontal>line]:[stroke-dasharray:0]',
-          '[&_.recharts-cartesian-grid-vertical>line:last-child]:opacity-0 [&_.recharts-cartesian-grid-vertical>line:nth-last-child(2)]:opacity-0',
-        )}
-        margin={{ top: 6, right: 0, left: 0, bottom: 6 }}
-        yDomain={['auto', 'auto']}
+        gradient={gradient}
+        yAxisTickCount={3}
       />
 
       <div className='flex w-full flex-col gap-4'>
