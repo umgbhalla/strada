@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import MyMapString from '@/map.json';
+import MyMapString from '@strada.sh/ui/src/map.json';
 import {
   RiAddLine,
   RiExpandLeftRightLine,
@@ -18,7 +18,7 @@ import {
   useMapEvent,
 } from 'react-leaflet';
 
-import * as CompactButton from '@/components/alignui/compact-button';
+import * as CompactButton from '@strada.sh/ui/src/components/alignui/compact-button';
 
 import type { LocationData } from './geography-panel';
 

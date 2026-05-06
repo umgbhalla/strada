@@ -5,8 +5,8 @@
 import * as React from 'react';
 import { RiArrowLeftDownLine, RiArrowRightUpLine } from '@remixicon/react';
 
-import * as Divider from '@/components/alignui/divider';
-import { WidgetHeader } from '@/components/widget-card';
+import * as Divider from '@strada.sh/ui/src/components/alignui/divider';
+import { WidgetHeader } from '@strada.sh/ui/src/components/widget-card';
 
 import { DashedDividerVertical } from '../dashed-divider';
 

@@ -8,7 +8,7 @@ export default defineConfig({
   clearScreen: false,
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, 'src'),
+      '@strada.sh/ui/src': path.resolve(__dirname, 'src'),
       'next/dynamic': path.resolve(__dirname, 'src/shims/next-dynamic.ts'),
       'next-themes': path.resolve(__dirname, 'src/shims/next-themes.ts'),
     },

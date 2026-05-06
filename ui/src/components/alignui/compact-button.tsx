@@ -3,9 +3,9 @@
 import * as React from 'react';
 import { Slot } from '@radix-ui/react-slot';
 
-import { PolymorphicComponentProps } from '@/utils/polymorphic';
-import { recursiveCloneChildren } from '@/utils/recursive-clone-children';
-import { tv, type VariantProps } from '@/utils/tv';
+import { PolymorphicComponentProps } from '@strada.sh/ui/src/utils/polymorphic';
+import { recursiveCloneChildren } from '@strada.sh/ui/src/utils/recursive-clone-children';
+import { tv, type VariantProps } from '@strada.sh/ui/src/utils/tv';
 
 const COMPACT_BUTTON_ROOT_NAME = 'CompactButtonRoot';
 const COMPACT_BUTTON_ICON_NAME = 'CompactButtonIcon';

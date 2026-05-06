@@ -2,7 +2,7 @@
 
 import { Cell, Pie, PieChart as RechartsPieChart, Sector } from 'recharts';
 
-import { cn } from '@/utils/cn';
+import { cn } from '@strada.sh/ui/src/utils/cn';
 
 export const CIRCLE_SIZE = 90;
 const INNER_RADIUS = 32;

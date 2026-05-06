@@ -9,9 +9,9 @@ import {
   RiArrowUpLine,
 } from '@remixicon/react';
 
-import { TimeseriesChart, type TimeseriesChartProps } from '@/components/charts';
-import { TimeRangeToggle } from '@/components/time-range-toggle';
-import { WidgetHeader } from '@/components/widget-card';
+import { TimeseriesChart, type TimeseriesChartProps } from '@strada.sh/ui/src/components/charts';
+import { TimeRangeToggle } from '@strada.sh/ui/src/components/time-range-toggle';
+import { WidgetHeader } from '@strada.sh/ui/src/components/widget-card';
 
 export type SparklinePanelMetric = {
   label: string;

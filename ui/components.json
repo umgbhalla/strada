@@ -11,10 +11,10 @@
   },
   "iconLibrary": "lucide",
   "aliases": {
-    "components": "src/components",
-    "utils": "src/lib/utils",
-    "ui": "src/components/ui",
-    "lib": "src/lib"
+    "components": "@strada.sh/ui/src/components",
+    "utils": "@strada.sh/ui/src/lib/utils",
+    "ui": "@strada.sh/ui/src/components/ui",
+    "lib": "@strada.sh/ui/src/lib"
   },
   "registries": {
     "@coss": "https://coss.com/ui/r/{name}.json"

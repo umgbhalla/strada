@@ -4,9 +4,9 @@
 
 import * as React from 'react';
 
-import { LegendDot } from '@/components/legend-dot';
-import PieChart from '@/components/pie-chart';
-import { WidgetHeader } from '@/components/widget-card';
+import { LegendDot } from '@strada.sh/ui/src/components/legend-dot';
+import PieChart from '@strada.sh/ui/src/components/pie-chart';
+import { WidgetHeader } from '@strada.sh/ui/src/components/widget-card';
 
 export type DonutPanelDataItem = {
   id: string;

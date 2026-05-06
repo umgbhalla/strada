@@ -5,7 +5,7 @@
 import * as React from 'react';
 import dynamic from 'next/dynamic';
 
-import { WidgetHeader } from '@/components/widget-card';
+import { WidgetHeader } from '@strada.sh/ui/src/components/widget-card';
 
 if (typeof window !== 'undefined') {
   void import('leaflet/dist/leaflet.css');
