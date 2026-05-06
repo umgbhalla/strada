@@ -23,6 +23,8 @@ import {
   LogOutIcon,
   CheckIcon,
   MenuIcon,
+  SunIcon,
+  MoonIcon,
 } from "lucide-react";
 import { cn } from "../lib/utils.ts";
 import { Button } from "./ui/button.tsx";
@@ -215,6 +217,15 @@ function SidebarContent({
               </div>
             </div>
             <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={() => {
+                document.documentElement.classList.toggle("dark");
+              }}
+            >
+              <SunIcon className="size-4 text-muted-foreground hidden dark:block" />
+              <MoonIcon className="size-4 text-muted-foreground dark:hidden" />
+              Toggle dark mode
+            </DropdownMenuItem>
             <DropdownMenuItem
               onClick={async () => {
                 await authClient.signOut();

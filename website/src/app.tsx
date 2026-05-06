@@ -116,15 +116,15 @@ function GridSection({ children, grow, className, hideTop }: {
 }) {
   return (
     <div className={cn(
-      'relative max-w-(--content-max-width) mx-auto w-full border-x border-border md:border-l-0',
+      'relative max-w-(--content-max-width) mx-auto w-full border-x border-border md:border-x-0',
       grow && 'grow flex flex-col',
       className,
     )}>
       {!hideTop && <GridDot position="tl" className="md:hidden" />}
-      {!hideTop && <GridDot position="tr" />}
+      {!hideTop && <GridDot position="tr" className="md:hidden" />}
       {children}
       <GridDot position="bl" className="md:hidden" />
-      <GridDot position="br" />
+      <GridDot position="br" className="md:hidden" />
     </div>
   )
 }
@@ -327,7 +327,7 @@ export const app = new Spiceflow({ tracer })
     const { Sidebar, MobileDrawer, MobileMenuButton } = await import('./components/sidebar.tsx')
     const projectId = loaderData.projectId
     return (
-      <div className="isolate relative flex w-full h-screen overflow-clip">
+      <div className="isolate relative flex w-full min-h-screen">
         <Sidebar />
         <MobileDrawer />
         {/* Mobile hamburger */}
@@ -346,8 +346,8 @@ export const app = new Spiceflow({ tracer })
               <GridDivider />
             </>
           )}
-          <GridSection grow className="overflow-hidden">
-            <main className="flex-1 overflow-auto p-6">
+          <GridSection grow>
+            <main className="flex-1 p-6">
               {children}
             </main>
           </GridSection>
@@ -421,8 +421,8 @@ export const app = new Spiceflow({ tracer })
 
   // ── Project page (Errors tab with widget dashboard) ─────────────
   .page('/dash/projects/:projectId', async () => {
-    const { WidgetsGridDemoPage } = await import('@strada.sh/ui/src/components/widgets-grid-demo')
-    return <WidgetsGridDemoPage />
+    const { ErrorsDashboard } = await import('./components/errors-dashboard.tsx')
+    return <ErrorsDashboard />
   })
 
   // ── Issues tab placeholder ─────────────────────────────────────
