@@ -1,6 +1,6 @@
 import { createTV } from 'tailwind-variants';
 
-import { twMergeConfig } from '@strada.sh/ui/src/utils/cn';
+import { twMergeConfig } from '@strada.sh/ui/src/utils/cn.ts';
 
 export type { VariantProps, ClassValue } from 'tailwind-variants';
 

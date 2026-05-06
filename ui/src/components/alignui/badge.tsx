@@ -3,9 +3,9 @@
 import * as React from 'react';
 import { Slot } from '@radix-ui/react-slot';
 
-import type { PolymorphicComponentProps } from '@strada.sh/ui/src/utils/polymorphic';
-import { recursiveCloneChildren } from '@strada.sh/ui/src/utils/recursive-clone-children';
-import { tv, type VariantProps } from '@strada.sh/ui/src/utils/tv';
+import type { PolymorphicComponentProps } from '@strada.sh/ui/src/utils/polymorphic.ts';
+import { recursiveCloneChildren } from '@strada.sh/ui/src/utils/recursive-clone-children.tsx';
+import { tv, type VariantProps } from '@strada.sh/ui/src/utils/tv.ts';
 
 const BADGE_ROOT_NAME = 'BadgeRoot';
 const BADGE_ICON_NAME = 'BadgeIcon';

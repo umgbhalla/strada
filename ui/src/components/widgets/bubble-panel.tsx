@@ -4,11 +4,11 @@
 
 import * as React from 'react';
 
-import BubbleChart, { BubbleDataPoint } from '@strada.sh/ui/src/components/bubble-chart';
-import IconArrowTrendDown from '@strada.sh/ui/src/components/icons/arrow-trend-down';
-import IconArrowTrendUp from '@strada.sh/ui/src/components/icons/arrow-trend-up';
-import { LegendDot } from '@strada.sh/ui/src/components/legend-dot';
-import { WidgetHeader } from '@strada.sh/ui/src/components/widget-card';
+import BubbleChart, { BubbleDataPoint } from '@strada.sh/ui/src/components/bubble-chart.tsx';
+import IconArrowTrendDown from '@strada.sh/ui/src/components/icons/arrow-trend-down.tsx';
+import IconArrowTrendUp from '@strada.sh/ui/src/components/icons/arrow-trend-up.tsx';
+import { LegendDot } from '@strada.sh/ui/src/components/legend-dot.tsx';
+import { WidgetHeader } from '@strada.sh/ui/src/components/widget-card.tsx';
 
 export type BubblePanelDataItem = BubbleDataPoint & {
   label: string;

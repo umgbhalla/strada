@@ -8,10 +8,10 @@ import {
   RiArrowUpLine,
 } from '@remixicon/react';
 
-import * as Button from '@strada.sh/ui/src/components/alignui/button';
-import { CategoryBarChart } from '@strada.sh/ui/src/components/chart-category-bar';
-import { DashedDivider } from '@strada.sh/ui/src/components/dashed-divider';
-import { WidgetHeader } from '@strada.sh/ui/src/components/widget-card';
+import * as Button from '@strada.sh/ui/src/components/alignui/button.tsx';
+import { CategoryBarChart } from '@strada.sh/ui/src/components/chart-category-bar.tsx';
+import { DashedDivider } from '@strada.sh/ui/src/components/dashed-divider.tsx';
+import { WidgetHeader } from '@strada.sh/ui/src/components/widget-card.tsx';
 
 export type ProportionPanelDataItem = {
   label: string;

@@ -3,7 +3,7 @@
 'use client';
 
 import * as React from 'react';
-import { WidgetHeader } from '@strada.sh/ui/src/components/widget-card';
+import { WidgetHeader } from '@strada.sh/ui/src/components/widget-card.tsx';
 
 if (typeof window !== 'undefined') {
   void import('leaflet/dist/leaflet.css');
@@ -39,7 +39,7 @@ export function GeographyPanel({
   initialHighlightedId,
 }: GeographyPanelProps) {
   const [highlightedId, setHighlightedId] = React.useState<number>(
-    initialHighlightedId ?? data[0].id,
+    initialHighlightedId ?? data[0]!.id,
   );
   const highlightedLocation = data.find(
     (location) => location.id === highlightedId,

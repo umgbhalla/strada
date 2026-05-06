@@ -18,7 +18,7 @@ import {
   useMapEvent,
 } from 'react-leaflet';
 
-import * as CompactButton from '@strada.sh/ui/src/components/alignui/compact-button';
+import * as CompactButton from '@strada.sh/ui/src/components/alignui/compact-button.tsx';
 
 import type { LocationData } from './geography-panel';
 

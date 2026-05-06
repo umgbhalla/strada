@@ -61,20 +61,21 @@ const SERVICE_PALETTE = [
   { hue: 355, c: 0.11 }, // Red
 ]
 
-function getServiceColor(idx: number) {
-  if (idx < SERVICE_PALETTE.length) return SERVICE_PALETTE[idx]
+function getServiceColor(idx: number): { hue: number; c: number } {
+  if (idx >= 0 && idx < SERVICE_PALETTE.length) return SERVICE_PALETTE[idx]!
   const hue = (idx * 137.508) % 360
   return { hue, c: 0.10 }
 }
 
 export function getServiceLegendColor(serviceName: string, services: string[]): string {
-  const { hue, c } = getServiceColor(services.indexOf(serviceName))
-  return `oklch(0.58 ${c} ${hue})`
+  const color = getServiceColor(services.indexOf(serviceName))
+  return `oklch(0.58 ${color.c} ${color.hue})`
 }
 
 /** Returns { bg, hover } colors for a span bar. */
 export function getServiceBarColors(serviceName: string, services: string[], isDark: boolean) {
-  const { hue, c } = getServiceColor(services.indexOf(serviceName))
+  const color = getServiceColor(services.indexOf(serviceName))
+  const { hue, c } = color
   if (isDark) {
     return {
       bg: `oklch(0.45 ${c} ${hue})`,
@@ -107,17 +108,18 @@ export function calculateSelfTime(
   if (intervals.length === 0) return span.durationMs
 
   // Merge overlapping intervals
-  const merged = [intervals[0]]
+  const merged = [intervals[0]!]
   for (let i = 1; i < intervals.length; i++) {
-    const last = merged[merged.length - 1]
-    if (intervals[i].start <= last.end) {
-      last.end = Math.max(last.end, intervals[i].end)
+    const last = merged[merged.length - 1]!
+    const curr = intervals[i]!
+    if (curr.start <= last.end) {
+      last.end = Math.max(last.end, curr.end)
     } else {
-      merged.push(intervals[i])
+      merged.push(curr)
     }
   }
 
-  const childrenTime = merged.reduce((sum, i) => sum + (i.end - i.start), 0)
+  const childrenTime = merged.reduce((sum, iv) => sum + (iv.end - iv.start), 0)
   return Math.max(0, span.durationMs - childrenTime)
 }
 
@@ -131,8 +133,8 @@ export function getHttpInfo(spanName: string, attrs: Record<string, string>) {
 
   if (!method) {
     const parts = spanName.split(" ")
-    if (parts.length >= 2 && HTTP_METHODS.includes(parts[0].toUpperCase() as (typeof HTTP_METHODS)[number])) {
-      method = parts[0].toUpperCase()
+    if (parts.length >= 2 && HTTP_METHODS.includes(parts[0]!.toUpperCase() as (typeof HTTP_METHODS)[number])) {
+      method = parts[0]!.toUpperCase()
       if (!route) route = parts.slice(1).join(" ")
     }
   }
@@ -231,11 +233,13 @@ export function buildSpanTree(rows: OtelTraceRow[]) {
 // ─── Dark mode detection (hydration-safe) ───────────────────────
 
 function getIsDark(): boolean {
+  if (typeof document === "undefined") return false
   return document.documentElement.classList.contains("dark")
 }
 const getServerIsDark = () => false
 
 function subscribeTheme(cb: () => void) {
+  if (typeof window === "undefined") return () => {}
   const observer = new MutationObserver(cb)
   observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] })
   return () => observer.disconnect()

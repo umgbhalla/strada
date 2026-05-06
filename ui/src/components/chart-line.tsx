@@ -13,7 +13,7 @@ import {
   YAxis,
 } from 'recharts';
 
-import { cn } from '@strada.sh/ui/src/utils/cn';
+import { cn } from '@strada.sh/ui/src/utils/cn.ts';
 
 export type LineChartDataPoint = {
   date: string;

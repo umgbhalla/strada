@@ -172,7 +172,7 @@ export function buildTimeseriesChartOption({
           return true
         })
         const first = filteredParams[0]
-        const ts = Array.isArray(first?.value) ? first.value[0] : first?.axisValue
+        const ts = Array.isArray(first?.value) ? first.value[0] : (first as any)?.axisValue
         const header = ts != null
           ? `<div style="font-weight:600;margin-bottom:4px;">${echarts.format.encodeHTML(formatTimestamp(ts))}</div>`
           : ''
@@ -269,7 +269,7 @@ function colorWithOpacity(color: string, alpha: number): string {
   if (rgbMatch) return `rgba(${rgbMatch[1]}, ${rgbMatch[2]}, ${rgbMatch[3]}, ${opacity})`
 
   let hex = color.replace(/^#/, '')
-  if (hex.length === 3) hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2]
+  if (hex.length === 3) hex = hex[0]! + hex[0]! + hex[1]! + hex[1]! + hex[2]! + hex[2]!
   if (hex.length === 8) hex = hex.slice(0, 6)
   if (!/^[\da-f]{6}$/i.test(hex)) return color
 

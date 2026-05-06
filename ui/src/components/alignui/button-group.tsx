@@ -3,9 +3,9 @@
 import * as React from 'react';
 import { Slot } from '@radix-ui/react-slot';
 
-import { PolymorphicComponentProps } from '@strada.sh/ui/src/utils/polymorphic';
-import { recursiveCloneChildren } from '@strada.sh/ui/src/utils/recursive-clone-children';
-import { tv, type VariantProps } from '@strada.sh/ui/src/utils/tv';
+import { PolymorphicComponentProps } from '@strada.sh/ui/src/utils/polymorphic.ts';
+import { recursiveCloneChildren } from '@strada.sh/ui/src/utils/recursive-clone-children.tsx';
+import { tv, type VariantProps } from '@strada.sh/ui/src/utils/tv.ts';
 
 const BUTTON_GROUP_ROOT_NAME = 'ButtonGroupRoot';
 const BUTTON_GROUP_ITEM_NAME = 'ButtonGroupItem';

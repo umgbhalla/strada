@@ -6,10 +6,10 @@ import * as React from 'react';
 import NumberFlow from '@number-flow/react';
 import { RiArrowLeftSLine, RiArrowRightSLine } from '@remixicon/react';
 
-import { cn } from '@strada.sh/ui/src/utils/cn';
-import { useAnimateNumber } from '@strada.sh/ui/src/hooks/use-animate-number';
-import { ProgressChart } from '@strada.sh/ui/src/components/progress-chart';
-import { WidgetHeader } from '@strada.sh/ui/src/components/widget-card';
+import { cn } from '@strada.sh/ui/src/utils/cn.ts';
+import { useAnimateNumber } from '@strada.sh/ui/src/hooks/use-animate-number.ts';
+import { ProgressChart } from '@strada.sh/ui/src/components/progress-chart.tsx';
+import { WidgetHeader } from '@strada.sh/ui/src/components/widget-card.tsx';
 
 export type ProgressNavPanelDataItem = {
   id: string;
@@ -45,7 +45,7 @@ export function ProgressNavPanel({
   const initialRenderRef = React.useRef(true);
   const prevValueRef = React.useRef(0);
 
-  const activeItem = data[currentIndex];
+  const activeItem = data[currentIndex]!;
 
   const handlePrevious = () => {
     setCurrentIndex((prev) =>

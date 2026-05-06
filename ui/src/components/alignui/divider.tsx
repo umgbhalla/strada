@@ -1,6 +1,6 @@
 // AlignUI Divider v0.0.0
 
-import { tv, type VariantProps } from '@strada.sh/ui/src/utils/tv';
+import { tv, type VariantProps } from '@strada.sh/ui/src/utils/tv.ts';
 
 const DIVIDER_ROOT_NAME = 'DividerRoot';
 

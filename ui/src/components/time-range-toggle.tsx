@@ -6,7 +6,7 @@
 import * as React from 'react';
 import * as ToggleGroupPrimitive from '@radix-ui/react-toggle-group';
 
-import * as ButtonGroup from '@strada.sh/ui/src/components/alignui/button-group';
+import * as ButtonGroup from '@strada.sh/ui/src/components/alignui/button-group.tsx';
 
 export type TimeRangeOption = {
   value: string;

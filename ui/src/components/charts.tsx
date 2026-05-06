@@ -269,7 +269,7 @@ export function TimeseriesChart({
     if (!onTimeRangeChange) return {}
     return {
       brushend: (params) => {
-        const range = params.areas[0].coordRange
+        const range = params.areas[0]!.coordRange
         onTimeRangeChange(range[0], range[1])
         chartRef.current?.dispatchAction({ type: 'brush', areas: [] })
       },

@@ -2,11 +2,11 @@
 
 import type * as React from 'react';
 
-import { cn } from '@strada.sh/ui/src/utils/cn';
-import * as Badge from '@strada.sh/ui/src/components/alignui/badge';
-import * as Button from '@strada.sh/ui/src/components/alignui/button';
-import * as Tooltip from '@strada.sh/ui/src/components/alignui/tooltip';
-import IconInfoCustom from '@strada.sh/ui/src/components/icons/icon-info-custom-fill';
+import { cn } from '@strada.sh/ui/src/utils/cn.ts';
+import * as Badge from '@strada.sh/ui/src/components/alignui/badge.tsx';
+import * as Button from '@strada.sh/ui/src/components/alignui/button.tsx';
+import * as Tooltip from '@strada.sh/ui/src/components/alignui/tooltip.tsx';
+import IconInfoCustom from '@strada.sh/ui/src/components/icons/icon-info-custom-fill.tsx';
 
 type WidgetHeaderProps = {
   title: React.ReactNode;

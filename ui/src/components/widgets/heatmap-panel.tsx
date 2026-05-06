@@ -4,9 +4,9 @@
 
 import * as React from 'react';
 
-import { ChartRetentionHeatmap } from '@strada.sh/ui/src/components/chart-retention-heatmap';
-import IconInfoCustom from '@strada.sh/ui/src/components/icons/icon-info-custom-fill';
-import { WidgetHeader } from '@strada.sh/ui/src/components/widget-card';
+import { ChartRetentionHeatmap } from '@strada.sh/ui/src/components/chart-retention-heatmap.tsx';
+import IconInfoCustom from '@strada.sh/ui/src/components/icons/icon-info-custom-fill.tsx';
+import { WidgetHeader } from '@strada.sh/ui/src/components/widget-card.tsx';
 
 export type HeatmapPanelProps = Pick<
   React.ComponentProps<typeof WidgetHeader>,

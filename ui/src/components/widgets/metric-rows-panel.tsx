@@ -6,9 +6,9 @@ import * as React from 'react';
 import { RiArrowDownLine, RiArrowUpLine } from '@remixicon/react';
 import { format } from 'date-fns';
 
-import * as Divider from '@strada.sh/ui/src/components/alignui/divider';
-import { ChartArea, type AreaChartDataPoint } from '@strada.sh/ui/src/components/chart-area';
-import { WidgetHeader } from '@strada.sh/ui/src/components/widget-card';
+import * as Divider from '@strada.sh/ui/src/components/alignui/divider.tsx';
+import { ChartArea, type AreaChartDataPoint } from '@strada.sh/ui/src/components/chart-area.tsx';
+import { WidgetHeader } from '@strada.sh/ui/src/components/widget-card.tsx';
 
 export type MetricRowsPanelDataItem = {
   label: string;

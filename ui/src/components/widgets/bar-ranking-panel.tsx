@@ -4,9 +4,9 @@
 
 import * as React from 'react';
 
-import { ChartVerticalBar, type VerticalBarDataPoint } from '@strada.sh/ui/src/components/chart-vertical-bar';
-import { TimeRangeToggle } from '@strada.sh/ui/src/components/time-range-toggle';
-import { WidgetHeader } from '@strada.sh/ui/src/components/widget-card';
+import { ChartVerticalBar, type VerticalBarDataPoint } from '@strada.sh/ui/src/components/chart-vertical-bar.tsx';
+import { TimeRangeToggle } from '@strada.sh/ui/src/components/time-range-toggle.tsx';
+import { WidgetHeader } from '@strada.sh/ui/src/components/widget-card.tsx';
 
 export type BarRankingPanelRange = '1d' | '1w' | '1m' | '3m' | '1y';
 

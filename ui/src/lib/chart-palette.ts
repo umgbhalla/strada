@@ -36,7 +36,7 @@ export function getChartColor(color: ChartColorToken, isDarkMode = false): strin
 }
 
 export function resolveChartColor({ color, index, isDarkMode = false }: { color?: ChartColor; index: number; isDarkMode?: boolean }): string {
-  const token = color || defaultChartColorTokens[index % defaultChartColorTokens.length]
+  const token = color ?? defaultChartColorTokens[index % defaultChartColorTokens.length]!
   const chartToken = toChartColorToken(token)
   if (chartToken) return getChartColor(chartToken, isDarkMode)
   return token
