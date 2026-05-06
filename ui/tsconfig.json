@@ -20,9 +20,7 @@
     "types": ["vite/client", "node"],
     "baseUrl": ".",
     "paths": {
-      "@strada.sh/ui/src/*": ["./src/*"],
-      "next/dynamic": ["src/shims/next-dynamic.ts"],
-      "next-themes": ["src/shims/next-themes.ts"]
+      "@strada.sh/ui/src/*": ["./src/*"]
     }
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"],

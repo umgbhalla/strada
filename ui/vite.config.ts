@@ -9,8 +9,6 @@ export default defineConfig({
   resolve: {
     alias: {
       '@strada.sh/ui/src': path.resolve(__dirname, 'src'),
-      'next/dynamic': path.resolve(__dirname, 'src/shims/next-dynamic.ts'),
-      'next-themes': path.resolve(__dirname, 'src/shims/next-themes.ts'),
     },
   },
   plugins: [

@@ -9,7 +9,7 @@ import {
 } from '@remixicon/react';
 import DottedMap from 'dotted-map/without-countries';
 import type { LatLngBoundsExpression, LatLngExpression, LatLngTuple } from 'leaflet';
-import { useTheme } from 'next-themes';
+import { useIsDark } from '../../lib/utils.ts';
 import {
   CircleMarker,
   ImageOverlay,
@@ -103,8 +103,7 @@ const mapBounds: LatLngBoundsExpression = [
 ];
 
 const DottedMapOverlay = React.memo(() => {
-  const { resolvedTheme } = useTheme();
-  const isDark = resolvedTheme === 'dark';
+  const isDark = useIsDark();
 
   const svgMap = React.useMemo(() => {
     return dotMap.getSVG({

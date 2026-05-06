@@ -3,22 +3,14 @@
 'use client';
 
 import * as React from 'react';
-import dynamic from 'next/dynamic';
-
 import { WidgetHeader } from '@strada.sh/ui/src/components/widget-card';
 
 if (typeof window !== 'undefined') {
   void import('leaflet/dist/leaflet.css');
 }
 
-const GeographyMap = dynamic(
-  () =>
-    import('./geography-map').then((mod) => ({
-      default: mod.GeographyMap,
-    })),
-  {
-    ssr: false,
-  },
+const GeographyMap = React.lazy(() =>
+  import('./geography-map').then((mod) => ({ default: mod.GeographyMap })),
 );
 
 export interface LocationData {
@@ -84,11 +76,13 @@ export function GeographyPanel({
       </div>
 
       <div className='relative h-[224px] min-h-[224px] flex-1'>
-        <GeographyMap
-          highlightedId={highlightedId}
-          setHighlightedId={setHighlightedId}
-          data={data}
-        />
+        <React.Suspense fallback={null}>
+          <GeographyMap
+            highlightedId={highlightedId}
+            setHighlightedId={setHighlightedId}
+            data={data}
+          />
+        </React.Suspense>
       </div>
     </div>
   );
