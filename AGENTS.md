@@ -10,6 +10,8 @@ Each user gets their own ClickHouse database. There are no shared tenants. Withi
 
 Strada is a Cloudflare-based infrastructure that wraps the user's database and handles: authentication, team invites, ingestion, a UI for browsing logs/errors/spans, email alerts, token generation, and a CLI to query the data.
 
+This project uses **Sigillo** for secrets management. Load the `sigillo` skill when working with secrets, env vars, or dev server scripts. Secrets are injected at runtime via `sigillo run --` so they never touch `.env` files or the agent context window. The `website/` dev script uses `sigillo run -- vite dev` and deploy scripts use `sigillo run -c preview` / `sigillo run -c prod`. Never create `.dev.vars` or `.env` files manually.
+
 We use the standard OTel schema for ClickHouse: https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/exporter/clickhouseexporter/internal/sqltemplates/logs_json_table.sql
 
 See other files in sqltemplates as well for other kinds of tables.

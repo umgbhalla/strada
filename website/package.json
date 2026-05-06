@@ -10,7 +10,7 @@
     "./dist/*": "./dist/*"
   },
   "scripts": {
-    "dev": "pnpm db:migrate:local && vite dev",
+    "dev": "pnpm db:migrate:local && sigillo run -- vite dev",
     "build": "tsc -p tsconfig.json && vite build",
     "typecheck": "tsc --noEmit",
     "types": "wrangler types",
@@ -22,6 +22,7 @@
     "deploy:prod": "pnpm db:migrate:prod && sigillo run -c prod -- vite build && wrangler deploy"
   },
   "dependencies": {
+    "@base-ui/react": "^1.4.1",
     "@better-auth/drizzle-adapter": "https://pkg.pr.new/better-auth/better-auth/@better-auth/drizzle-adapter@6913",
     "@strada.sh/sdk": "workspace:^",
     "@tailwindcss/vite": "^4.2.2",
@@ -30,16 +31,18 @@
     "clsx": "^2.1.1",
     "db": "workspace:^",
     "drizzle-orm": "1.0.0-beta.21",
+    "lucide-react": "^1.14.0",
     "marked": "^18.0.2",
     "radix-ui": "latest",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
-    "spiceflow": "1.20.0-rsc.0",
+    "spiceflow": "1.22.0-rsc.0",
     "strada": "workspace:^",
     "string-dedent": "^3.0.2",
     "tailwind-merge": "^3.5.0",
     "tailwindcss": "^4.2.2",
     "ulid": "latest",
+    "vaul": "^1.1.2",
     "zod": "latest"
   },
   "devDependencies": {
