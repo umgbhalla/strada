@@ -1,5 +1,6 @@
 /* Tailwind v4 global styles and shadcn-style design tokens for the website UI. */
 @import 'tailwindcss';
+@source "../../ui/src/*";
 
 @theme inline {
   --font-sans: var(--font-sans);
@@ -38,10 +39,13 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+  --color-overlay: var(--overlay);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  --radius-10: 0.625rem;
+  --radius-20: 1.25rem;
   --animate-skeleton: skeleton 2s -1s infinite linear;
   @keyframes skeleton {
     to {
@@ -86,6 +90,7 @@
   --sidebar-accent-foreground: var(--foreground);
   --sidebar-border: --alpha(var(--color-black) / 6%);
   --sidebar-ring: var(--color-neutral-400);
+  --overlay: #3333333d;
 
   @variant dark {
     --background: var(--color-neutral-950);
@@ -121,6 +126,7 @@
     --sidebar-accent-foreground: var(--color-neutral-100);
     --sidebar-border: --alpha(var(--color-white) / 8%);
     --sidebar-ring: var(--color-neutral-400);
+    --overlay: #3333338f;
   }
 }
 
@@ -166,5 +172,22 @@
   -ms-overflow-style: none;
 }
 .scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* @strada.sh/ui chart and widget utilities */
+@keyframes chart-category-cell-load { 100% { width: 100%; } }
+
+@utility chart-category-cell-load {
+  width: 0;
+  animation: chart-category-cell-load 1.2s calc(var(--i) * 0.12s) cubic-bezier(0.6, 0.6, 0, 1) forwards;
+}
+
+.remixicon path { transform: scale(0.8996); transform-origin: center; }
+
+.scrollbar-none {
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
   display: none;
 }

@@ -419,23 +419,10 @@ export const app = new Spiceflow({ tracer })
     )
   })
 
-  // ── Project page (placeholder for Errors tab) ──────────────────
+  // ── Project page (Errors tab with widget dashboard) ─────────────
   .page('/dash/projects/:projectId', async () => {
-    return (
-      <div className="flex flex-col items-center justify-center h-full text-center gap-4 py-20">
-        <div className="rounded-full bg-muted p-4">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="size-8 text-muted-foreground">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
-          </svg>
-        </div>
-        <div>
-          <h2 className="text-lg font-semibold">Errors</h2>
-          <p className="text-sm text-muted-foreground mt-1">
-            Error data will appear here once your app starts sending telemetry.
-          </p>
-        </div>
-      </div>
-    )
+    const { WidgetsGridDemoPage } = await import('@strada.sh/ui/src/components/widgets-grid-demo')
+    return <WidgetsGridDemoPage />
   })
 
   // ── Issues tab placeholder ─────────────────────────────────────
