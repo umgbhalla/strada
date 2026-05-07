@@ -71,27 +71,20 @@ export function SparklinePanel({
         yAxisTickCount={3}
       />
 
-      <div className='flex w-full flex-col gap-4'>
+      <div className='grid w-full grid-cols-[20px_1fr_auto_20px_auto] items-center gap-x-1.5 gap-y-4'>
         {metrics.map((metric) => {
           const Icon = metric.icon;
           const TrendIcon = metric.direction === 'up' ? RiArrowUpLine : RiArrowDownLine;
           return (
-            <div key={metric.label} className='flex items-center gap-1.5'>
-              <div className='flex flex-1 items-center gap-1.5'>
-                <Icon className='size-5 shrink-0 text-foreground/40' />
-                <div className='text-sm font-medium text-muted-foreground'>{metric.label}</div>
+            <React.Fragment key={metric.label}>
+              <Icon className='size-5 shrink-0 text-foreground/40' />
+              <div className='text-sm font-medium text-muted-foreground'>{metric.label}</div>
+              <div className='text-right text-sm font-normal tabular-nums text-muted-foreground'>
+                {metric.value}
               </div>
-
-              <div className='flex items-center gap-1.5'>
-                <div className='min-w-16 text-sm font-normal tabular-nums text-muted-foreground'>
-                  {metric.value}
-                </div>
-                <div className='flex min-w-16 items-center justify-end gap-0.5 pl-1 text-right tabular-nums'>
-                  <TrendIcon className={metric.direction === 'up' ? 'size-5 shrink-0 text-success' : 'size-5 shrink-0 text-destructive'} />
-                  <div className='text-sm font-normal text-muted-foreground'>{metric.change}</div>
-                </div>
-              </div>
-            </div>
+              <TrendIcon className={metric.direction === 'up' ? 'size-5 shrink-0 text-success' : 'size-5 shrink-0 text-destructive'} />
+              <div className='text-sm font-normal tabular-nums text-muted-foreground'>{metric.change}</div>
+            </React.Fragment>
           );
         })}
       </div>

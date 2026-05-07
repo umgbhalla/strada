@@ -25,6 +25,8 @@ export type DonutPanelProps = Pick<
   circleSize?: number;
   currency?: string;
   locale?: string;
+  /** Custom value formatter. When provided, overrides the default currency formatter. */
+  formatValue?: (value: number) => string;
 };
 
 export function DonutPanel({
@@ -40,6 +42,7 @@ export function DonutPanel({
   circleSize = 98,
   currency = 'USD',
   locale = 'en-US',
+  formatValue,
 }: DonutPanelProps) {
   const totalValue = data.reduce(
     (sum, segment) => sum + segment.value,
@@ -87,11 +90,13 @@ export function DonutPanel({
 
                 <div className='flex items-center gap-1.5 tabular-nums'>
                   <div className='text-sm font-medium text-muted-foreground'>
-                    {new Intl.NumberFormat(locale, {
-                      style: 'currency',
-                      currency,
-                      maximumFractionDigits: 0,
-                    }).format(s.value)}
+                    {formatValue
+                      ? formatValue(s.value)
+                      : new Intl.NumberFormat(locale, {
+                          style: 'currency',
+                          currency,
+                          maximumFractionDigits: 0,
+                        }).format(s.value)}
                   </div>
                   <div className='text-sm font-normal text-foreground/25'>
                     ·
