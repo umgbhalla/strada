@@ -67,6 +67,7 @@ export {
   type CaptureExceptionOptions,
   type StradaTelemetryOptions,
   type StartSpanOptions,
+  type DisposableSpan,
   setTags,
   startSpan,
   startInactiveSpan,

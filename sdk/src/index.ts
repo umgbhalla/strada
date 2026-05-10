@@ -28,6 +28,7 @@ export {
   type StradaTelemetryOptions,
   type CaptureExceptionOptions,
   type StartSpanOptions,
+  type DisposableSpan,
   type StradaLogger,
   type BatchSpanProcessorBrowserConfig,
   type BatchLogRecordProcessorBrowserConfig,

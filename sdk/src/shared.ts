@@ -739,24 +739,51 @@ export function startSpan<T>(
 }
 
 /**
+ * An OTel Span that implements `Disposable` for use with the `using` keyword.
+ * All standard Span methods are delegated to the underlying span.
+ * When the block exits, `Symbol.dispose` calls `span.end()` automatically.
+ *
+ * @example
+ * ```ts
+ * {
+ *   using span = startInactiveSpan({ name: 'bg-task' })
+ *   span.setAttribute('queue', 'jobs')
+ * } // span.end() called automatically
+ * ```
+ */
+export type DisposableSpan = OtelSpan & Disposable;
+
+/**
  * Create a span without setting it as active in context.
  *
- * The span is NOT auto-ended. You must call `span.end()` yourself.
+ * The returned span implements `Disposable`, so it can be used with
+ * the `using` keyword for automatic `span.end()` on scope exit.
+ * You can also call `span.end()` manually if you prefer.
+ *
  * Use this for background or parallel work that should not parent
  * child spans created in the current context.
  *
  * @example
  * ```ts
+ * // with using — span.end() called automatically
+ * {
+ *   using span = startInactiveSpan({ name: 'bg-task' })
+ *   span.setAttribute('queue', 'jobs')
+ * }
+ *
+ * // without using — call span.end() yourself
  * const span = startInactiveSpan({ name: 'bg-task' })
  * doWork().finally(() => span.end())
  * ```
  */
-export function startInactiveSpan(options: StartSpanOptions): OtelSpan {
+export function startInactiveSpan(options: StartSpanOptions): DisposableSpan {
   const tracer = _trace.getTracer("strada");
-  return tracer.startSpan(options.name, {
+  const span = tracer.startSpan(options.name, {
     attributes: options.attributes,
     kind: options.kind,
   });
+  (span as DisposableSpan)[Symbol.dispose] = () => span.end();
+  return span as DisposableSpan;
 }
 
 /**

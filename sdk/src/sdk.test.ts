@@ -1064,6 +1064,44 @@ describe("startInactiveSpan", () => {
     expect(spans[0]!.attributes["queue"]).toBe("jobs");
     expect(spans[0]!.kind).toBe(3);
   });
+
+  it("implements Symbol.dispose for auto-end via using", () => {
+    {
+      using span = startInactiveSpan({ name: "disposable-span" });
+      span.setAttribute("step", "work");
+    }
+    // span.end() was called automatically by Symbol.dispose
+
+    const spans = exporter.getFinishedSpans();
+    expect(spans).toHaveLength(1);
+    expect(spans[0]!.name).toBe("disposable-span");
+    expect(spans[0]!.attributes["step"]).toBe("work");
+  });
+
+  it("using auto-ends span even when an error is thrown", () => {
+    expect(() => {
+      using span = startInactiveSpan({ name: "error-disposable" });
+      span.setAttribute("before", "throw");
+      throw new Error("boom");
+    }).toThrow("boom");
+
+    const spans = exporter.getFinishedSpans();
+    expect(spans).toHaveLength(1);
+    expect(spans[0]!.name).toBe("error-disposable");
+    expect(spans[0]!.attributes["before"]).toBe("throw");
+  });
+
+  it("manual span.end() before dispose does not throw", () => {
+    {
+      using span = startInactiveSpan({ name: "double-end" });
+      span.end(); // manual end first
+    }
+    // Symbol.dispose calls span.end() again — OTel ignores double end
+
+    const spans = exporter.getFinishedSpans();
+    expect(spans).toHaveLength(1);
+    expect(spans[0]!.name).toBe("double-end");
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -189,23 +189,105 @@ Spans from **different tracer instances** also nest correctly. Parent-child is d
 
 **Use `startSpan` by default.** It creates a span, sets it as active in context, auto-ends it, and auto-records errors. Any spans created inside the callback are automatically parented.
 
-`startInactiveSpan` only creates a span. It does **not** set it as active and does **not** auto-end. You must call `span.end()` yourself. Use this for **background or fire-and-forget work** that should not parent child spans.
+`startInactiveSpan` only creates a span. It does **not** set it as active and does **not** auto-end. You must call `span.end()` yourself. Use this for work that should not parent subsequent spans.
+
+The difference matters because the **active span** determines what future spans get parented to. With `startSpan`, everything created inside the callback becomes a child. With `startInactiveSpan`, the context is unchanged, so subsequent spans stay siblings of the inactive span rather than children.
+
+In a trace viewer:
+
+```
+startSpan produces a nested tree          startInactiveSpan produces flat siblings
+
+process-order ████████████████████        process-order ████████████████████
+  ├─ validate  ████████                     ├─ send-email    ██████████████
+  └─ charge     ████████████                ├─ send-webhook  █████████████
+                                            └─ log-audit     █████
+```
+
+#### When to use `startSpan`
+
+Use it for **sequential work with sub-steps** where you want a hierarchy in the trace viewer.
+
+```ts
+import { startSpan } from "@strada.sh/sdk"
+
+// HTTP request handler: the request span parents all sub-operations
+await startSpan({ name: "POST /checkout" }, async () => {
+  await startSpan({ name: "validate-cart" }, async () => {
+    await validateCart(cartId)
+  })
+  await startSpan({ name: "charge-payment" }, async (span) => {
+    span.setAttribute("payment.provider", "stripe")
+    await chargeCard(paymentMethod)
+  })
+  await startSpan({ name: "send-confirmation" }, async () => {
+    await sendEmail(userId)
+  })
+})
+```
+
+Other good uses: database transactions with multiple queries, multi-step pipelines, middleware chains, any operation where the sub-steps are logically "inside" the parent.
+
+#### When to use `startInactiveSpan`
+
+Use it for **fire-and-forget work**, **parallel fan-out**, or **background tasks** that run independently and should not parent anything that happens after them.
 
 ```ts
 import { startSpan, startInactiveSpan } from "@strada.sh/sdk"
 
-// startSpan: active span, auto-end, auto-error recording
 await startSpan({ name: "process-order" }, async () => {
-  // This child span is automatically linked to "process-order"
-  await startSpan({ name: "validate-inventory" }, async () => {
-    // ...
-  })
-})
+  // These run in parallel and don't parent each other or subsequent work
+  const emailSpan = startInactiveSpan({ name: "send-email" })
+  const webhookSpan = startInactiveSpan({ name: "notify-webhook" })
 
-// startInactiveSpan: detached span for background work
-const bgSpan = startInactiveSpan({ name: "background-cleanup" })
-scheduleCleanup().finally(() => bgSpan.end())
+  await Promise.all([
+    sendEmail(order).finally(() => emailSpan.end()),
+    notifyWebhook(order).finally(() => webhookSpan.end()),
+  ])
+})
 ```
+
+Other good uses: scheduling a job onto a queue (the span measures the enqueue, not the job execution), starting a timer or interval, kicking off a cache warm that completes later.
+
+```ts
+// Enqueue a job: the span covers the enqueue call, not the job itself
+const span = startInactiveSpan({ name: "enqueue-report-generation" })
+span.setAttribute("job.type", "monthly-report")
+await queue.add("generate-report", { month: "2025-01" })
+span.end()
+```
+
+### `using` with inactive spans
+
+`startInactiveSpan` returns a span that implements `Symbol.dispose`, so you can use JavaScript's `using` declaration to auto-end it when the block exits. No manual `.end()` call needed.
+
+```ts
+import { startInactiveSpan } from "@strada.sh/sdk"
+
+{
+  using span = startInactiveSpan({ name: "background-cleanup" })
+  span.setAttribute("queue", "jobs")
+  await cleanupStaleJobs()
+} // span.end() called automatically here
+```
+
+This works for both normal exits and throws. If an error is thrown inside the block, the span is still ended.
+
+```ts
+{
+  using span = startInactiveSpan({ name: "risky-operation" })
+  try {
+    await doRiskyWork()
+  } catch (err) {
+    // record the error on the span before it auto-ends
+    span.recordException(err instanceof Error ? err : new Error(String(err)))
+    span.setStatus({ code: SpanStatusCode.ERROR })
+    throw err
+  }
+} // span.end() called automatically, even after the throw
+```
+
+`using` spans are **not active in context**. Child spans created inside the block are not automatically parented to them. Use `startSpan` (callback form) when you need parent-child nesting. Use `using` + `startInactiveSpan` when you want auto-cleanup for a detached span without a callback wrapper.
 
 ### Raw OTel tracing API
 
