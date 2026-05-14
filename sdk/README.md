@@ -114,6 +114,48 @@ stradaVitePlugin({
 
 These are **standard OpenTelemetry resource attributes**. Strada stores them in `ResourceAttributes` for raw logs and traces. Error extraction maps `service.version` to the denormalized `Release` column, while commit and deployment metadata stay queryable through resource attributes.
 
+## User Identity
+
+Pass **`userId`** to `initStrada()` when the current user is already known. The browser SDK injects it into spans/logs/errors as `user.id` and propagates it to backend SDKs through W3C Baggage.
+
+```ts
+import { initStrada } from "@strada.sh/sdk"
+
+initStrada({
+  projectId: "01JTHG5M7XPQR8KNCZ0W4D",
+  service: "frontend",
+  userId: () => window.__APP_USER__?.id,
+})
+```
+
+When login/logout happens after initialization, call **`identifyUser()`** in the browser. Browser calls only persist `user.id` in the JS-readable `strada_uid` cookie and update in-memory context. They do not store email/name/profile data.
+
+```ts
+import { identifyUser } from "@strada.sh/sdk/browser"
+
+identifyUser({ id: user.id })
+identifyUser(null) // logout: clear cookie and in-memory user id
+```
+
+Call **`identifyUser()` from trusted server code** to replace the latest profile snapshot in `otel_users`. This still uses OTLP logs: the SDK emits `event.name = "strada.user.identify"`, the collector stores the raw event in `otel_logs`, and extracts the latest profile row into `otel_users` for SQL joins.
+
+```ts
+import { identifyUser } from "@strada.sh/sdk"
+
+identifyUser({
+  id: user.id,
+  email: user.email,
+  name: user.name,
+  image: user.image,
+  organizationId: account.id,
+  organizationName: account.name,
+})
+```
+
+Only `user.id` is stored in cookies. **Email, image, name, and organization fields** are explicit server-side profile data so PII is not copied into every telemetry row.
+
+Every server `identifyUser()` call is a **full snapshot** for that user. Pass all profile fields you want to keep, because a later call with only `{ id, image }` intentionally replaces missing fields with empty values in the latest `otel_users` row.
+
 ## Default instrumentation
 
 The SDK does **not** install the OTel auto-instrumentation packages by default. It does not monkey-patch `fetch`, `XMLHttpRequest`, `http`, `express`, database clients, or `console.*`.

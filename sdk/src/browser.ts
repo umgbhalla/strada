@@ -47,6 +47,9 @@ import {
   setTags,
   resetContext,
   resolveUserId,
+  setRuntimeUserId,
+  writeUserIdCookie,
+  clearUserIdCookie,
   resolveBatchOptions,
   resolveEndpoint,
   resolveReleaseAttributes,
@@ -55,6 +58,9 @@ import {
   createStradaBaggage,
   BAGGAGE_SESSION_ID,
   BAGGAGE_USER_ID,
+  DEFAULT_USER_ID_COOKIE,
+  DEFAULT_USER_ID_COOKIE_MAX_AGE,
+  type StradaUserIdentity,
   ERROR_SEVERITY,
   ERROR_SEVERITY_TEXT,
   INFO_SEVERITY,
@@ -66,6 +72,7 @@ export {
   type StradaOptions,
   type CaptureExceptionOptions,
   type StradaTelemetryOptions,
+  type StradaUserIdentity,
   type StartSpanOptions,
   type DisposableSpan,
   setTags,
@@ -619,6 +626,52 @@ export function track(
     attributes,
     context: ctx,
   });
+}
+
+// ---------------------------------------------------------------------------
+// User identity
+// ---------------------------------------------------------------------------
+
+/**
+ * Update browser user identity after login/logout.
+ *
+ * The browser runtime only persists user.id in a JS-readable cookie so future
+ * page loads can correlate telemetry. Rich profile fields are intentionally not
+ * written to cookies; call identifyUser() from a trusted server runtime to emit
+ * the profile event extracted into otel_users.
+ */
+export function identifyUser(user: StradaUserIdentity | null): void {
+  const cookieName = typeof _options?.userIdCookie === "string"
+    ? _options.userIdCookie
+    : DEFAULT_USER_ID_COOKIE;
+  const hadPageview = Boolean(_currentPageviewSpan);
+
+  if (hadPageview) {
+    endCurrentPageSpan();
+  }
+
+  if (user === null) {
+    setRuntimeUserId(null);
+    if (_options?.userIdCookie !== false) {
+      clearUserIdCookie(cookieName);
+    }
+    if (hadPageview) {
+      startPageSpan();
+    }
+    return;
+  }
+
+  setRuntimeUserId(user.id);
+  if (_options?.userIdCookie !== false) {
+    writeUserIdCookie({
+      name: cookieName,
+      value: user.id,
+      maxAge: DEFAULT_USER_ID_COOKIE_MAX_AGE,
+    });
+  }
+  if (hadPageview) {
+    startPageSpan();
+  }
 }
 
 // ---------------------------------------------------------------------------

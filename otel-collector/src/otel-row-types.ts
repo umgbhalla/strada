@@ -89,6 +89,24 @@ export interface OtelErrorRow {
   source_signal: string; // "log" or "trace"
 }
 
+// Mutable user profile row extracted from reserved identify log events.
+// Written to otel_users with ReplacingMergeTree(Version).
+export interface OtelUserRow {
+  project_id: string;
+  user_id: string;
+  email: string;
+  name: string;
+  full_name: string;
+  user_hash: string;
+  image: string;
+  organization_id: string;
+  organization_name: string;
+  attributes: Record<string, string>;
+  last_seen: string;
+  version: number;
+  updated_at: string;
+}
+
 // Matches the OTel ClickHouse metrics base schema, with project_id added.
 interface OtelBaseMetricRow {
   project_id: string;

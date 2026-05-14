@@ -386,6 +386,79 @@ describe.sequential('collector integration with official OTel SDKs', () => {
     `)
   })
 
+  it('extracts identify logs into otel_users only for authenticated ingest', async () => {
+    const projectId = 'TEST-PROJECT'
+    const ingestToken = 'str_test_ingest_token'
+    const ingestTokenHash = await hashToken(ingestToken)
+    const inserts: CapturedInsert[] = []
+
+    const fakeBackend = await startServer(
+      parsePortFromEnv('OTEL_COLLECTOR_FAKE_BACKEND_PORT'),
+      async (req, res) => {
+        const body = await readBody(req)
+        const base = `http://${req.headers.host ?? '127.0.0.1'}`
+        const url = new URL(req.url ?? '/', base)
+        const query = url.searchParams.get('query') ?? ''
+        const rows = body
+          .split('\n')
+          .filter((line) => line.trim().length > 0)
+          .map((line) => JSON.parse(line))
+
+        inserts.push({ query, table: extractTable(query), rows })
+
+        res.statusCode = 200
+        res.end('OK')
+      },
+    )
+
+    try {
+      const app = createCollectorApp({
+        db: createFakeD1({ projectId, clickhouseUrl: fakeBackend.baseUrl, ingestTokenHash }),
+      })
+      const url = `https://${projectId.toLowerCase()}-ingest.strada.sh/v1/logs`
+      const body = JSON.stringify({
+        resourceLogs: [{
+          scopeLogs: [{
+            logRecords: [{
+              timeUnixNano: '1700000000123456789',
+              eventName: 'strada.user.identify',
+              attributes: [
+                { key: 'event.name', value: { stringValue: 'strada.user.identify' } },
+                { key: 'user.id', value: { stringValue: 'user_123' } },
+                { key: 'user.email', value: { stringValue: 'tommy@example.com' } },
+              ],
+            }],
+          }],
+        }],
+      })
+
+      const anonymous = await app.handle(new Request(url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body,
+      }))
+      expect(anonymous.status).toBe(200)
+      await waitFor(() => inserts.some((insert) => insert.table === 'otel_logs'), 8_000)
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      expect(inserts.map((insert) => insert.table).sort()).toEqual(['otel_logs'])
+
+      inserts.length = 0
+      const authenticated = await app.handle(new Request(url, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          authorization: `Bearer ${ingestToken}`,
+        },
+        body,
+      }))
+      expect(authenticated.status).toBe(200)
+      await waitFor(() => inserts.some((insert) => insert.table === 'otel_users'), 8_000)
+      expect(inserts.map((insert) => insert.table).sort()).toEqual(['otel_logs', 'otel_users'])
+    } finally {
+      await closeServer(fakeBackend.server)
+    }
+  })
+
   it('exports traces/logs/metrics to ClickHouse SQL with valid JSON payloads', async () => {
     const projectId = 'TEST-PROJECT'
     const ingestToken = 'str_test_ingest_token'

@@ -13,6 +13,7 @@ export type SignalKind =
   | "traces"
   | "logs"
   | "errors"
+  | "users"
   | "metrics_gauge"
   | "metrics_sum"
   | "metrics_histogram"
@@ -46,6 +47,11 @@ const ERRORS_EXCEPTIONS: Record<string, string | null> = {
   // No exceptions beyond the shared ones
 };
 
+const USERS_EXCEPTIONS: Record<string, string | null> = {
+  user_id: "UserId",
+  user_hash: "UserHash",
+};
+
 const METRICS_EXCEPTIONS: Record<string, string | null> = {
   metric_attributes: "Attributes", // OTel metrics use Attributes, not MetricAttributes
   start_timestamp: "StartTimeUnix", // OTel metrics use StartTimeUnix, not StartTimestamp
@@ -66,6 +72,8 @@ function getExceptions(signal: SignalKind): Record<string, string | null> {
       return LOGS_EXCEPTIONS;
     case "errors":
       return ERRORS_EXCEPTIONS;
+    case "users":
+      return USERS_EXCEPTIONS;
     default:
       // All metric types share the same exceptions
       return METRICS_EXCEPTIONS;

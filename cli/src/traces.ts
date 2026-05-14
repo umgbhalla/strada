@@ -282,6 +282,8 @@ const PREVIEW_ATTRIBUTE_KEYS = [
   "messaging.operation.name",
   "messaging.destination.name",
   "user.id",
+  "user.email",
+  "organization.id",
   "session.id",
 ];
 

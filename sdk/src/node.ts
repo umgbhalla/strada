@@ -60,9 +60,11 @@ import {
   resolveIngestHeaders,
   resolveReleaseAttributes,
   shouldExportTelemetry,
+  emitUserIdentifyLog,
   ATTR,
   BAGGAGE_SESSION_ID,
   BAGGAGE_USER_ID,
+  type StradaUserIdentity,
   ERROR_SEVERITY,
   ERROR_SEVERITY_TEXT,
   INFO_SEVERITY,
@@ -74,6 +76,7 @@ export {
   type StradaOptions,
   type CaptureExceptionOptions,
   type StradaTelemetryOptions,
+  type StradaUserIdentity,
   type StartSpanOptions,
   type DisposableSpan,
   setTags,
@@ -496,6 +499,22 @@ export function track(
     body: name,
     attributes,
   });
+}
+
+/**
+ * Emit a trusted user profile event over OTLP logs.
+ * The collector stores the raw event in otel_logs and extracts the latest
+ * profile into otel_users for joins from issue/session views.
+ */
+export function identifyUser(user: StradaUserIdentity): void {
+  if (!_logger) {
+    console.warn(
+      "[@strada.sh/sdk] identifyUser() called before initStrada(). User profile was not sent.",
+    );
+    return;
+  }
+
+  emitUserIdentifyLog(_logger, user);
 }
 
 /**

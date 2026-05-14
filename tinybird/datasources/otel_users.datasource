@@ -1,0 +1,28 @@
+TOKEN OTEL_TINYBIRD_TOKEN APPEND
+TOKEN STRADA_READ_TOKEN READ
+
+DESCRIPTION >
+    Mutable user profile dimension extracted from reserved Strada identify events.
+    Server SDKs emit event.name = "strada.user.identify" through OTLP logs.
+    Each identify event INSERTs a new row with a higher Version; reads use
+    argMax(column, Version) grouped by UserId to get the latest profile.
+
+SCHEMA >
+    `ProjectId` LowCardinality(String) `json:$.project_id` CODEC(ZSTD(1)),
+    `UserId` String `json:$.user_id` CODEC(ZSTD(1)),
+    `Email` String `json:$.email` CODEC(ZSTD(1)),
+    `Name` String `json:$.name` CODEC(ZSTD(1)),
+    `FullName` String `json:$.full_name` CODEC(ZSTD(1)),
+    `UserHash` String `json:$.user_hash` CODEC(ZSTD(1)),
+    `Image` String `json:$.image` CODEC(ZSTD(1)),
+    `OrganizationId` String `json:$.organization_id` CODEC(ZSTD(1)),
+    `OrganizationName` String `json:$.organization_name` CODEC(ZSTD(1)),
+    `Attributes` Map(LowCardinality(String), String) `json:$.attributes` CODEC(ZSTD(1)),
+    `LastSeen` DateTime64(3) `json:$.last_seen` CODEC(ZSTD(1)),
+    `Version` UInt64 `json:$.version` CODEC(ZSTD(1)),
+    `UpdatedAt` DateTime64(3) `json:$.updated_at` CODEC(ZSTD(1))
+
+ENGINE "ReplacingMergeTree"
+ENGINE_VER "Version"
+ENGINE_SORTING_KEY "ProjectId, UserId"
+ENGINE_SETTINGS index_granularity=8192

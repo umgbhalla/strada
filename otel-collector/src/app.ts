@@ -11,6 +11,7 @@ import { transformLogs } from "./transform-logs.ts";
 import { transformMetrics } from "./transform-metrics.ts";
 import { createBackend } from "./backend.ts";
 import { extractErrorsFromTraces, extractErrorsFromLogs } from "./extract-errors.ts";
+import { extractUsersFromLogs } from "./extract-users.ts";
 import type {
   ExportTraceServiceRequest,
   ExportLogsServiceRequest,
@@ -71,7 +72,7 @@ async function requireIngestAccess({
   projectId: string;
   orgId: string;
   anonymousRateLimiter?: IngestRateLimiter;
-}) {
+}): Promise<boolean> {
   const token = getBearerToken(request);
   if (token) {
     const valid = await validateIngestToken({ db, orgId, token });
@@ -81,10 +82,10 @@ async function requireIngestAccess({
         headers: { "content-type": "application/json" },
       });
     }
-    return;
+    return true;
   }
 
-  if (!anonymousRateLimiter) return;
+  if (!anonymousRateLimiter) return false;
 
   const ip = request.headers.get("cf-connecting-ip") ?? "unknown";
   const { success } = await anonymousRateLimiter.limit({ key: `anonymous-ingest:${projectId}:${ip}` });
@@ -94,6 +95,8 @@ async function requireIngestAccess({
       headers: { "content-type": "application/json" },
     });
   }
+
+  return false;
 }
 
 async function parseOtlpRequest<T>(request: OtlpRequest): Promise<T> {
@@ -194,7 +197,7 @@ export function createCollectorApp({ db, anonymousRateLimiter }: { db: D1Databas
     .post("/v1/logs", async ({ request, waitUntil }) => {
       const projectId = getProjectId(request);
       const config = await resolveOrFail({ db, projectId });
-      await requireIngestAccess({ db, request, projectId, orgId: config.orgId, anonymousRateLimiter });
+      const authenticated = await requireIngestAccess({ db, request, projectId, orgId: config.orgId, anonymousRateLimiter });
 
       const body = await parseOtlpRequest<ExportLogsServiceRequest>(request);
       const backend = createBackend(config);
@@ -207,6 +210,11 @@ export function createCollectorApp({ db, anonymousRateLimiter }: { db: D1Databas
       const errorsNdjson = extractErrorsFromLogs(body, projectId);
       if (errorsNdjson) {
         waitUntil(backend.send(datasources.errors, "errors", errorsNdjson));
+      }
+
+      const usersNdjson = authenticated ? extractUsersFromLogs(body, projectId) : "";
+      if (usersNdjson) {
+        waitUntil(backend.send(datasources.users, "users", usersNdjson));
       }
 
       return {};

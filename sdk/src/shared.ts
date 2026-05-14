@@ -117,6 +117,27 @@ export interface StradaOptions {
   userIdCookie?: string | false;
 }
 
+export interface StradaUserIdentity {
+  /** Stable application user id. This is the only identity field written to cookies. */
+  id: string;
+  /** User email. PII, emitted only through explicit identifyUser profile events. */
+  email?: string;
+  /** Display name or username. */
+  name?: string;
+  /** Full human-readable name. */
+  fullName?: string;
+  /** Stable anonymized user hash when raw ids are sensitive. */
+  hash?: string;
+  /** Profile image URL. */
+  image?: string;
+  /** Product/account organization id for this user profile. */
+  organizationId?: string;
+  /** Product/account organization name for this user profile. */
+  organizationName?: string;
+  /** Additional low-cardinality profile attributes. */
+  attributes?: Record<string, string>;
+}
+
 export interface StradaReleaseMetadata {
   version?: string;
   commit?: string;
@@ -233,6 +254,7 @@ export function getTags(): Record<string, string> {
 
 export function resetContext(): void {
   _tags = {};
+  resetRuntimeUserId();
 }
 
 // ---------------------------------------------------------------------------
@@ -586,6 +608,18 @@ export function createStradaLogger(
 
 /** Default cookie name for user ID. */
 export const DEFAULT_USER_ID_COOKIE = "strada_uid";
+export const DEFAULT_USER_ID_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
+export const USER_IDENTIFY_EVENT_NAME = ATTR["strada.user.identify"];
+
+let _runtimeUserId: string | null | undefined;
+
+export function setRuntimeUserId(userId: string | null | undefined): void {
+  _runtimeUserId = userId;
+}
+
+export function resetRuntimeUserId(): void {
+  _runtimeUserId = undefined;
+}
 
 /**
  * Read a cookie value by name from document.cookie.
@@ -606,6 +640,24 @@ export function readCookie(name: string): string | undefined {
   }
 }
 
+export function writeUserIdCookie({
+  name = DEFAULT_USER_ID_COOKIE,
+  value,
+  maxAge = DEFAULT_USER_ID_COOKIE_MAX_AGE,
+}: {
+  name?: string;
+  value: string;
+  maxAge?: number;
+}): void {
+  if (typeof document === "undefined") return;
+  document.cookie = `${encodeURIComponent(name)}=${encodeURIComponent(value)}; Path=/; SameSite=Lax; Max-Age=${maxAge}`;
+}
+
+export function clearUserIdCookie(name = DEFAULT_USER_ID_COOKIE): void {
+  if (typeof document === "undefined") return;
+  document.cookie = `${encodeURIComponent(name)}=; Path=/; SameSite=Lax; Max-Age=0`;
+}
+
 function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -623,6 +675,10 @@ function escapeRegExp(s: string): string {
  * 3. undefined
  */
 export function resolveUserId(options: StradaOptions | undefined): string | undefined {
+  if (_runtimeUserId !== undefined) {
+    return _runtimeUserId ?? undefined;
+  }
+
   // 1. Explicit userId option (static string or dynamic resolver)
   if (options?.userId) {
     if (typeof options.userId === "function") {
@@ -645,6 +701,45 @@ export function resolveUserId(options: StradaOptions | undefined): string | unde
   }
 
   return undefined;
+}
+
+export function userIdentityToAttributes(user: StradaUserIdentity): Record<string, string> {
+  return {
+    [ATTR["user.id"]]: user.id,
+    ...(user.email ? { [ATTR["user.email"]]: user.email } : {}),
+    ...(user.name ? { [ATTR["user.name"]]: user.name } : {}),
+    ...(user.fullName ? { [ATTR["user.full_name"]]: user.fullName } : {}),
+    ...(user.hash ? { [ATTR["user.hash"]]: user.hash } : {}),
+    ...(user.image ? { [ATTR["user.image"]]: user.image } : {}),
+    ...(user.organizationId ? { [ATTR["organization.id"]]: user.organizationId } : {}),
+    ...(user.organizationName ? { [ATTR["organization.name"]]: user.organizationName } : {}),
+    ...Object.fromEntries(
+      Object.entries(user.attributes ?? {}).map(([key, value]) => [`strada.user.attributes.${key}`, value]),
+    ),
+  };
+}
+
+export function createUserIdentifyAttributes(user: StradaUserIdentity): Record<string, string> {
+  return {
+    [ATTR["event.name"]]: USER_IDENTIFY_EVENT_NAME,
+    ...userIdentityToAttributes(user),
+  };
+}
+
+export function emitUserIdentifyLog(
+  logger: Pick<OtelLogger, "emit"> | undefined,
+  user: StradaUserIdentity,
+): boolean {
+  if (!logger) return false;
+
+  logger.emit({
+    eventName: USER_IDENTIFY_EVENT_NAME,
+    severityNumber: INFO_SEVERITY,
+    severityText: INFO_SEVERITY_TEXT,
+    body: USER_IDENTIFY_EVENT_NAME,
+    attributes: createUserIdentifyAttributes(user),
+  });
+  return true;
 }
 
 // ---------------------------------------------------------------------------

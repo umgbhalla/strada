@@ -308,6 +308,38 @@ ORDER BY (ProjectId, ServiceName, FingerprintHash, toDateTime(Timestamp))
 SETTINGS index_granularity = 8192;
 
 -- ============================================================================
+-- USERS (ReplacingMergeTree)
+-- ============================================================================
+--
+-- Mutable user profile dimension extracted from reserved Strada identify log
+-- events. Telemetry rows carry stable ids like Tags['user.id']; query paths join
+-- to this table only when they need display fields like email, name, org, image.
+--
+-- Each identify event INSERTs a new row with Version = event epoch ms. Background
+-- merges eventually collapse older rows, but reads should use argMax(col, Version)
+-- grouped by UserId instead of FINAL for Tinybird compatibility.
+
+CREATE TABLE IF NOT EXISTS otel_users
+(
+    `ProjectId`        LowCardinality(String) CODEC(ZSTD(1)),
+    `UserId`           String                 CODEC(ZSTD(1)),
+    `Email`            String                 CODEC(ZSTD(1)),
+    `Name`             String                 CODEC(ZSTD(1)),
+    `FullName`         String                 CODEC(ZSTD(1)),
+    `UserHash`         String                 CODEC(ZSTD(1)),
+    `Image`            String                 CODEC(ZSTD(1)),
+    `OrganizationId`   String                 CODEC(ZSTD(1)),
+    `OrganizationName` String                 CODEC(ZSTD(1)),
+    `Attributes`       Map(LowCardinality(String), String) CODEC(ZSTD(1)),
+    `LastSeen`         DateTime64(3)          CODEC(ZSTD(1)),
+    `Version`          UInt64                 CODEC(ZSTD(1)),
+    `UpdatedAt`        DateTime64(3)          CODEC(ZSTD(1))
+)
+ENGINE = ReplacingMergeTree(Version)
+ORDER BY (ProjectId, UserId)
+SETTINGS index_granularity = 8192;
+
+-- ============================================================================
 -- METRICS: Gauge
 -- ============================================================================
 

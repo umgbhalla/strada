@@ -17,7 +17,10 @@ import {
   resolveReleaseAttributes,
   resolveUserId,
   readCookie,
+  writeUserIdCookie,
+  clearUserIdCookie,
   setTags,
+  setRuntimeUserId,
   resetContext,
   startSpan,
   startInactiveSpan,
@@ -27,8 +30,9 @@ import {
   createStradaBaggage,
   BAGGAGE_SESSION_ID,
   BAGGAGE_USER_ID,
+  createUserIdentifyAttributes,
 } from "./shared.ts";
-import { getBrowserWorkContext } from "./browser.ts";
+import { getBrowserWorkContext, identifyUser } from "./browser.ts";
 import {
   MAX_LOG_STRING_LENGTH,
   formatLogValue as formatJsonLogValue,
@@ -786,6 +790,86 @@ describe("resolveUserId", () => {
   it("falls back from userId function to cookie when function returns undefined", () => {
     cookieValue = "strada_uid=cookie_user";
     expect(resolveUserId({ projectId: "test", service: "s", userId: () => undefined })).toBe("cookie_user");
+  });
+
+  it("runtime user id override takes priority over init option and cookie", () => {
+    cookieValue = "strada_uid=cookie_user";
+    setRuntimeUserId("runtime_user");
+    expect(resolveUserId({ projectId: "test", service: "s", userId: "init_user" })).toBe("runtime_user");
+  });
+
+  it("runtime null clears the user even when init option is set", () => {
+    setRuntimeUserId(null);
+    expect(resolveUserId({ projectId: "test", service: "s", userId: "init_user" })).toBeUndefined();
+  });
+});
+
+describe("browser user id cookie writes", () => {
+  let cookieValue = "";
+  const originalDocument = globalThis.document;
+  const hadDocument = originalDocument !== undefined;
+
+  beforeEach(() => {
+    cookieValue = "";
+    (globalThis as any).document = {
+      get cookie() { return cookieValue; },
+      set cookie(value: string) { cookieValue = value; },
+    };
+  });
+
+  afterEach(() => {
+    if (hadDocument) {
+      (globalThis as any).document = originalDocument;
+    } else {
+      delete (globalThis as any).document;
+    }
+  });
+
+  it("writes and clears the default user id cookie", () => {
+    writeUserIdCookie({ value: "user 123" });
+    expect(cookieValue).toBe("strada_uid=user%20123; Path=/; SameSite=Lax; Max-Age=31536000");
+
+    clearUserIdCookie();
+    expect(cookieValue).toBe("strada_uid=; Path=/; SameSite=Lax; Max-Age=0");
+  });
+
+  it("identifyUser sets browser cookie and runtime override", () => {
+    identifyUser({ id: "user_42" });
+    expect(cookieValue).toBe("strada_uid=user_42; Path=/; SameSite=Lax; Max-Age=31536000");
+    expect(resolveUserId({ projectId: "test", service: "web" })).toBe("user_42");
+
+    identifyUser(null);
+    expect(cookieValue).toBe("strada_uid=; Path=/; SameSite=Lax; Max-Age=0");
+    expect(resolveUserId({ projectId: "test", service: "web", userId: "init_user" })).toBeUndefined();
+  });
+});
+
+describe("createUserIdentifyAttributes", () => {
+  it("maps user profile fields to reserved OTel log attributes", () => {
+    expect(createUserIdentifyAttributes({
+      id: "user_123",
+      email: "tommy@example.com",
+      name: "Tommy",
+      fullName: "Tommy Morse",
+      hash: "hash_123",
+      image: "https://example.com/avatar.png",
+      organizationId: "org_123",
+      organizationName: "Acme",
+      attributes: { plan: "pro" },
+    })).toMatchInlineSnapshot(`
+      {
+        "event.name": "strada.user.identify",
+        "organization.id": "org_123",
+        "organization.name": "Acme",
+        "strada.user.attributes.plan": "pro",
+        "user.email": "tommy@example.com",
+        "user.full_name": "Tommy Morse",
+        "user.hash": "hash_123",
+        "user.id": "user_123",
+        "user.image": "https://example.com/avatar.png",
+        "user.name": "Tommy",
+      }
+    `);
   });
 });
 

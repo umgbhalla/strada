@@ -67,6 +67,7 @@ const STRADA_TABLES = [
   'otel_metrics_exponential_histogram',
   'otel_analytics_pages',
   'otel_analytics_sessions',
+  'otel_users',
   'otel_issue_state',
 ]
 
@@ -275,5 +276,4 @@ export async function insertBackendRow(ctx: {
 
   throw new Error(`unknown backend "${dbConfig.backend}"`)
 }
-
 

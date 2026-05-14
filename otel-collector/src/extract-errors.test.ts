@@ -6,7 +6,52 @@ import {
   computeDefaultFingerprint,
   hashFingerprint,
 } from "./extract-errors.ts";
+import { extractUsersFromLogs } from "./extract-users.ts";
 import type { ExportLogsServiceRequest, ExportTraceServiceRequest } from "./otlp-types.ts";
+
+describe("extractUsersFromLogs", () => {
+  it("extracts reserved identify events into otel_users rows", () => {
+    const body: ExportLogsServiceRequest = {
+      resourceLogs: [
+        {
+          scopeLogs: [
+            {
+              logRecords: [
+                {
+                  timeUnixNano: "1700000000123456789",
+                  eventName: "strada.user.identify",
+                  attributes: [
+                    { key: "event.name", value: { stringValue: "strada.user.identify" } },
+                    { key: "user.id", value: { stringValue: "user_123" } },
+                    { key: "user.email", value: { stringValue: "tommy@example.com" } },
+                    { key: "user.name", value: { stringValue: "Tommy" } },
+                    { key: "user.image", value: { stringValue: "https://example.com/avatar.png" } },
+                    { key: "organization.id", value: { stringValue: "org_123" } },
+                    { key: "organization.name", value: { stringValue: "Acme" } },
+                    { key: "strada.user.attributes.plan", value: { stringValue: "pro" } },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(extractUsersFromLogs(body, "project_123")).toMatchInlineSnapshot(`
+      "{\"project_id\":\"project_123\",\"user_id\":\"user_123\",\"email\":\"tommy@example.com\",\"name\":\"Tommy\",\"full_name\":\"\",\"user_hash\":\"\",\"image\":\"https://example.com/avatar.png\",\"organization_id\":\"org_123\",\"organization_name\":\"Acme\",\"attributes\":{\"plan\":\"pro\"},\"last_seen\":\"2023-11-14T22:13:20.123456789Z\",\"version\":1700000000123,\"updated_at\":\"2023-11-14T22:13:20.123456789Z\"}
+      "
+    `);
+  });
+
+  it("ignores identify events without user.id", () => {
+    const body: ExportLogsServiceRequest = {
+      resourceLogs: [{ scopeLogs: [{ logRecords: [{ eventName: "strada.user.identify" }] }] }],
+    };
+
+    expect(extractUsersFromLogs(body, "project_123")).toBe("");
+  });
+});
 
 describe("stripDynamicValues", () => {
   it("replaces numbers", () => {

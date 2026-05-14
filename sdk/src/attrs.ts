@@ -16,6 +16,22 @@ export const ATTR = {
   "session.id": "session.id",
   /** Signed-in user identity from StradaOptions.userId, cookie, or propagated baggage. Correlates telemetry across sessions. */
   "user.id": "user.id",
+  /** Signed-in user's email address. Stored through identifyUser profile events, not cookies. */
+  "user.email": "user.email",
+  /** Signed-in user's display name or username. */
+  "user.name": "user.name",
+  /** Signed-in user's full name. */
+  "user.full_name": "user.full_name",
+  /** Stable anonymized user hash when raw user.id is sensitive. */
+  "user.hash": "user.hash",
+  /** Signed-in user's profile image URL. */
+  "user.image": "user.image",
+  /** Product/account organization id associated with the user profile. */
+  "organization.id": "organization.id",
+  /** Product/account organization display name associated with the user profile. */
+  "organization.name": "organization.name",
+  /** Reserved event name for user profile upserts extracted into otel_users. */
+  "strada.user.identify": "strada.user.identify",
 
   // -- URL context (injected by browser SDK into every span and log) --
 

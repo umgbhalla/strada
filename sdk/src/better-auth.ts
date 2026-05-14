@@ -9,6 +9,10 @@
 import { logs, SeverityNumber } from "@opentelemetry/api-logs";
 import type { BetterAuthPlugin } from "better-auth";
 import { ATTR } from "./attrs.ts";
+import {
+  DEFAULT_USER_ID_COOKIE,
+  emitUserIdentifyLog,
+} from "./shared.ts";
 
 export interface StradaBetterAuthOptions {
   /** Disable all cookie and event behavior while keeping the plugin registered. */
@@ -39,9 +43,10 @@ export interface StradaAuthEventProperties {
 }
 
 type BetterAuthUser = {
-  id?: string;
-  email?: string;
-  name?: string;
+  id?: string | null;
+  email?: string | null;
+  name?: string | null;
+  image?: string | null;
 };
 
 type CookieOptions = {
@@ -62,7 +67,6 @@ type BetterAuthContext = {
 };
 
 const ONE_YEAR_SECONDS = 60 * 60 * 24 * 365;
-const DEFAULT_BETTER_AUTH_USER_ID_COOKIE = "strada_uid";
 const pluginBase = { id: "strada-better-auth" } satisfies BetterAuthPlugin;
 
 const customAttributeKeys = {
@@ -78,7 +82,7 @@ const customAttributeKeys = {
 export function strataBetterAuth(options: StradaBetterAuthOptions = {}) {
   const config = {
     enabled: options.enabled ?? true,
-    cookieName: options.cookieName ?? DEFAULT_BETTER_AUTH_USER_ID_COOKIE,
+    cookieName: options.cookieName ?? DEFAULT_USER_ID_COOKIE,
     cookieMaxAge: options.cookieMaxAge ?? ONE_YEAR_SECONDS,
     includeUserDetails: options.includeUserDetails ?? true,
     track: options.track ?? emitAuthLog,
@@ -103,6 +107,7 @@ export function strataBetterAuth(options: StradaBetterAuthOptions = {}) {
             user: {
               create: {
                 after: async (user, context) => {
+                  emitIdentifyLog(user, config.includeUserDetails);
                   await trackSafely("auth.signup", {
                     ...commonAuthProperties({
                       user,
@@ -146,6 +151,8 @@ export function strataBetterAuth(options: StradaBetterAuthOptions = {}) {
               value: userId,
               maxAge: config.cookieMaxAge,
             });
+
+            emitIdentifyLog(user, config.includeUserDetails);
 
             if (authCtx.path?.startsWith("/sign-up")) return {};
 
@@ -226,7 +233,7 @@ function parseAuthSource(path: string | undefined): { method?: string; provider?
   return {};
 }
 
-function stringValue(value: string | undefined): string | undefined {
+function stringValue(value: string | null | undefined): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
@@ -247,5 +254,20 @@ function emitAuthLog(name: string, properties: StradaAuthEventProperties): void 
     severityText: "INFO",
     body: name,
     attributes,
+  });
+}
+
+function emitIdentifyLog(user: BetterAuthUser | undefined | null, includeUserDetails: boolean): void {
+  const userId = stringValue(user?.id);
+  if (!userId) return;
+  const email = includeUserDetails ? stringValue(user?.email) : undefined;
+  const name = includeUserDetails ? stringValue(user?.name) : undefined;
+  const image = includeUserDetails ? stringValue(user?.image) : undefined;
+
+  emitUserIdentifyLog(logs.getLogger("strada-better-auth"), {
+    id: userId,
+    ...(email ? { email } : {}),
+    ...(name ? { name } : {}),
+    ...(image ? { image } : {}),
   });
 }

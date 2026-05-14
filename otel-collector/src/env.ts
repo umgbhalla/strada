@@ -9,6 +9,7 @@ export const datasources = {
   traces: "otel_traces",
   logs: "otel_logs",
   errors: "otel_errors",
+  users: "otel_users",
   gauge: "otel_metrics_gauge",
   sum: "otel_metrics_sum",
   histogram: "otel_metrics_histogram",
