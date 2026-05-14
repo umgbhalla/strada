@@ -2,10 +2,10 @@
 // Opens the browser for the user to approve, polls until approved, saves the token.
 
 import * as clack from "@clack/prompts";
-import { goke } from "goke";
+import dedent from "string-dedent";
+import { goke, openInBrowser } from "goke";
 import type { GokeExecutionContext } from "goke";
 import { bold, cyan } from "./colors.ts";
-import { openInBrowser } from "goke";
 import { getResolvedConfig, saveConfig, getBaseUrl, setScope } from "./config.ts";
 
 export const loginCli = goke();
@@ -14,6 +14,21 @@ const CLI_CLIENT_ID = "strada-cli"
 
 async function readJson<T>(response: Response): Promise<T> {
   return JSON.parse(await response.text()) as T;
+}
+
+function getLoginInteractivityError() {
+  return dedent`
+    strada login needs an interactive terminal and must stay alive while you approve the browser login.
+
+    Refusing to start because stdout is not attached to a TTY.
+
+    Run it in a background terminal session like tuistory or tmux, then wait for the URL/code:
+
+      bunx tuistory launch "strada login" -s strada-login --no-wait
+      bunx tuistory -s strada-login wait "/Your code:|https?:\\/\\//i" --timeout 15000
+
+    The login command exits by itself after successful browser approval.
+  `;
 }
 
 loginCli
@@ -31,8 +46,13 @@ loginCli
 
 async function loginAction(
   options: { url?: string },
-  { process: proc }: GokeExecutionContext,
+  { console: output, process: proc }: GokeExecutionContext,
 ) {
+  if (!process.stdout.isTTY) {
+    output.error(getLoginInteractivityError());
+    return proc.exit(1);
+  }
+
   const baseUrl = options.url || getBaseUrl();
   clack.intro(bold("Strada — Login"));
 
