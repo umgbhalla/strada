@@ -56,7 +56,7 @@
     "goke": "^6.10.0",
     "spiceflow": "1.22.0-rsc.0",
     "string-dedent": "^3.0.2",
-    "zod": "^4.3.6"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",

@@ -107,6 +107,6 @@
     "better-auth": "https://pkg.pr.new/better-auth@9489",
     "esbuild": "^0.28.0",
     "rimraf": "^6.0.1",
-    "vite": "^8.0.2"
+    "vite": "^8.0.13"
   }
 }
