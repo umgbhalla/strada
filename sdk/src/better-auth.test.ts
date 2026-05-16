@@ -6,12 +6,6 @@ import {
   type StradaBetterAuthOptions,
 } from "./better-auth.ts";
 
-type CookieWrite = {
-  name: string;
-  value: string;
-  options?: Record<string, string | number | boolean>;
-};
-
 type HookContext = {
   path?: string;
   context: {
@@ -19,8 +13,9 @@ type HookContext = {
     session?: { user?: { id?: string; email?: string; name?: string } } | null;
   };
   getCookie?: (name: string) => string | null | undefined;
-  setCookie: (name: string, value: string, options?: Record<string, string | number | boolean>) => void;
 };
+
+type HookResult = { headers?: Headers };
 
 type SignupHook = (
   user: { id?: string; email?: string; name?: string },
@@ -29,7 +24,6 @@ type SignupHook = (
 
 function makeHarness(options: StradaBetterAuthOptions = {}) {
   const events: Array<{ name: string; properties: StradaAuthEventProperties }> = [];
-  const cookies: CookieWrite[] = [];
   const plugin: BetterAuthPlugin = strataBetterAuth({
     ...options,
     track: (name, properties) => {
@@ -37,7 +31,7 @@ function makeHarness(options: StradaBetterAuthOptions = {}) {
     },
   });
 
-  const after = plugin.hooks?.after?.[0]?.handler as ((ctx: HookContext) => Promise<Record<string, never>>) | undefined;
+  const after = plugin.hooks?.after?.[0]?.handler as ((ctx: HookContext) => Promise<HookResult>) | undefined;
   const initResult = plugin.init?.({} as never) as {
     options?: {
       databaseHooks?: {
@@ -47,15 +41,20 @@ function makeHarness(options: StradaBetterAuthOptions = {}) {
   } | undefined;
   const signupAfter = initResult?.options?.databaseHooks?.user?.create?.after;
 
-  const setCookie = (
-    name: string,
-    value: string,
-    cookieOptions?: Record<string, string | number | boolean>,
-  ) => {
-    cookies.push({ name, value, options: cookieOptions });
-  };
+  return { plugin, after, signupAfter, events };
+}
 
-  return { plugin, after, signupAfter, events, cookies, setCookie };
+/** Extract cookie name=value pairs from a Headers object's set-cookie header */
+function parseCookiesFromHeaders(headers?: Headers): Array<{ raw: string; name: string; value: string }> {
+  if (!headers) return [];
+  const setCookie = headers.get("set-cookie");
+  if (!setCookie) return [];
+  // Split on the first = to get name and then take the value before the first ;
+  const nameValue = setCookie.split(";")[0]!;
+  const eqIdx = nameValue.indexOf("=");
+  const name = decodeURIComponent(nameValue.slice(0, eqIdx));
+  const value = decodeURIComponent(nameValue.slice(eqIdx + 1));
+  return [{ raw: setCookie, name, value }];
 }
 
 describe("strataBetterAuth", () => {
@@ -69,24 +68,18 @@ describe("strataBetterAuth", () => {
           user: { id: "user_123", email: "tommy@example.com", name: "Tommy" },
         },
       },
-      setCookie: harness.setCookie,
     });
 
-    expect(result).toEqual({});
-    expect(harness.cookies).toMatchInlineSnapshot(`
-      [
-        {
-          "name": "strada_uid",
-          "options": {
-            "httpOnly": false,
-            "maxAge": 31536000,
-            "path": "/",
-            "sameSite": "lax",
-          },
-          "value": "user_123",
-        },
-      ]
-    `);
+    const cookies = parseCookiesFromHeaders(result.headers);
+    expect(cookies).toHaveLength(1);
+    expect(cookies[0]!.name).toBe("strada_uid");
+    expect(cookies[0]!.value).toBe("user_123");
+    expect(cookies[0]!.raw).toContain("Path=/");
+    expect(cookies[0]!.raw).toContain("SameSite=lax");
+    expect(cookies[0]!.raw).toContain("Max-Age=31536000");
+    // must NOT contain HttpOnly so the browser SDK can read it
+    expect(cookies[0]!.raw).not.toContain("HttpOnly");
+
     expect(harness.events).toMatchInlineSnapshot(`
       [
         {
@@ -107,24 +100,15 @@ describe("strataBetterAuth", () => {
   it("tracks OAuth provider from callback path", async () => {
     const harness = makeHarness({ cookieName: "custom_uid" });
 
-    await harness.after!({
+    const result = await harness.after!({
       path: "/callback/google",
       context: { newSession: { user: { id: "user_oauth", email: "a@b.test" } } },
-      setCookie: harness.setCookie,
     });
 
-    expect(harness.cookies[0]).toMatchInlineSnapshot(`
-      {
-        "name": "custom_uid",
-        "options": {
-          "httpOnly": false,
-          "maxAge": 31536000,
-          "path": "/",
-          "sameSite": "lax",
-        },
-        "value": "user_oauth",
-      }
-    `);
+    const cookies = parseCookiesFromHeaders(result.headers);
+    expect(cookies[0]!.name).toBe("custom_uid");
+    expect(cookies[0]!.value).toBe("user_oauth");
+
     expect(harness.events[0]).toMatchInlineSnapshot(`
       {
         "name": "auth.login",
@@ -168,40 +152,30 @@ describe("strataBetterAuth", () => {
   it("sets the cookie but does not double-track login for email signup", async () => {
     const harness = makeHarness();
 
-    await harness.after!({
+    const result = await harness.after!({
       path: "/sign-up/email",
       context: { newSession: { user: { id: "new_user", email: "new@example.com" } } },
-      setCookie: harness.setCookie,
     });
 
-    expect(harness.cookies[0]?.value).toBe("new_user");
+    const cookies = parseCookiesFromHeaders(result.headers);
+    expect(cookies[0]!.value).toBe("new_user");
     expect(harness.events).toEqual([]);
   });
 
   it("clears the user cookie and tracks logout", async () => {
     const harness = makeHarness();
 
-    await harness.after!({
+    const result = await harness.after!({
       path: "/sign-out",
       context: {},
       getCookie: (name) => name === "strada_uid" ? "user_123" : undefined,
-      setCookie: harness.setCookie,
     });
 
-    expect(harness.cookies).toMatchInlineSnapshot(`
-      [
-        {
-          "name": "strada_uid",
-          "options": {
-            "httpOnly": false,
-            "maxAge": 0,
-            "path": "/",
-            "sameSite": "lax",
-          },
-          "value": "",
-        },
-      ]
-    `);
+    const cookies = parseCookiesFromHeaders(result.headers);
+    expect(cookies[0]!.name).toBe("strada_uid");
+    expect(cookies[0]!.value).toBe("");
+    expect(cookies[0]!.raw).toContain("Max-Age=0");
+
     expect(harness.events).toMatchInlineSnapshot(`
       [
         {
@@ -221,7 +195,6 @@ describe("strataBetterAuth", () => {
     await harness.after!({
       path: "/sign-in/email",
       context: { newSession: { user: { id: "user_123", email: "hidden@example.com" } } },
-      setCookie: harness.setCookie,
     });
 
     expect(harness.events[0]).toMatchInlineSnapshot(`

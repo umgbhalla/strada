@@ -4,6 +4,13 @@
  * This file intentionally imports Better Auth only as a type. The runtime plugin
  * is a plain object matching Better Auth's structural plugin contract, so apps
  * that do not use Better Auth never bundle it through @strada.sh/sdk.
+ *
+ * Cookie setting uses the `{ headers }` return mechanism from after hooks, not
+ * `ctx.setCookie()`. The hook context type (`HookEndpointContext`) wraps
+ * `EndpointContext` in `Partial<>`, so `setCookie` is undefined at runtime.
+ * Returning `{ headers: new Headers({ "set-cookie": ... }) }` is the correct
+ * way to set cookies from after hooks; `runAfterHooks` merges those headers
+ * into `context.context.responseHeaders`.
  */
 
 import { logs, SeverityNumber } from "@opentelemetry/api-logs";
@@ -49,22 +56,27 @@ type BetterAuthUser = {
   image?: string | null;
 };
 
-type CookieOptions = {
-  path?: string;
-  sameSite?: "lax" | "strict" | "none";
-  httpOnly?: boolean;
-  maxAge?: number;
-};
-
-type BetterAuthContext = {
+/**
+ * Minimal shape of the context passed to after hooks at runtime.
+ * The real type is HookEndpointContext from @better-auth/core, which is
+ * Partial<EndpointContext<...>> — most EndpointContext methods (setCookie,
+ * setHeader, etc.) are undefined. We only type the properties we actually use.
+ *
+ * Source: @better-auth/core/dist/types/plugin.d.mts (HookEndpointContext)
+ * Source: @better-auth/core/dist/api/index.d.mts (AuthContext.newSession, AuthContext.session)
+ * Source: better-call/dist/endpoint.d.mts (EndpointContext.getCookie)
+ */
+type HookContext = {
   path?: string;
   context: {
     newSession?: { user?: BetterAuthUser } | null;
     session?: { user?: BetterAuthUser } | null;
   };
   getCookie?: (name: string) => string | null | undefined;
-  setCookie: (name: string, value: string, options?: CookieOptions) => string;
 };
+
+type BetterAuthAfterHookHandler =
+  NonNullable<NonNullable<BetterAuthPlugin["hooks"]>["after"]>[number]["handler"];
 
 const ONE_YEAR_SECONDS = 60 * 60 * 24 * 365;
 const pluginBase = { id: "strada-better-auth" } satisfies BetterAuthPlugin;
@@ -78,6 +90,23 @@ const customAttributeKeys = {
   authPath: "custom.auth_path",
   isSignup: "custom.is_signup",
 } satisfies Record<keyof StradaAuthEventProperties, string>;
+
+/**
+ * Serialize a cookie name/value/options into a Set-Cookie header string.
+ * Avoids a runtime dependency on better-call's serializeCookie.
+ */
+function serializeSetCookie(
+  name: string,
+  value: string,
+  options: { path?: string; sameSite?: string; httpOnly?: boolean; maxAge?: number } = {},
+): string {
+  let cookie = `${encodeURIComponent(name)}=${encodeURIComponent(value)}`;
+  if (options.path) cookie += `; Path=${options.path}`;
+  if (options.maxAge !== undefined) cookie += `; Max-Age=${options.maxAge}`;
+  if (options.sameSite) cookie += `; SameSite=${options.sameSite}`;
+  if (options.httpOnly) cookie += "; HttpOnly";
+  return cookie;
+}
 
 export function strataBetterAuth(options: StradaBetterAuthOptions = {}) {
   const config = {
@@ -127,73 +156,66 @@ export function strataBetterAuth(options: StradaBetterAuthOptions = {}) {
       after: [
         {
           matcher: (context) => Boolean(context.path),
-          handler: async (ctx) => {
-            const authCtx = ctx as BetterAuthContext;
-
-            if (authCtx.path === "/sign-out") {
-              const previousUserId = authCtx.getCookie?.(config.cookieName) ?? undefined;
-              clearStradaUidCookie({ ctx: authCtx, name: config.cookieName });
-              const user = authCtx.context.session?.user ?? (previousUserId ? { id: previousUserId } : undefined);
+          // The after hook receives HookEndpointContext at runtime, which is
+          // Partial<EndpointContext<...>> — setCookie/setHeader are undefined.
+          // Cookie setting is done via the returned { headers } object, which
+          // runAfterHooks merges into context.context.responseHeaders.
+          handler: (async (ctx: HookContext) => {
+            if (ctx.path === "/sign-out") {
+              const previousUserId = ctx.getCookie?.(config.cookieName) ?? undefined;
+              const headers = makeClearCookieHeaders(config.cookieName);
+              const user = ctx.context.session?.user ?? (previousUserId ? { id: previousUserId } : undefined);
               await trackSafely("auth.logout", commonAuthProperties({
                 user,
-                path: authCtx.path,
+                path: ctx.path,
                 includeUserDetails: config.includeUserDetails,
               }));
-              return {};
+              return { headers };
             }
 
-            const user = authCtx.context.newSession?.user;
+            const user = ctx.context.newSession?.user;
             const userId = stringValue(user?.id);
             if (!userId) return {};
 
-            writeStradaUidCookie(authCtx, {
-              name: config.cookieName,
-              value: userId,
-              maxAge: config.cookieMaxAge,
-            });
+            const headers = makeSetCookieHeaders(config.cookieName, userId, config.cookieMaxAge);
 
             emitIdentifyLog(user, config.includeUserDetails);
 
-            if (authCtx.path?.startsWith("/sign-up")) return {};
+            if (ctx.path?.startsWith("/sign-up")) return { headers };
 
             await trackSafely("auth.login", commonAuthProperties({
               user,
-              path: authCtx.path,
+              path: ctx.path,
               includeUserDetails: config.includeUserDetails,
             }));
-            return {};
-          },
+            return { headers };
+          }) as BetterAuthAfterHookHandler,
         },
       ],
     },
   } satisfies BetterAuthPlugin;
 }
 
-function writeStradaUidCookie(
-  ctx: BetterAuthContext,
-  options: { name: string; value: string; maxAge: number },
-) {
-  ctx.setCookie(options.name, options.value, {
+function makeSetCookieHeaders(name: string, value: string, maxAge: number): Headers {
+  const headers = new Headers();
+  headers.set("set-cookie", serializeSetCookie(name, value, {
     path: "/",
     sameSite: "lax",
     httpOnly: false,
-    maxAge: options.maxAge,
-  });
+    maxAge,
+  }));
+  return headers;
 }
 
-function clearStradaUidCookie({
-  ctx,
-  name,
-}: {
-  ctx: BetterAuthContext;
-  name: string;
-}) {
-  ctx.setCookie(name, "", {
+function makeClearCookieHeaders(name: string): Headers {
+  const headers = new Headers();
+  headers.set("set-cookie", serializeSetCookie(name, "", {
     path: "/",
     sameSite: "lax",
     httpOnly: false,
     maxAge: 0,
-  });
+  }));
+  return headers;
 }
 
 function commonAuthProperties({
