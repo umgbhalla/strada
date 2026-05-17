@@ -10,7 +10,7 @@
 import * as TooltipPrimitive from '@radix-ui/react-tooltip'
 import dedent from 'string-dedent'
 
-import { renderDashboard } from '../lib/mdx-dashboard.tsx'
+import { MdxDashboard } from '../lib/mdx-dashboard.tsx'
 
 // ── Demo data ────────────────────────────────────────────────────
 
@@ -187,9 +187,9 @@ export function ErrorsDashboardMdx() {
         <div>
           <h1 className='text-2xl font-medium'>Errors</h1>
         </div>
-        {renderDashboard({
-          mdx: dashboardMdx,
-          scope: {
+        <MdxDashboard
+          mdx={dashboardMdx}
+          scope={{
             errorsByServiceData,
             errorSourcesData,
             handledData,
@@ -197,8 +197,8 @@ export function ErrorsDashboardMdx() {
             byEnvironmentData,
             servicesData,
             browserErrorsChartData,
-          },
-        })}
+          }}
+        />
       </div>
     </TooltipPrimitive.Provider>
   )

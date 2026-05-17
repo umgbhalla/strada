@@ -11,19 +11,7 @@ import PieChart from '@ui/components/pie-chart.tsx';
 import { ShowMore } from '@ui/components/show-more.tsx';
 import { WidgetHeader } from '@ui/components/widget-card.tsx';
 
-// ── Auto-color palette ──────────────────────────────────────────
-
-const FILL_PALETTE = [
-  'fill-primary', 'fill-destructive', 'fill-yellow-500', 'fill-purple-500',
-  'fill-success', 'fill-orange-500', 'fill-teal-500', 'fill-pink-500',
-  'fill-indigo-500', 'fill-amber-500', 'fill-cyan-500', 'fill-rose-500',
-] as const;
-
-const DOT_PALETTE = [
-  'bg-primary', 'bg-destructive', 'bg-yellow-500', 'bg-purple-500',
-  'bg-success', 'bg-orange-500', 'bg-teal-500', 'bg-pink-500',
-  'bg-indigo-500', 'bg-amber-500', 'bg-cyan-500', 'bg-rose-500',
-] as const;
+import { FILL_CLASSES, DOT_CLASSES } from '../../lib/chart-colors.ts';
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -70,8 +58,8 @@ export function DonutPanel({
   const segments = data.map((item, i) => ({
     ...item,
     id: item.label,
-    fillClassName: FILL_PALETTE[i % FILL_PALETTE.length]!,
-    dotClassName: DOT_PALETTE[i % DOT_PALETTE.length]!,
+    fillClassName: FILL_CLASSES[i % FILL_CLASSES.length]!,
+    dotClassName: DOT_CLASSES[i % DOT_CLASSES.length]!,
     percentage: Math.round((item.value / totalValue) * 100),
   }));
 

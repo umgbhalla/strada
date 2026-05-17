@@ -8,7 +8,7 @@
 //   Grid, Grid.Item, DonutPanel, SparklinePanel, SparkAreaPanel
 //
 // Usage:
-//   const jsx = renderDashboard({ mdx, scope })
+//   <MdxDashboard mdx={mdxString} scope={{ myData }} />
 
 import { SafeMdxRenderer } from 'safe-mdx'
 import { mdxParse } from 'safe-mdx/parse'
@@ -27,9 +27,9 @@ const DASHBOARD_COMPONENTS = {
   SparkAreaPanel,
 }
 
-// ── Render function ─────────────────────────────────────────────
+// ── Component ───────────────────────────────────────────────────
 
-export function renderDashboard({
+export function MdxDashboard({
   mdx,
   scope = {},
 }: {

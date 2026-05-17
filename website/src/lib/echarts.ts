@@ -6,14 +6,12 @@ import * as ec from 'echarts/core'
 import { LineChart, BarChart } from 'echarts/charts'
 import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
+import { HEX_COLORS } from './chart-colors.ts'
 
 ec.use([LineChart, BarChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer])
 
 ec.registerTheme('strada', {
-  color: [
-    '#5470c6', '#91cc75', '#fac858', '#ee6666', '#73c0de',
-    '#3ba272', '#fc8452', '#9a60b4', '#ea7ccc',
-  ],
+  color: [...HEX_COLORS],
 })
 
 export const echarts = ec
