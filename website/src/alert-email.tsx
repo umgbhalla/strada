@@ -44,16 +44,20 @@ function formatFirstSeen(raw: string): string {
 
 // ── Shared components ──────────────────────────────────────────
 // Dark mode strategy:
-// - Inline styles use light-mode colors (universal fallback)
+// - Inline code (<code>) has NO background color. Monospace font is enough
+//   distinction, and any background becomes a white block in dark-mode
+//   clients like Spark that darken the body but leave inline styles alone.
+// - Stacktrace <pre> has no inline background either. The dark mode <style>
+//   block adds a dark background for clients that support media queries.
 // - <style> block adds @media (prefers-color-scheme: dark) overrides
-//   with !important for clients that support it (Apple Mail, some Outlook)
-// - Gmail ignores media queries but does its own color inversion on
-//   near-white backgrounds, which works acceptably for #f0f0f0/#f5f5f5
-// - color-scheme meta tag signals dark mode support to Apple Mail
+//   with !important for Apple Mail and some Outlook versions.
+// - Gmail ignores media queries but does its own color inversion.
+// - Spark ignores both media queries and color inversion; no-background
+//   inline styles are the only safe option.
+// - color-scheme meta tag signals dark mode support to Apple Mail.
 
 const darkModeStyles = `
   @media (prefers-color-scheme: dark) {
-    .strada-code { background-color: #2a2a2a !important; color: #e0e0e0 !important; }
     .strada-pre { background-color: #1e1e1e !important; }
     .strada-pre pre { color: #e0e0e0 !important; }
     .strada-hr { border-top-color: #444 !important; }
@@ -69,9 +73,6 @@ function Code({ children }: { children: string }) {
     <code className="strada-code" style={{
       fontFamily: mono,
       fontSize: 13,
-      padding: '2px 6px',
-      borderRadius: 4,
-      backgroundColor: '#f0f0f0',
     }}>
       {children}
     </code>
@@ -80,7 +81,7 @@ function Code({ children }: { children: string }) {
 
 function Pre({ children }: { children: string }) {
   return (
-    <div className="strada-pre" style={{ overflowX: 'auto', borderRadius: 8, backgroundColor: '#f5f5f5' }}>
+    <div className="strada-pre" style={{ overflowX: 'auto', borderRadius: 8 }}>
       <pre style={{
         fontFamily: mono,
         fontSize: 13,
@@ -88,7 +89,6 @@ function Pre({ children }: { children: string }) {
         padding: 16,
         margin: 0,
         whiteSpace: 'pre',
-        color: '#1a1a1a',
       }}>
         {children}
       </pre>
@@ -167,9 +167,6 @@ function AlertEmail({ data }: { data: ErrorAlertData }) {
         <code className="strada-code" style={{
           fontFamily: mono,
           fontSize: 13,
-          padding: '4px 8px',
-          borderRadius: 4,
-          backgroundColor: '#f0f0f0',
         }}>
           {`strada issues view ${data.fingerprintHash} -p ${data.projectSlug}`}
         </code>
