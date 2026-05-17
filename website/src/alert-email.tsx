@@ -43,14 +43,30 @@ function formatFirstSeen(raw: string): string {
 }
 
 // ── Shared components ──────────────────────────────────────────
+// Dark mode strategy:
+// - Inline styles use light-mode colors (universal fallback)
+// - <style> block adds @media (prefers-color-scheme: dark) overrides
+//   with !important for clients that support it (Apple Mail, some Outlook)
+// - Gmail ignores media queries but does its own color inversion on
+//   near-white backgrounds, which works acceptably for #f0f0f0/#f5f5f5
+// - color-scheme meta tag signals dark mode support to Apple Mail
+
+const darkModeStyles = `
+  @media (prefers-color-scheme: dark) {
+    .strada-code { background-color: #2a2a2a !important; color: #e0e0e0 !important; }
+    .strada-pre { background-color: #1e1e1e !important; }
+    .strada-pre pre { color: #e0e0e0 !important; }
+    .strada-hr { border-top-color: #444 !important; }
+  }
+`
 
 function Hr() {
-  return <hr style={{ border: 'none', borderTop: '1px solid #e0e0e0', margin: '24px 0' }} />
+  return <hr className="strada-hr" style={{ border: 'none', borderTop: '1px solid #e0e0e0', margin: '24px 0' }} />
 }
 
 function Code({ children }: { children: string }) {
   return (
-    <code style={{
+    <code className="strada-code" style={{
       fontFamily: mono,
       fontSize: 13,
       padding: '2px 6px',
@@ -64,7 +80,7 @@ function Code({ children }: { children: string }) {
 
 function Pre({ children }: { children: string }) {
   return (
-    <div style={{ overflowX: 'auto', borderRadius: 8, backgroundColor: '#f5f5f5' }}>
+    <div className="strada-pre" style={{ overflowX: 'auto', borderRadius: 8, backgroundColor: '#f5f5f5' }}>
       <pre style={{
         fontFamily: mono,
         fontSize: 13,
@@ -92,6 +108,7 @@ function EmailShell({ children }: { children: React.ReactNode }) {
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="color-scheme" content="light dark" />
         <meta name="supported-color-schemes" content="light dark" />
+        <style dangerouslySetInnerHTML={{ __html: darkModeStyles }} />
       </head>
       <body style={{
         fontFamily: sans,
@@ -147,7 +164,7 @@ function AlertEmail({ data }: { data: ErrorAlertData }) {
 
       <p style={{ margin: '12px 0' }}>View this issue:</p>
       <p style={{ margin: '8px 0' }}>
-        <code style={{
+        <code className="strada-code" style={{
           fontFamily: mono,
           fontSize: 13,
           padding: '4px 8px',
