@@ -421,8 +421,8 @@ export const app = new Spiceflow({ tracer })
 
   // ── Project page (Errors tab with widget dashboard) ─────────────
   .page('/dash/projects/:projectId', async () => {
-    const { ErrorsDashboard } = await import('./components/errors-dashboard.tsx')
-    return <ErrorsDashboard />
+    const { ErrorsDashboardMdx } = await import('./components/errors-dashboard-mdx.tsx')
+    return <ErrorsDashboardMdx />
   })
 
   // ── Issues tab placeholder ─────────────────────────────────────

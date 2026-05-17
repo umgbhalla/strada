@@ -1,8 +1,11 @@
 // Generic compact area-chart panel with a side usage summary.
+//
+// Data can be a Promise for RSC streaming via use().
 
 'use client';
 
-import * as React from 'react';
+import { use } from 'react';
+import type * as React from 'react';
 
 import { ChartArea, type AreaChartDataPoint } from '@ui/components/chart-area.tsx';
 import { WidgetHeader } from '@ui/components/widget-card.tsx';
@@ -15,10 +18,17 @@ export type SparkAreaPanelProps = Pick<
   React.ComponentProps<typeof WidgetHeader>,
   'title' | 'value' | 'badge' | 'badgeColor' | 'tooltip' | 'actionLabel' | 'action'
 > & {
-  data: SparkAreaPanelDataItem[];
+  data: SparkAreaPanelDataItem[] | Promise<SparkAreaPanelDataItem[]>;
   usageValue: string;
   usageLabel: string;
 };
+
+function resolveData<T>(data: T | Promise<T>): T {
+  if (data && typeof data === 'object' && 'then' in data) {
+    return use(data as Promise<T>);
+  }
+  return data;
+}
 
 export function SparkAreaPanel({
   title,
@@ -28,10 +38,12 @@ export function SparkAreaPanel({
   tooltip,
   actionLabel,
   action,
-  data,
+  data: rawData,
   usageValue,
   usageLabel,
 }: SparkAreaPanelProps) {
+  const data = resolveData(rawData);
+
   return (
     <div className='flex flex-col gap-0 overflow-hidden'>
       <WidgetHeader

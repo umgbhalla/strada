@@ -4,6 +4,13 @@
   "private": true,
   "type": "module",
   "description": "Strada website and API. Auth, project management, query bridge to Tinybird/ClickHouse.",
+  "imports": {
+    "#echarts": {
+      "types": "./src/lib/echarts.ts",
+      "browser": "./src/lib/echarts.ts",
+      "default": "./src/lib/echarts-server.ts"
+    }
+  },
   "exports": {
     "./package.json": "./package.json",
     "./src/*": "./src/*",
@@ -44,7 +51,8 @@
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "recharts": "^3.8.1",
-    "spiceflow": "1.22.0-rsc.0",
+    "safe-mdx": "^1.11.0",
+    "spiceflow": "1.25.1-rsc.0",
     "strada": "workspace:^",
     "string-dedent": "^3.0.2",
     "tailwind-merge": "^3.5.0",

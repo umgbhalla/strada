@@ -1,9 +1,7 @@
 // Reusable area chart component wrapping recharts.
-// Supports single and stacked areas with a consistent data interface.
 
 'use client';
 
-import * as React from 'react';
 import { Area, AreaChart, ResponsiveContainer, XAxis, YAxis } from 'recharts';
 
 export type AreaChartDataPoint = {
@@ -13,13 +11,10 @@ export type AreaChartDataPoint = {
 
 export type AreaConfig = {
   dataKey: string;
-  /** Line stroke color. Use 'none' to hide */
   stroke?: string;
   strokeWidth?: number;
-  /** Fill color */
   fill: string;
   fillOpacity?: number;
-  /** Interpolation type */
   type?: 'linear' | 'monotone' | 'step';
 };
 
@@ -27,19 +22,12 @@ export type ChartAreaProps = {
   data: AreaChartDataPoint[];
   areas: AreaConfig[];
   height?: number | string;
-  /** Show X axis */
   showXAxis?: boolean;
-  /** X axis tick formatter */
   xAxisFormatter?: (value: string) => string;
-  /** X axis height (for tick labels) */
   xAxisHeight?: number;
-  /** X axis tick margin */
   xAxisTickMargin?: number;
-  /** X axis className for tick styling */
   xAxisClassName?: string;
-  /** Y-axis domain */
   yDomain?: [string | number, string | number];
-  /** Margin overrides */
   margin?: { top?: number; right?: number; bottom?: number; left?: number };
   className?: string;
 };

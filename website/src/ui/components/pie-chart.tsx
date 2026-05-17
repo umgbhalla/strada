@@ -1,3 +1,5 @@
+// Donut/pie chart wrapping recharts.
+
 'use client';
 
 import { Cell, Pie, PieChart as RechartsPieChart, Sector } from 'recharts';
@@ -5,13 +7,12 @@ import { Cell, Pie, PieChart as RechartsPieChart, Sector } from 'recharts';
 import { cn } from '@ui/utils/cn.ts';
 
 export const CIRCLE_SIZE = 90;
+
 const INNER_RADIUS = 32;
 const OUTER_RADIUS = 45;
 
 const renderActiveShape = (props: any) => {
-  const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, ...rest } =
-    props;
-
+  const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, ...rest } = props;
   return (
     <Sector
       cx={cx}
@@ -36,21 +37,11 @@ export default function PieChart({
   circleSize?: number;
 }) {
   return (
-    <div
-      className={className}
-      style={{
-        width: circleSize,
-      }}
-    >
+    <div className={className} style={{ width: circleSize }}>
       <RechartsPieChart
         width={circleSize}
         height={circleSize}
-        margin={{
-          top: 0,
-          bottom: 0,
-          left: 0,
-          right: 0,
-        }}
+        margin={{ top: 0, bottom: 0, left: 0, right: 0 }}
       >
         <Pie
           dataKey='value'
