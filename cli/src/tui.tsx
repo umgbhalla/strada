@@ -11,11 +11,11 @@ import {
   Action,
   ActionPanel,
   BarGraph,
+  Cache,
   Color,
   Detail,
   Icon,
   List,
-  LocalStorage,
   Table,
   showToast,
   Toast,
@@ -24,7 +24,7 @@ import {
 } from "termcast";
 import { useCachedPromise } from "@termcast/utils";
 import type { ReactNode } from "react";
-import { useSyncExternalStore, useEffect, useCallback } from "react";
+import { useSyncExternalStore, useEffect, useCallback, useRef } from "react";
 import { createStore } from "zustand/vanilla";
 
 import { fetchOrgs, fetchProjects } from "./orgs.ts";
@@ -111,35 +111,31 @@ interface TuiState {
   timeRange: TimeRange;
 }
 
+// Cache is sync (SQLite-backed) and works at module scope because
+// the termcast provider sets up extensionPath before the component
+// renders. This is different from LocalStorage which is async.
+const cache = new Cache({ namespace: "strada-tui" });
+
+function loadPersistedState(): Partial<TuiState> {
+  const raw = cache.get("state");
+  if (!raw) return {};
+  try { return JSON.parse(raw) as Partial<TuiState>; }
+  catch { return {}; }
+}
+
+const persisted = loadPersistedState();
+
 const store = createStore<TuiState>(() => ({
-  view: "issues",
-  projectId: null,
-  projectSlug: null,
-  service: null,
-  timeRange: "24h",
+  view: persisted.view ?? "issues",
+  projectId: persisted.projectId ?? null,
+  projectSlug: persisted.projectSlug ?? null,
+  service: persisted.service ?? null,
+  timeRange: persisted.timeRange ?? "24h",
 }));
 
-// Persist to LocalStorage on every change
+// Persist every state change synchronously
 store.subscribe((state) => {
-  void LocalStorage.setItem("tui-state", JSON.stringify(state));
-});
-
-// Load persisted state on module init (async, best-effort)
-void LocalStorage.getItem("tui-state").then((raw) => {
-  if (typeof raw === "string") {
-    try {
-      const saved = JSON.parse(raw) as Partial<TuiState>;
-      store.setState({
-        view: saved.view ?? "issues",
-        projectId: saved.projectId ?? null,
-        projectSlug: saved.projectSlug ?? null,
-        service: saved.service ?? null,
-        timeRange: saved.timeRange ?? "24h",
-      });
-    } catch {
-      // ignore corrupt data
-    }
-  }
+  cache.set("state", JSON.stringify(state));
 });
 
 function useStore<T>(selector: (s: TuiState) => T): T {
@@ -210,8 +206,13 @@ function parseAttributes(value: unknown): Record<string, string> {
 
 function NavigationDropdown({ projects }: { projects: CachedProject[] }): ReactNode {
   const view = useStore((s) => s.view);
+  const projectSlug = useStore((s) => s.projectSlug);
   const projectId = useStore((s) => s.projectId);
   const timeRange = useStore((s) => s.timeRange);
+
+  const viewLabel = VIEW_OPTIONS.find((v) => v.id === view)?.label ?? "Issues";
+  const timeLabel = TIME_OPTIONS.find((t) => t.id === timeRange)?.label ?? "24h";
+  const displayValue = `${viewLabel} · ${projectSlug ?? "…"} · ${timeLabel}`;
 
   const handleChange = useCallback((value: string) => {
     if (value.startsWith("view::")) {
@@ -228,6 +229,7 @@ function NavigationDropdown({ projects }: { projects: CachedProject[] }): ReactN
     <List.Dropdown
       tooltip="Navigation"
       value={`view::${view}`}
+      displayValue={displayValue}
       onChange={handleChange}
     >
       <List.Dropdown.Section title="View">
@@ -271,14 +273,14 @@ function ServiceFilterActions({ services, isLoading }: { services: ServiceRow[];
   return (
     <ActionPanel.Section title={isLoading ? "Services (loading…)" : "Service"}>
       <Action
-        title={currentService ? "All Services" : "✓ All Services"}
+        title="All Services"
         icon={currentService ? ICON.circle : ICON.checkCircle}
         onAction={() => store.setState({ service: null })}
       />
       {services.map((s) => (
         <Action
           key={s.serviceName}
-          title={s.serviceName === currentService ? `✓ ${s.serviceName}` : s.serviceName}
+          title={s.serviceName}
           icon={s.serviceName === currentService ? ICON.checkCircle : ICON.circle}
           onAction={() => store.setState({ service: s.serviceName })}
         />
@@ -1131,10 +1133,6 @@ export default function StradaTui(): ReactNode {
   );
   const services = servicesData ?? [];
 
-  const viewLabel = VIEW_OPTIONS.find((v) => v.id === view)?.label ?? "Issues";
-  const timeLabel = TIME_OPTIONS.find((t) => t.id === timeRange)?.label ?? "24h";
-  const navTitle = `${viewLabel} · ${projectSlug ?? "…"} · ${timeLabel}`;
-
   const isLoading = orgLoading || !projectId;
 
   // TODO: Use AI to generate SQL WHERE clause from natural language search query.
@@ -1144,8 +1142,7 @@ export default function StradaTui(): ReactNode {
     <List
       isLoading={isLoading}
       isShowingDetail={true}
-      navigationTitle={navTitle}
-      searchBarPlaceholder={`Search ${viewLabel.toLowerCase()}…`}
+      searchBarPlaceholder="Search…"
       searchBarAccessory={<NavigationDropdown projects={projects} />}
     >
       {projectId && view === "issues" && (

@@ -20,6 +20,14 @@
     "directory": "cli"
   },
   "bin": "dist/bin.js",
+  "commands": [
+    {
+      "name": "tui",
+      "title": "Strada",
+      "description": "Browse issues, logs, traces, and analytics",
+      "mode": "view"
+    }
+  ],
   "files": [
     "src",
     "dist"
