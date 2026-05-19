@@ -70,7 +70,7 @@ export function DonutPanel({
   }));
 
   return (
-    <>
+    <ShowMore maxHeight={200}>
       <WidgetHeader
         title={title}
         value={value}
@@ -85,26 +85,24 @@ export function DonutPanel({
       <div className='mt-4 flex items-start gap-4'>
         <PieChart data={chartData} circleSize={98} className='shrink-0' />
 
-        <ShowMore maxHeight={120}>
-          <div className='grid min-w-0 flex-1 grid-cols-[12px_1fr_auto_auto_auto] items-center gap-x-1.5 gap-y-2'>
-            {segments.map((s) => (
-              <React.Fragment key={s.id}>
-                <LegendDot className={s.dotClassName} />
-                <div className='truncate text-sm font-medium text-muted-foreground'>
-                  {s.label}
-                </div>
-                <div className='text-right text-sm font-medium tabular-nums text-muted-foreground'>
-                  {fmt(s.value)}
-                </div>
-                <div className='text-sm font-normal text-foreground/25'>·</div>
-                <div className='text-sm font-normal tabular-nums text-foreground/40'>
-                  {s.percentage}%
-                </div>
-              </React.Fragment>
-            ))}
-          </div>
-        </ShowMore>
+        <div className='grid min-w-0 flex-1 grid-cols-[12px_1fr_auto_auto_auto] items-center gap-x-1.5 gap-y-2'>
+          {segments.map((s) => (
+            <React.Fragment key={s.id}>
+              <LegendDot className={s.dotClassName} />
+              <div className='truncate text-sm font-medium text-muted-foreground'>
+                {s.label}
+              </div>
+              <div className='text-right text-sm font-medium tabular-nums text-muted-foreground'>
+                {fmt(s.value)}
+              </div>
+              <div className='text-sm font-normal text-foreground/25'>·</div>
+              <div className='text-sm font-normal tabular-nums text-foreground/40'>
+                {s.percentage}%
+              </div>
+            </React.Fragment>
+          ))}
+        </div>
       </div>
-    </>
+    </ShowMore>
   );
 }
