@@ -134,7 +134,16 @@ projectsCli
     output.log(`  Ingest endpoint: ${res.ingestEndpoint.toLowerCase()}`);
     output.log(`  Token:           ${cyan(res.token)}`);
     output.log("");
-    output.log(dim("Use this ingest-scoped token only in server-side SDKs. Browser ingest should omit it."));
+    output.log(bold("About the token:"));
+    output.log(`  This is an org-wide ingest token. Pass it as ${cyan("STRADA_TOKEN")} in your server-side SDK.`);
+    output.log(`  Without a token, ingest requests are treated as anonymous browser traffic and`);
+    output.log(`  rate limited by Cloudflare. Server-side SDKs should always include a token to`);
+    output.log(`  avoid hitting rate limits.`);
+    output.log("");
+    output.log(`  ${bold("Do not use this token in browser SDKs.")} Browser ingest is designed to work`);
+    output.log(`  without a token. Embedding it in client-side code would expose it publicly.`);
+    output.log("");
+    output.log(dim("The token is shown only once. If lost, create a new one with `strada tokens create --scope ingest <name>`."));
     output.log(dim("Manage tokens with `strada tokens list` and `strada tokens create <name>`."));
   });
 
