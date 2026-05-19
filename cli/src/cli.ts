@@ -71,7 +71,7 @@ cli.command("", "Browse Strada in the terminal").action(async () => {
 
   const React = await import("react");
   const { renderWithProviders } = await import("termcast");
-  const { default: StradaTui } = await import("./tui.js");
+  const { default: StradaTui } = await import("./tui/index.js");
   await renderWithProviders(React.createElement(StradaTui), {
     extensionName: "strada",
   });
