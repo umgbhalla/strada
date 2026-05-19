@@ -1,4 +1,8 @@
 // Main Strada CLI entrypoint. Composes sub-CLIs and wires help/version output.
+//
+// Shebang is `node` so all CLI subcommands work without Bun.
+// Only the default TUI command requires Bun (OpenTUI Zig FFI). When
+// invoked under Node, the TUI re-spawns itself with `bun` via spawnSync.
 
 import { goke } from "goke";
 import packageJson from "../package.json" with { type: "json" };
@@ -28,6 +32,50 @@ export const cli = goke("strada")
   .use(servicesCli)
   .use(tracesCli)
   .use(tokensCli);
+
+// ── Default command (TUI) ─────────────────────────────────────────
+
+cli.command("", "Browse Strada in the terminal").action(async () => {
+  // OpenTUI's Zig renderer requires Bun FFI. When running under Node,
+  // re-spawn the same command with bun so the TUI works transparently.
+  const isBun = typeof (globalThis as { Bun?: unknown }).Bun !== "undefined";
+  if (!isBun) {
+    const { spawnSync } = await import("node:child_process");
+    const { fileURLToPath } = await import("node:url");
+    const __filename = fileURLToPath(import.meta.url);
+    const result = spawnSync("bun", [__filename, ...process.argv.slice(2)], {
+      stdio: "inherit",
+      env: process.env,
+    });
+    if (result.error) {
+      const isWindows = process.platform === "win32";
+      const installCmd = isWindows
+        ? 'powershell -c "irm bun.sh/install.ps1 | iex"'
+        : "curl -fsSL https://bun.sh/install | bash";
+      console.error(
+        "Error: The TUI requires Bun to run.\n\n" +
+          "Install Bun:\n" +
+          `  ${installCmd}\n\n` +
+          "Then run:\n" +
+          "  strada",
+      );
+      process.exit(1);
+    }
+    if (result.signal) {
+      process.kill(process.pid, result.signal);
+      return;
+    }
+    process.exit(result.status ?? 1);
+    return;
+  }
+
+  const React = await import("react");
+  const { renderWithProviders } = await import("termcast");
+  const { default: StradaTui } = await import("./tui.js");
+  await renderWithProviders(React.createElement(StradaTui), {
+    extensionName: "strada",
+  });
+});
 
 cli.help();
 cli.version(packageJson.version);

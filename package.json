@@ -18,6 +18,11 @@
   "dependencies": {
     "oxlint-tsgolint": "^0.17.4"
   },
+  "pnpm": {
+    "overrides": {
+      "termcast": "link:/Users/morse/Documents/GitHub/termcast/termcast"
+    }
+  },
   "devDependencies": {
     "@changesets/cli": "^2.30.0",
     "oxfmt": "^0.42.0",

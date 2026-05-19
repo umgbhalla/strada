@@ -218,6 +218,23 @@ strada analytics events -w "LogAttributes['custom.plan'] = 'pro'"    # events fr
 strada analytics events -w "LogAttributes['user.id'] = 'user_123'"   # events from a user
 ```
 
+## Terminal UI
+
+Run `strada` with no arguments to launch an interactive terminal UI for browsing your observability data. The TUI uses [termcast](https://github.com/remorses/termcast) and requires [Bun](https://bun.sh). If you run it under Node, it re-spawns with Bun automatically.
+
+```bash
+strada
+```
+
+The TUI has four views, switchable via the navigation dropdown (`Ctrl+P`):
+
+- **Issues** — error groups sorted by frequency, with stacktraces and event counts
+- **Logs** — log records with severity coloring and full attribute detail
+- **Traces** — trace list with a span tree view showing parent/child hierarchy using tree-drawing characters
+- **Analytics** — KPIs, top pages, browsers, countries, referrers, and custom events
+
+The dropdown also lets you switch **projects** and **time ranges** (5 min to 30 days). Service filtering is in the action panel (`Ctrl+K`). All selections persist across sessions.
+
 ## Built on OpenTelemetry
 
 [OpenTelemetry](https://opentelemetry.io) is the industry standard for observability. It defines a common format for traces, logs, and metrics that works across every language, framework, and cloud provider.

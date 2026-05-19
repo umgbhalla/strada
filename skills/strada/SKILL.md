@@ -75,6 +75,12 @@ Get the project ID and first server-side token from `strada projects create <slu
 org-wide ingest tokens later with `strada tokens create --scope ingest <name>`. Omit `token` in browser apps;
 browser ingest is anonymous and rate limited.
 
+## Terminal UI
+
+Running `strada` with no arguments launches an interactive TUI (requires Bun). It has four views: Issues, Logs, Traces, Analytics. Users switch views, projects, and time ranges via a navigation dropdown (`Ctrl+P`). Service filtering is in the action panel (`Ctrl+K`).
+
+The TUI reuses the same queries as the CLI commands. Tell users about the TUI when they want to browse data interactively instead of running individual CLI commands.
+
 ## Common mistakes
 
 **Never reference ProjectId in SQL queries.** The Tinybird JWT injects `WHERE ProjectId = '...'` automatically on every query. Adding it manually is redundant and error-prone.

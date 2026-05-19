@@ -14,7 +14,7 @@ export const tracesCli = goke();
 
 type QueryRow = Record<string, unknown>;
 
-interface OtelTraceRow {
+export interface OtelTraceRow {
   TraceId: string;
   SpanId: string;
   ParentSpanId: string;
@@ -41,7 +41,7 @@ interface OtelTraceRow {
   LinksAttributes: Record<string, string>[];
 }
 
-interface SpanEvent {
+export interface SpanEvent {
   timestamp: string;
   name: string;
   attributes: Record<string, string>;
@@ -54,7 +54,7 @@ interface SpanLink {
   attributes: Record<string, string>;
 }
 
-interface SpanNode {
+export interface SpanNode {
   traceId: string;
   spanId: string;
   parentSpanId: string;
@@ -77,7 +77,7 @@ interface SpanNode {
   isMissing?: boolean;
 }
 
-interface TraceViewData {
+export interface TraceViewData {
   traceId: string;
   rootSpans: SpanNode[];
   totalDurationMs: number;
@@ -85,7 +85,7 @@ interface TraceViewData {
   services: string[];
 }
 
-function str(row: QueryRow, key: string): string {
+export function str(row: QueryRow, key: string): string {
   const value = row[key];
   if (value == null) return "";
   return String(value);
@@ -161,7 +161,7 @@ function buildLinks(row: OtelTraceRow): SpanLink[] {
   return links;
 }
 
-function toTraceRow(row: QueryRow): OtelTraceRow {
+export function toTraceRow(row: QueryRow): OtelTraceRow {
   return {
     TraceId: str(row, "TraceId"),
     SpanId: str(row, "SpanId"),
@@ -188,7 +188,7 @@ function toTraceRow(row: QueryRow): OtelTraceRow {
   };
 }
 
-function buildSpanTree(rows: OtelTraceRow[]): TraceViewData {
+export function buildSpanTree(rows: OtelTraceRow[]): TraceViewData {
   const byId = new Map<string, SpanNode>();
 
   for (const row of rows) {
@@ -250,7 +250,7 @@ function buildSpanTree(rows: OtelTraceRow[]): TraceViewData {
   };
 }
 
-function formatDurationMs(ms: number): string {
+export function formatDurationMs(ms: number): string {
   if (ms < 1) return `${Math.round(ms * 1000)}µs`;
   if (ms < 1000) return `${ms.toFixed(1)}ms`;
   return `${(ms / 1000).toFixed(2)}s`;
