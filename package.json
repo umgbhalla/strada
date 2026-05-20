@@ -16,8 +16,15 @@
     "secrets:sync": "pnpm --dir website secrets && pnpm --dir otel-collector secrets"
   },
   "dependencies": {
-    "oxlint-tsgolint": "^0.17.4",
-    "termcast": "link:../termcast/termcast"
+    "oxlint-tsgolint": "^0.17.4"
+  },
+  "dependenciesMeta": {
+    "termcast": {
+      "injected": true
+    },
+    "@termcast/utils": {
+      "injected": true
+    }
   },
   "devDependencies": {
     "@changesets/cli": "^2.30.0",

@@ -7,4 +7,5 @@ onlyBuiltDependencies:
   - sharp
   - workerd
 overrides:
-  termcast: link:../termcast/termcast
+  termcast: file:../termcast/termcast
+  "@termcast/utils": file:../termcast/raycast-utils
