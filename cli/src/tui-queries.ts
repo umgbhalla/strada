@@ -25,7 +25,9 @@ function str(row: Row, key: string): string {
 }
 
 function num(row: Row, key: string): number {
-  return Number(row[key] ?? 0) || 0;
+  const v = row[key];
+  if (typeof v === "number") return v;
+  return Number(v ?? 0) || 0;
 }
 
 // ── Issues ────────────────────────────────────────────────────────
@@ -44,14 +46,16 @@ export interface IssueRow {
 }
 
 export async function queryIssuesList(
-  opts: BaseQueryOptions & { unhandled?: boolean },
-): Promise<IssueRow[]> {
+  opts: BaseQueryOptions & { unhandled?: boolean; offset?: number },
+): Promise<{ data: IssueRow[]; hasMore: boolean }> {
   const since = parseDuration(opts.since || "24h");
   const limit = opts.limit || 20;
+  const offset = opts.offset || 0;
   const conditions = [`Timestamp >= now() - INTERVAL ${since}`];
   if (opts.service) conditions.push(`ServiceName = '${opts.service}'`);
   if (opts.unhandled) conditions.push(`MechanismHandled = false`);
 
+  // Fetch one extra row to determine hasMore without a separate COUNT query
   const sql = dedent`
     SELECT
         FingerprintHash,
@@ -68,11 +72,13 @@ export async function queryIssuesList(
     WHERE ${conditions.join("\n  AND ")}
     GROUP BY FingerprintHash
     ORDER BY event_count DESC
-    LIMIT ${limit}
+    LIMIT ${limit + 1} OFFSET ${offset}
   `.trim();
 
   const res = await queryProject(opts.projectId, sql);
-  return (res.data ?? []).map((r) => ({
+  const rows = res.data ?? [];
+  const hasMore = rows.length > limit;
+  const data = (hasMore ? rows.slice(0, limit) : rows).map((r) => ({
     fingerprintHash: str(r, "FingerprintHash"),
     lastType: str(r, "last_type"),
     lastMessage: str(r, "last_message"),
@@ -84,6 +90,7 @@ export async function queryIssuesList(
     firstSeen: str(r, "first_seen"),
     lastSeen: str(r, "last_seen"),
   }));
+  return { data, hasMore };
 }
 
 export interface IssueSummary {
@@ -276,9 +283,11 @@ export async function queryLogsList(
     search?: string;
     traceId?: string;
     minLevel?: number;
+    offset?: number;
   },
-): Promise<LogRow[]> {
-  const limit = opts.limit || 200;
+): Promise<{ data: LogRow[]; hasMore: boolean }> {
+  const limit = opts.limit || 30;
+  const offset = opts.offset || 0;
   const conditions = [
     `Timestamp >= ${parseTimeBoundary(opts.since || "1h")}`,
   ];
@@ -287,6 +296,7 @@ export async function queryLogsList(
   if (opts.search) conditions.push(`Body LIKE '%${opts.search}%'`);
   if (opts.minLevel) conditions.push(`SeverityNumber >= ${opts.minLevel}`);
 
+  // Fetch one extra row to determine hasMore without a separate COUNT query
   const sql = dedent`
     SELECT
         Timestamp,
@@ -299,11 +309,13 @@ export async function queryLogsList(
     FROM otel_logs
     WHERE ${conditions.join("\n  AND ")}
     ORDER BY Timestamp DESC
-    LIMIT ${limit}
+    LIMIT ${limit + 1} OFFSET ${offset}
   `.trim();
 
   const res = await queryProject(opts.projectId, sql);
-  return (res.data ?? []).map((r) => ({
+  const rows = res.data ?? [];
+  const hasMore = rows.length > limit;
+  const data = (hasMore ? rows.slice(0, limit) : rows).map((r) => ({
     timestamp: str(r, "Timestamp"),
     severityText: str(r, "SeverityText"),
     serviceName: str(r, "ServiceName"),
@@ -312,6 +324,7 @@ export async function queryLogsList(
     traceId: str(r, "TraceId"),
     spanId: str(r, "SpanId"),
   }));
+  return { data, hasMore };
 }
 
 export interface LogStatsRow {
@@ -373,15 +386,17 @@ export interface TraceSummaryRow {
 }
 
 export async function queryTracesList(
-  opts: BaseQueryOptions & { errorsOnly?: boolean },
-): Promise<TraceSummaryRow[]> {
-  const limit = opts.limit || 50;
+  opts: BaseQueryOptions & { errorsOnly?: boolean; offset?: number },
+): Promise<{ data: TraceSummaryRow[]; hasMore: boolean }> {
+  const limit = opts.limit || 20;
+  const offset = opts.offset || 0;
   const conditions = [
     `Timestamp >= ${parseTimeBoundary(opts.since || "1h")}`,
   ];
   if (opts.service) conditions.push(`ServiceName = '${opts.service}'`);
   const having = opts.errorsOnly ? "HAVING ErrorSpanCount > 0" : "";
 
+  // Fetch one extra row to determine hasMore without a separate COUNT query
   const sql = dedent`
     SELECT
         TraceId,
@@ -398,11 +413,13 @@ export async function queryTracesList(
     GROUP BY TraceId
     ${having}
     ORDER BY StartTime DESC
-    LIMIT ${limit}
+    LIMIT ${limit + 1} OFFSET ${offset}
   `.trim();
 
   const res = await queryProject(opts.projectId, sql);
-  return (res.data ?? []).map((r) => ({
+  const rows = res.data ?? [];
+  const hasMore = rows.length > limit;
+  const data = (hasMore ? rows.slice(0, limit) : rows).map((r) => ({
     traceId: str(r, "TraceId"),
     startTime: str(r, "StartTime"),
     durationNs: num(r, "DurationNs"),
@@ -413,6 +430,7 @@ export async function queryTracesList(
     rootServiceName: str(r, "RootServiceName"),
     rootStatusCode: str(r, "RootStatusCode"),
   }));
+  return { data, hasMore };
 }
 
 export async function queryTraceSpans(

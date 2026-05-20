@@ -11,6 +11,7 @@ import {
 } from "termcast";
 import { useCachedPromise } from "@termcast/utils";
 import type { ReactNode } from "react";
+import { useState, useEffect } from "react";
 
 import {
   queryTracesList,
@@ -23,7 +24,7 @@ import {
   formatDurationMs,
   type SpanNode,
 } from "../traces.ts";
-import { useStore, ICON } from "./store.ts";
+import { store, useStore, ICON } from "./store.ts";
 import { timeAgo, formatTimestamp, truncate } from "./helpers.ts";
 import { CommonActions, type ViewProps } from "./shared.tsx";
 
@@ -54,18 +55,39 @@ function flattenSpanTree(rootSpans: SpanNode[]): FlatSpan[] {
 
 // ── Traces list view ──────────────────────────────────────────────
 
+const TRACES_PAGE_SIZE = 20;
+
 export function TracesView({ projectId, services, servicesLoading }: ViewProps): ReactNode {
   const timeRange = useStore((s) => s.timeRange);
   const service = useStore((s) => s.service);
   const { push } = useNavigation();
 
-  const { data, isLoading, revalidate } = useCachedPromise(
-    async (pid: string, since: string, svc: string | null) =>
-      queryTracesList({ projectId: pid, since, service: svc ?? undefined, limit: 50 }),
+  const { data, isLoading, revalidate, pagination } = useCachedPromise(
+    (pid: string, since: string, svc: string | null) =>
+      async ({ page }: { page: number }) => {
+        const result = await queryTracesList({
+          projectId: pid,
+          since,
+          service: svc ?? undefined,
+          limit: TRACES_PAGE_SIZE,
+          offset: page * TRACES_PAGE_SIZE,
+        });
+        return { data: result.data, hasMore: result.hasMore };
+      },
     [projectId, timeRange, service],
+    { keepPreviousData: true },
   );
 
   const traces = data ?? [];
+
+  // Sync pagination to global store so the parent List can use it
+  useEffect(() => {
+    const p = pagination
+      ? { pageSize: TRACES_PAGE_SIZE, hasMore: pagination.hasMore, onLoadMore: pagination.onLoadMore }
+      : undefined;
+    store.setState({ pagination: p });
+    return () => { store.setState({ pagination: undefined }); };
+  }, [pagination?.hasMore]);
 
   return (
     <>
@@ -130,9 +152,13 @@ export function TracesView({ projectId, services, servicesLoading }: ViewProps):
 
 // ── Span tree view (pushed from trace list) ───────────────────────
 
+const SPAN_PAGE_SIZE = 50;
+
 function SpanTreeView({ projectId, traceId }: { projectId: string; traceId: string }): ReactNode {
   const { push } = useNavigation();
 
+  // Fetch all spans for the trace (needed for tree computation), then paginate
+  // the flattened list client-side to avoid rendering 100s of List.Items at once.
   const { data, isLoading } = useCachedPromise(
     async (pid: string, tid: string) => {
       const res = await queryTraceSpans({ projectId: pid, traceId: tid });
@@ -143,7 +169,14 @@ function SpanTreeView({ projectId, traceId }: { projectId: string; traceId: stri
     [projectId, traceId],
   );
 
-  const flat = data?.flat ?? [];
+  const allFlat = data?.flat ?? [];
+  const [visibleCount, setVisibleCount] = useState(SPAN_PAGE_SIZE);
+
+  // Reset visible count when trace changes
+  useEffect(() => { setVisibleCount(SPAN_PAGE_SIZE); }, [traceId]);
+
+  const flat = allFlat.slice(0, visibleCount);
+  const hasMore = visibleCount < allFlat.length;
 
   return (
     <List
@@ -151,6 +184,11 @@ function SpanTreeView({ projectId, traceId }: { projectId: string; traceId: stri
       // isShowingDetail={true}
       navigationTitle={`Trace ${traceId.slice(0, 16)}…`}
       searchBarPlaceholder="Search spans…"
+      pagination={hasMore ? {
+        pageSize: SPAN_PAGE_SIZE,
+        hasMore,
+        onLoadMore: () => setVisibleCount((c) => Math.min(c + SPAN_PAGE_SIZE, allFlat.length)),
+      } : undefined}
     >
       {flat.map(({ span, displayPrefix }: FlatSpan, i: number) => {
         const isError = span.statusCode === "Error";

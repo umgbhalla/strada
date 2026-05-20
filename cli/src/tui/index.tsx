@@ -60,12 +60,14 @@ export default function StradaTui(): ReactNode {
   // TODO: Use AI to generate SQL WHERE clause from natural language search query.
   // For now, search filters client-side on List.Item title/keywords.
 
+  const pagination = useStore((s) => s.pagination);
+
   return (
     <List
       isLoading={isLoading}
       isShowingDetail={true}
       searchBarPlaceholder="Search…"
-      // accessoryTagsLayout={[10,10]}
+      pagination={pagination}
       searchBarAccessory={<NavigationDropdown projects={projects} />}
     >
       {projectId && view === "issues" && (

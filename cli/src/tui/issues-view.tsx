@@ -14,6 +14,7 @@ import {
 } from "termcast";
 import { useCachedPromise } from "@termcast/utils";
 import type { ReactNode } from "react";
+import { useEffect } from "react";
 
 import { getApiClient } from "../api-client.ts";
 import {
@@ -74,30 +75,57 @@ function renderStacktraceMarkdown(framesJson?: string, rawStacktrace?: string): 
 
 // ── Issues list view ──────────────────────────────────────────────
 
+const ISSUES_PAGE_SIZE = 15;
+
 export function IssuesView({ projectId, services, servicesLoading }: ViewProps): ReactNode {
   const timeRange = useStore((s) => s.timeRange);
   const service = useStore((s) => s.service);
   const { push } = useNavigation();
 
-  const { data, isLoading, revalidate } = useCachedPromise(
-    async (pid: string, since: string, svc: string | null) => {
-      const issues = await queryIssuesList({ projectId: pid, since, service: svc ?? undefined, limit: 50 });
-      const fps = issues.map((i) => i.fingerprintHash);
-      const metadata = await queryIssueMetadata(pid, fps);
-      return { issues, metadata };
-    },
+  const { data, isLoading, revalidate, pagination } = useCachedPromise(
+    (pid: string, since: string, svc: string | null) =>
+      async ({ page }: { page: number }) => {
+        const result = await queryIssuesList({
+          projectId: pid,
+          since,
+          service: svc ?? undefined,
+          limit: ISSUES_PAGE_SIZE,
+          offset: page * ISSUES_PAGE_SIZE,
+        });
+        // Fetch metadata for the current page's fingerprints
+        const fps = result.data.map((i) => i.fingerprintHash);
+        const metadata = fps.length > 0 ? await queryIssueMetadata(pid, fps) : new Map();
+        return { data: result.data.map((issue) => ({ issue, metadata })), hasMore: result.hasMore };
+      },
     [projectId, timeRange, service],
+    { keepPreviousData: true },
   );
 
-  const issues = data?.issues ?? [];
-  // useCachedPromise may serialize/deserialize through JSON, which converts
-  // Map to a plain object. Handle both cases.
-  const rawMeta = data?.metadata;
+  const items: { issue: IssueRow; metadata: Map<string, IssueMetadata> | Record<string, IssueMetadata> }[] = data ?? [];
+  const issues = items.map((item) => item.issue);
+  // Collect metadata from all pages into one lookup
   const getMeta = (fp: string): IssueMetadata | undefined => {
-    if (rawMeta instanceof Map) return rawMeta.get(fp);
-    if (rawMeta && typeof rawMeta === "object") return (rawMeta as Record<string, IssueMetadata>)[fp];
+    for (const item of items) {
+      const rawMeta = item.metadata;
+      if (rawMeta instanceof Map) {
+        const m = rawMeta.get(fp);
+        if (m) return m;
+      } else if (rawMeta && typeof rawMeta === "object") {
+        const m = (rawMeta as Record<string, IssueMetadata>)[fp];
+        if (m) return m;
+      }
+    }
     return undefined;
   };
+
+  // Sync pagination to global store so the parent List can use it
+  useEffect(() => {
+    const p = pagination
+      ? { pageSize: ISSUES_PAGE_SIZE, hasMore: pagination.hasMore, onLoadMore: pagination.onLoadMore }
+      : undefined;
+    store.setState({ pagination: p });
+    return () => { store.setState({ pagination: undefined }); };
+  }, [pagination?.hasMore]);
 
   return (
     <>

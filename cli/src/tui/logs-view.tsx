@@ -11,12 +11,13 @@ import {
 } from "termcast";
 import { useCachedPromise } from "@termcast/utils";
 import type { ReactNode } from "react";
+import { useEffect } from "react";
 
 import {
   queryLogsList,
   type LogRow,
 } from "../tui-queries.ts";
-import { useStore, ICON } from "./store.ts";
+import { store, useStore, ICON } from "./store.ts";
 import { timeAgo, formatTimestamp, truncate, parseAttributes } from "./helpers.ts";
 import { CommonActions, type ViewProps } from "./shared.tsx";
 
@@ -33,18 +34,39 @@ const SEVERITY_COLORS: Record<string, string> = {
 
 // ── Logs list view ────────────────────────────────────────────────
 
+const LOGS_PAGE_SIZE = 30;
+
 export function LogsView({ projectId, services, servicesLoading }: ViewProps): ReactNode {
   const timeRange = useStore((s) => s.timeRange);
   const service = useStore((s) => s.service);
   const { push } = useNavigation();
 
-  const { data, isLoading, revalidate } = useCachedPromise(
-    async (pid: string, since: string, svc: string | null) =>
-      queryLogsList({ projectId: pid, since, service: svc ?? undefined, limit: 200 }),
+  const { data, isLoading, revalidate, pagination } = useCachedPromise(
+    (pid: string, since: string, svc: string | null) =>
+      async ({ page }: { page: number }) => {
+        const result = await queryLogsList({
+          projectId: pid,
+          since,
+          service: svc ?? undefined,
+          limit: LOGS_PAGE_SIZE,
+          offset: page * LOGS_PAGE_SIZE,
+        });
+        return { data: result.data, hasMore: result.hasMore };
+      },
     [projectId, timeRange, service],
+    { keepPreviousData: true },
   );
 
   const logs = data ?? [];
+
+  // Sync pagination to global store so the parent List can use it
+  useEffect(() => {
+    const p = pagination
+      ? { pageSize: LOGS_PAGE_SIZE, hasMore: pagination.hasMore, onLoadMore: pagination.onLoadMore }
+      : undefined;
+    store.setState({ pagination: p });
+    return () => { store.setState({ pagination: undefined }); };
+  }, [pagination?.hasMore]);
 
   return (
     <>

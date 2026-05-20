@@ -47,12 +47,16 @@ export const TIME_OPTIONS: { id: TimeRange; label: string }[] = [
 
 // ── Zustand store ─────────────────────────────────────────────────
 
+export type ListPagination = { pageSize: number; hasMore: boolean; onLoadMore: () => void };
+
 export interface TuiState {
   view: TuiView;
   projectId: string | null;
   projectSlug: string | null;
   service: string | null;
   timeRange: TimeRange;
+  /** Set by the active view so the parent List can pass it to termcast */
+  pagination: ListPagination | undefined;
 }
 
 // Cache is sync (SQLite-backed) and works at module scope because
@@ -78,11 +82,13 @@ export const store = createStore<TuiState>(() => ({
   projectSlug: persisted.projectSlug ?? null,
   service: persisted.service ?? null,
   timeRange: persisted.timeRange ?? "24h",
+  pagination: undefined,
 }));
 
-// Persist every state change synchronously
+// Persist every state change synchronously (skip pagination, it's transient)
 store.subscribe((state) => {
-  cache.set("state", JSON.stringify(state));
+  const { pagination: _, ...persistable } = state;
+  cache.set("state", JSON.stringify(persistable));
 });
 
 export function useStore<T>(selector: (s: TuiState) => T): T {
