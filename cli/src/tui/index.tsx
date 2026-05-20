@@ -65,6 +65,7 @@ export default function StradaTui(): ReactNode {
       isLoading={isLoading}
       isShowingDetail={true}
       searchBarPlaceholder="Search…"
+      // accessoryTagsLayout={[10,10]}
       searchBarAccessory={<NavigationDropdown projects={projects} />}
     >
       {projectId && view === "issues" && (

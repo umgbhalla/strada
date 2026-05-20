@@ -148,7 +148,7 @@ function SpanTreeView({ projectId, traceId }: { projectId: string; traceId: stri
   return (
     <List
       isLoading={isLoading}
-      isShowingDetail={true}
+      // isShowingDetail={true}
       navigationTitle={`Trace ${traceId.slice(0, 16)}…`}
       searchBarPlaceholder="Search spans…"
     >

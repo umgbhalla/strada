@@ -57,12 +57,13 @@ export function LogsView({ projectId, services, servicesLoading }: ViewProps): R
           <List.Item
             key={`${log.timestamp}-${i}`}
             title={truncate(log.body || "(empty)", 80)}
-            subtitle={`[${log.serviceName}]`}
+            // subtitle={`[${log.serviceName}]`}
             icon={{ source: ICON.circleFilled, tintColor: iconColor }}
             accessories={[
               { tag: { value: severity, color: iconColor } },
               { text: formatTimestamp(log.timestamp) },
             ]}
+
             keywords={[log.body, log.serviceName, severity]}
             detail={
               <List.Item.Detail
