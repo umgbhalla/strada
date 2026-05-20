@@ -5,12 +5,18 @@
 // Destinations are org-scoped and linked to rules many-to-many.
 // The website cron checks errors every 5 minutes and sends notifications
 // when thresholds are exceeded.
+//
+// Rules can be scoped to a single project (projectId set) or apply to
+// all projects in the org (projectId null). The clack interactive prompt
+// lets TTY users pick a project from a list.
 
+import * as clack from "@clack/prompts";
 import { goke } from "goke";
 import { z } from "zod";
 import { bold, cyan, dim, green, red, yellow } from "./colors.ts";
 import { getApiClient } from "./api-client.ts";
-import { ensureDefaultOrg } from "./projects.ts";
+import { ensureDefaultOrg, resolveProjectId } from "./projects.ts";
+import { fetchProjects } from "./orgs.ts";
 import { printTable } from "./table.ts";
 
 export const alertsCli = goke();
@@ -37,10 +43,16 @@ alertsCli
       return;
     }
 
+    const rule = res.rule as typeof res.rule & { projectId?: string | null; projectSlug?: string | null };
+    const projectLabel = rule.projectSlug
+      ? cyan(rule.projectSlug)
+      : dim("all projects");
+
     output.log("");
     output.log(bold(`Alert rule for ${cyan(org.name)}`));
     output.log(`  ${dim("Name")}         ${res.rule.name}`);
     output.log(`  ${dim("Type")}         ${res.rule.type}`);
+    output.log(`  ${dim("Project")}      ${projectLabel}`);
     output.log("");
     output.log(`  ${dim("Threshold")}    ${bold(String(res.rule.errorThreshold ?? 1))} errors in ${bold(String(res.rule.errorWindowMinutes ?? 5))} minutes`);
     output.log(`  ${dim("Cooldown")}     ${bold(String(res.rule.cooldownMinutes))} minutes`);
@@ -72,6 +84,7 @@ alertsCli
   .command("alerts add", "Add an alert destination (creates error_threshold rule if needed)")
   .option("--channel <type>", z.enum(["email", "webhook", "slack"]).describe("Notification channel"))
   .option("--to <destination>", "Email address, webhook URL, or Slack webhook URL")
+  .option("--project [slug]", "Project slug to scope the alert to (omit for all projects)")
   .option("--threshold [count]", "Min errors to trigger (default: 1)")
   .option("--window [minutes]", "Time window in minutes (default: 5)")
   .option("--cooldown [minutes]", "Re-alert cooldown in minutes (default: 60)")
@@ -85,53 +98,45 @@ alertsCli
     const org = await ensureDefaultOrg();
     const { safeFetch } = getApiClient();
 
-    const body = {
-      channel: options.channel,
-      destination: options.to,
-      ...(options.threshold ? { errorThreshold: Number(options.threshold) } : {}),
-      ...(options.window ? { errorWindowMinutes: Number(options.window) } : {}),
-      ...(options.cooldown ? { cooldownMinutes: Number(options.cooldown) } : {}),
-    };
+    // Resolve project scope: explicit flag, interactive prompt, or null (all)
+    let projectId: string | null = null;
+    if (options.project) {
+      const resolved = await resolveProjectId(org.id, options.project);
+      projectId = resolved.id;
+    } else {
+      const isTty = process.stdin.isTTY && process.stdout.isTTY;
+      if (isTty) {
+        const projects = await fetchProjects(org.id);
+        const choice = await clack.select({
+          message: "Which project should this alert cover?",
+          options: [
+            { value: "all", label: "All projects", hint: "alerts on every project in the org" },
+            ...projects.map((p) => ({ value: p.id, label: p.slug, hint: p.id })),
+          ],
+        });
+        if (clack.isCancel(choice)) return proc.exit(0);
+        projectId = choice === "all" ? null : choice;
+      }
+    }
 
     const res = await safeFetch("/api/v0/orgs/:orgId/alerts/destinations", {
       method: "POST",
       params: { orgId: org.id },
-      body,
+      // projectId is accepted by the API but the stale website d.ts doesn't know yet.
+      // Rebuild website declarations to remove this cast.
+      body: {
+        channel: options.channel,
+        destination: options.to,
+        projectId,
+        ...(options.threshold ? { errorThreshold: Number(options.threshold) } : {}),
+        ...(options.window ? { errorWindowMinutes: Number(options.window) } : {}),
+        ...(options.cooldown ? { cooldownMinutes: Number(options.cooldown) } : {}),
+      } as any,
     });
     if (res instanceof Error) throw res;
 
-    output.log(green(`Added ${cyan(options.channel)} destination: ${options.to}`));
-  });
-
-// ── alerts set ───────────────────────────────────────────────────
-
-alertsCli
-  .command("alerts set", "Update error alert rule thresholds")
-  .option("--threshold [count]", "Min errors to trigger")
-  .option("--window [minutes]", "Time window in minutes")
-  .option("--cooldown [minutes]", "Re-alert cooldown in minutes")
-  .action(async (options, { console: output, process: proc }) => {
-    if (!options.threshold && !options.window && !options.cooldown) {
-      output.log("Specify at least one: --threshold, --window, or --cooldown");
-      return proc.exit(1);
-    }
-
-    const org = await ensureDefaultOrg();
-    const { safeFetch } = getApiClient();
-
-    const body: Record<string, unknown> = {};
-    if (options.threshold) body.errorThreshold = Number(options.threshold);
-    if (options.window) body.errorWindowMinutes = Number(options.window);
-    if (options.cooldown) body.cooldownMinutes = Number(options.cooldown);
-
-    const res = await safeFetch("/api/v0/orgs/:orgId/alerts", {
-      method: "PUT",
-      params: { orgId: org.id },
-      body,
-    });
-    if (res instanceof Error) throw res;
-
-    output.log(green("Alert rule updated"));
+    const scopeLabel = projectId ? `project ${cyan(options.project || projectId)}` : "all projects";
+    output.log(green(`Added ${cyan(options.channel)} destination: ${options.to} (${scopeLabel})`));
   });
 
 // ── alerts remove ────────────────────────────────────────────────

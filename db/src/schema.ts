@@ -335,6 +335,11 @@ export const alertRule = s.sqliteTable(
       .text("org_id")
       .notNull()
       .references(() => org.id, { onDelete: "cascade" }),
+    // Nullable project scope. Null means the rule applies to all projects
+    // in the org. When set, only errors from that project trigger the rule.
+    projectId: s
+      .text("project_id")
+      .references(() => project.id, { onDelete: "cascade" }),
     type: s
       .text("type", { enum: ["error_threshold", "health_check"] })
       .notNull()
@@ -526,6 +531,7 @@ export const relations = defineRelations(
     },
     alertRule: {
       org: r.one.org({ from: r.alertRule.orgId, to: r.org.id }),
+      project: r.one.project({ from: r.alertRule.projectId, to: r.project.id }),
       destinations: r.many.alertDestination({
         from: r.alertRule.id.through(r.alertRuleDestination.ruleId),
         to: r.alertDestination.id.through(r.alertRuleDestination.destinationId),

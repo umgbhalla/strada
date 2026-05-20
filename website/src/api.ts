@@ -943,7 +943,7 @@ export const api = new Spiceflow({ tracer })
         // Find the first error_threshold rule for this org (legacy: one per org)
         const rule = await db.query.alertRule.findFirst({
           where: { orgId: params.orgId, type: 'error_threshold' },
-          with: { destinations: true },
+          with: { destinations: true, project: true },
         })
 
         if (!rule) {
@@ -956,6 +956,8 @@ export const api = new Spiceflow({ tracer })
             name: rule.name,
             type: rule.type,
             enabled: rule.enabled,
+            projectId: rule.projectId,
+            projectSlug: rule.project?.slug ?? null,
             errorThreshold: rule.errorThreshold,
             errorWindowMinutes: rule.errorWindowMinutes,
             cooldownMinutes: rule.cooldownMinutes,
@@ -974,6 +976,7 @@ export const api = new Spiceflow({ tracer })
       request: z.object({
         channel: z.enum(['email', 'webhook', 'slack']),
         destination: z.string().min(1),
+        projectId: z.string().nullable().optional(),
         errorThreshold: z.number().int().min(1).optional(),
         errorWindowMinutes: z.number().int().min(1).optional(),
         cooldownMinutes: z.number().int().min(1).optional(),
@@ -984,6 +987,16 @@ export const api = new Spiceflow({ tracer })
 
         const db = getDb()
         const body = await request.json()
+
+        // Validate projectId belongs to this org when provided
+        if (body.projectId) {
+          const proj = await db.query.project.findFirst({
+            where: { id: body.projectId, orgId: params.orgId },
+          })
+          if (!proj) {
+            throw json({ error: 'project not found in this org' }, { status: 404 })
+          }
+        }
 
         // Upsert the error_threshold rule for this org (default name)
         let rule = await db.query.alertRule.findFirst({
@@ -996,20 +1009,21 @@ export const api = new Spiceflow({ tracer })
               orgId: params.orgId,
               type: 'error_threshold',
               name: 'Error alerts',
+              projectId: body.projectId ?? null,
               errorThreshold: body.errorThreshold ?? 1,
               errorWindowMinutes: body.errorWindowMinutes ?? 5,
               cooldownMinutes: body.cooldownMinutes ?? 60,
             })
             .returning()
           rule = created!
-        } else if (body.errorThreshold || body.errorWindowMinutes || body.cooldownMinutes) {
+        } else {
+          const updates: Record<string, unknown> = { updatedAt: Date.now() }
+          if (body.projectId !== undefined) updates.projectId = body.projectId
+          if (body.errorThreshold != null) updates.errorThreshold = body.errorThreshold
+          if (body.errorWindowMinutes != null) updates.errorWindowMinutes = body.errorWindowMinutes
+          if (body.cooldownMinutes != null) updates.cooldownMinutes = body.cooldownMinutes
           await db.update(schema.alertRule)
-            .set({
-              ...(body.errorThreshold != null ? { errorThreshold: body.errorThreshold } : {}),
-              ...(body.errorWindowMinutes != null ? { errorWindowMinutes: body.errorWindowMinutes } : {}),
-              ...(body.cooldownMinutes != null ? { cooldownMinutes: body.cooldownMinutes } : {}),
-              updatedAt: Date.now(),
-            })
+            .set(updates)
             .where(orm.eq(schema.alertRule.id, rule.id))
         }
 

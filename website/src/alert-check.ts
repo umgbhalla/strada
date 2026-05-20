@@ -75,6 +75,7 @@ export async function checkAlerts(): Promise<void> {
 async function checkOrgAlerts(rule: {
   id: string
   orgId: string
+  projectId: string | null
   errorThreshold: number | null
   errorWindowMinutes: number | null
   cooldownMinutes: number
@@ -92,15 +93,15 @@ async function checkOrgAlerts(rule: {
     return
   }
 
-  // Load all projects for this org
-  const projects = await db.query.project.findMany({
-    where: { orgId: rule.orgId },
-  })
+  // Load projects scoped by the rule. Null projectId means all projects.
+  const projects = rule.projectId
+    ? await db.query.project.findMany({ where: { id: rule.projectId, orgId: rule.orgId } })
+    : await db.query.project.findMany({ where: { orgId: rule.orgId } })
   if (projects.length === 0) {
-    logger.warn({ message: `no projects for org`, orgId: rule.orgId })
+    logger.warn({ message: `no projects for org`, orgId: rule.orgId, ruleProjectId: rule.projectId })
     return
   }
-  logger.info({ message: `checking org`, orgId: rule.orgId, projectCount: projects.length, backend: dbConfig.backend })
+  logger.info({ message: `checking org`, orgId: rule.orgId, projectCount: projects.length, ruleProjectId: rule.projectId, backend: dbConfig.backend })
 
   const orgName = rule.org?.name || 'Unknown'
   const threshold = rule.errorThreshold ?? 1
