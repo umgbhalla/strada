@@ -541,7 +541,7 @@ function renderStructuredFrames(frames: StackFrame[]): string[] {
       : file;
 
     if (frame.in_app) {
-      lines.push(`    ${white("at")} ${bold(fn)} ${cyan(`(${loc})`)}  ${dim("← in-app")}`);
+      lines.push(`    ${white("at")} ${bold(fn)} ${cyan(`(${loc})`)}`);
     } else {
       lines.push(`    ${dim(`at ${fn} (${loc})`)}`);
     }

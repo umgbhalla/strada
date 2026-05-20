@@ -53,7 +53,7 @@ function renderStacktraceMarkdown(framesJson?: string, rawStacktrace?: string): 
             ? frame.colno != null ? `${file}:${frame.lineno}:${frame.colno}` : `${file}:${frame.lineno}`
             : file;
           if (frame.in_app) {
-            lines.push(`  ▸ **${fn}** \`${loc}\`  ← in-app`);
+            lines.push(`  ▸ **${fn}** \`${loc}\``);
           } else {
             lines.push(`    at ${fn} (${loc})`);
           }
@@ -134,7 +134,11 @@ export function IssuesView({ projectId, services, servicesLoading }: ViewProps):
             accessories={accessories}
             detail={
               <List.Item.Detail
-                markdown={`**${issue.lastType || "Error"}**: ${issue.lastMessage || "(no message)"}`}
+                markdown={[
+                  `**${issue.lastType || "Error"}**: ${issue.lastMessage || "(no message)"}`,
+                  "",
+                  renderStacktraceMarkdown(issue.lastFrames, issue.lastStacktrace),
+                ].join("\n")}
                 metadata={
                   <List.Item.Detail.Metadata>
                     <List.Item.Detail.Metadata.Label title="Events" text={String(issue.eventCount)} />

@@ -35,6 +35,8 @@ export interface IssueRow {
   lastType: string;
   lastMessage: string;
   lastLevel: string;
+  lastStacktrace: string;
+  lastFrames: string;
   eventCount: number;
   unhandledCount: number;
   firstSeen: string;
@@ -56,6 +58,8 @@ export async function queryIssuesList(
         anyLast(ExceptionType) AS last_type,
         anyLast(ExceptionMessage) AS last_message,
         anyLast(Level) AS last_level,
+        anyLast(ExceptionStacktrace) AS last_stacktrace,
+        anyLast(ExceptionFrames) AS last_frames,
         count() AS event_count,
         min(Timestamp) AS first_seen,
         max(Timestamp) AS last_seen,
@@ -73,6 +77,8 @@ export async function queryIssuesList(
     lastType: str(r, "last_type"),
     lastMessage: str(r, "last_message"),
     lastLevel: str(r, "last_level"),
+    lastStacktrace: str(r, "last_stacktrace"),
+    lastFrames: str(r, "last_frames"),
     eventCount: num(r, "event_count"),
     unhandledCount: num(r, "unhandled_count"),
     firstSeen: str(r, "first_seen"),
