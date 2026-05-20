@@ -29,3 +29,25 @@ export function getApiClient() {
   const auth = requireAuth();
   return createApiClient(auth.baseUrl, auth.sessionToken);
 }
+
+// ── Query execution ───────────────────────────────────────────────
+
+export interface QueryResult {
+  data?: Array<Record<string, unknown>>;
+  meta?: Array<{ name: string; type?: string }>;
+  rows?: number;
+  statistics?: { elapsed: number; rows_read?: number; bytes_read?: number };
+  raw?: string;
+}
+
+/** Run a SQL query against a project via the website API. */
+export async function queryProject(projectId: string, sql: string): Promise<QueryResult> {
+  const { safeFetch } = getApiClient();
+  const res = await safeFetch("/api/v0/projects/:projectId/query", {
+    method: "POST",
+    params: { projectId },
+    body: { sql },
+  });
+  if (res instanceof Error) throw res;
+  return res as QueryResult;
+}

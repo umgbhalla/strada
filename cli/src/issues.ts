@@ -11,32 +11,15 @@ import { goke } from "goke";
 import dedent from "string-dedent";
 import { z } from "zod";
 import { bold, cyan, dim, red, yellow, gray, green, white } from "./colors.ts";
-import { getApiClient } from "./api-client.ts";
+import { getApiClient, queryProject, type QueryResult } from "./api-client.ts";
 import { resolveProject, resolveProjects } from "./projects.ts";
 import { printTable, formatCount, timeAgo } from "./table.ts";
 import { parseDuration } from "./parse-duration.ts";
 
+// Re-export queryProject and QueryResult so existing imports from "./issues.ts" still work
+export { queryProject, type QueryResult };
+
 export const issuesCli = goke();
-
-export interface QueryResult {
-  data?: Array<Record<string, unknown>>;
-  meta?: Array<{ name: string; type?: string }>;
-  rows?: number;
-  statistics?: { elapsed: number; rows_read?: number; bytes_read?: number };
-  raw?: string;
-}
-
-/** Run a SQL query against a project. Shared by issues subcommands, analytics, and the query command. */
-export async function queryProject(projectId: string, sql: string): Promise<QueryResult> {
-  const { safeFetch } = getApiClient();
-  const res = await safeFetch("/api/v0/projects/:projectId/query", {
-    method: "POST",
-    params: { projectId },
-    body: { sql },
-  });
-  if (res instanceof Error) throw res;
-  return res as QueryResult;
-}
 
 /**
  * Fetch issue metadata (status) from otel_issue_state via SQL.

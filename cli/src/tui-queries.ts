@@ -4,8 +4,7 @@
 // inlining SQL, so queries stay in sync across both interfaces.
 
 import dedent from "string-dedent";
-import { queryProject, type QueryResult } from "./issues.ts";
-import { getApiClient } from "./api-client.ts";
+import { queryProject, type QueryResult, getApiClient } from "./api-client.ts";
 import { parseDuration, parseTimeBoundary } from "./parse-duration.ts";
 
 // ── Shared types ──────────────────────────────────────────────────
@@ -84,14 +83,13 @@ export interface IssueRow {
   lastSeen: string;
 }
 
-export async function queryIssuesList(
-  opts: BaseQueryOptions & { unhandled?: boolean; offset?: number; aiFilter?: AiFilterResult },
-): Promise<{ data: IssueRow[]; hasMore: boolean }> {
+export type IssuesListOpts = BaseQueryOptions & { unhandled?: boolean; offset?: number; aiFilter?: AiFilterResult };
+
+/** Build the SQL for queryIssuesList. Exported for testing. */
+export function buildIssuesListSQL(opts: IssuesListOpts): string {
   const limit = opts.limit || 20;
   const offset = opts.offset || 0;
 
-  // When AI filter is active, it provides the full WHERE (including date filter).
-  // Otherwise use the default 7-day window (or explicit `since` from CLI commands).
   const conditions: string[] = [];
   if (opts.aiFilter?.where) {
     conditions.push(`(${opts.aiFilter.where})`);
@@ -109,8 +107,7 @@ export async function queryIssuesList(
   const defaultOrderBy = "event_count DESC, FingerprintHash ASC";
   const orderBy = opts.aiFilter?.orderBy || defaultOrderBy;
 
-  // Fetch one extra row to determine hasMore without a separate COUNT query
-  const sql = dedent`
+  return dedent`
     SELECT
         FingerprintHash,
         anyLast(ExceptionType) AS last_type,
@@ -129,6 +126,13 @@ export async function queryIssuesList(
     ORDER BY ${orderBy}
     LIMIT ${limit + 1} OFFSET ${offset}
   `.trim();
+}
+
+export async function queryIssuesList(
+  opts: IssuesListOpts,
+): Promise<{ data: IssueRow[]; hasMore: boolean }> {
+  const limit = opts.limit || 20;
+  const sql = buildIssuesListSQL(opts);
 
   const res = await queryProject(opts.projectId, sql);
   const rows = res.data ?? [];
@@ -339,19 +343,18 @@ export interface LogsCursor {
   spanId: string;
 }
 
-export async function queryLogsList(
-  opts: BaseQueryOptions & {
-    search?: string;
-    traceId?: string;
-    minLevel?: number;
-    cursor?: LogsCursor;
-    aiFilter?: AiFilterResult;
-  },
-): Promise<{ data: LogRow[]; hasMore: boolean; cursor?: LogsCursor }> {
+export type LogsListOpts = BaseQueryOptions & {
+  search?: string;
+  traceId?: string;
+  minLevel?: number;
+  cursor?: LogsCursor;
+  aiFilter?: AiFilterResult;
+};
+
+/** Build the SQL for queryLogsList. Exported for testing. */
+export function buildLogsListSQL(opts: LogsListOpts): string {
   const limit = opts.limit || 30;
 
-  // When AI filter is active, it provides the full WHERE (including date filter).
-  // Otherwise use the default 7-day window (or explicit `since` from CLI commands).
   const conditions: string[] = [];
   if (opts.aiFilter?.where) {
     conditions.push(`(${opts.aiFilter.where})`);
@@ -364,7 +367,6 @@ export async function queryLogsList(
   if (opts.minLevel) conditions.push(`SeverityNumber >= ${opts.minLevel}`);
 
   // Cursor-based pagination: (Timestamp DESC, TraceId ASC, SpanId ASC).
-  // Nanosecond timestamps + TraceId + SpanId is unique enough for log rows.
   // Disabled when AI provides a custom orderBy since cursors depend on fixed sort order.
   if (opts.cursor && !opts.aiFilter?.orderBy) {
     const c = opts.cursor;
@@ -376,7 +378,7 @@ export async function queryLogsList(
   const defaultOrderBy = "Timestamp DESC, TraceId ASC, SpanId ASC";
   const orderBy = opts.aiFilter?.orderBy || defaultOrderBy;
 
-  const sql = dedent`
+  return dedent`
     SELECT
         Timestamp,
         SeverityText,
@@ -390,6 +392,13 @@ export async function queryLogsList(
     ORDER BY ${orderBy}
     LIMIT ${limit + 1}
   `.trim();
+}
+
+export async function queryLogsList(
+  opts: LogsListOpts,
+): Promise<{ data: LogRow[]; hasMore: boolean; cursor?: LogsCursor }> {
+  const limit = opts.limit || 30;
+  const sql = buildLogsListSQL(opts);
 
   const res = await queryProject(opts.projectId, sql);
   const rows = res.data ?? [];
@@ -474,17 +483,16 @@ export interface TracesCursor {
   id: string;
 }
 
-export async function queryTracesList(
-  opts: BaseQueryOptions & {
-    errorsOnly?: boolean;
-    cursor?: TracesCursor;
-    aiFilter?: AiFilterResult;
-  },
-): Promise<{ data: TraceSummaryRow[]; hasMore: boolean; cursor?: TracesCursor }> {
+export type TracesListOpts = BaseQueryOptions & {
+  errorsOnly?: boolean;
+  cursor?: TracesCursor;
+  aiFilter?: AiFilterResult;
+};
+
+/** Build the SQL for queryTracesList. Exported for testing. */
+export function buildTracesListSQL(opts: TracesListOpts): string {
   const limit = opts.limit || 20;
 
-  // When AI filter is active, it provides the full WHERE (including date filter).
-  // Otherwise use the default 7-day window (or explicit `since` from CLI commands).
   const conditions: string[] = [];
   if (opts.aiFilter?.where) {
     conditions.push(`(${opts.aiFilter.where})`);
@@ -493,14 +501,11 @@ export async function queryTracesList(
   }
   if (opts.service) conditions.push(`ServiceName = '${opts.service}'`);
 
-  // Collect HAVING parts: errorsOnly, AI having, and cursor pagination
   const havingParts: string[] = [];
   if (opts.errorsOnly) havingParts.push("ErrorSpanCount > 0");
   if (opts.aiFilter?.having) havingParts.push(`(${opts.aiFilter.having})`);
 
-  // Cursor-based pagination: use (StartTime DESC, TraceId ASC) as a deterministic
-  // compound cursor. Disabled when AI provides a custom orderBy since cursors
-  // depend on fixed sort order.
+  // Cursor-based pagination: disabled when AI provides a custom orderBy
   if (opts.cursor && !opts.aiFilter?.orderBy) {
     havingParts.push(
       `(StartTime < '${opts.cursor.ts}' OR (StartTime = '${opts.cursor.ts}' AND TraceId > '${opts.cursor.id}'))`,
@@ -512,7 +517,7 @@ export async function queryTracesList(
   const defaultOrderBy = "StartTime DESC, TraceId ASC";
   const orderBy = opts.aiFilter?.orderBy || defaultOrderBy;
 
-  const sql = dedent`
+  return dedent`
     SELECT
         TraceId,
         min(Timestamp) AS StartTime,
@@ -530,6 +535,13 @@ export async function queryTracesList(
     ORDER BY ${orderBy}
     LIMIT ${limit + 1}
   `.trim();
+}
+
+export async function queryTracesList(
+  opts: TracesListOpts,
+): Promise<{ data: TraceSummaryRow[]; hasMore: boolean; cursor?: TracesCursor }> {
+  const limit = opts.limit || 20;
+  const sql = buildTracesListSQL(opts);
 
   const res = await queryProject(opts.projectId, sql);
   const rows = res.data ?? [];
