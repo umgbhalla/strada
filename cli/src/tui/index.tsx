@@ -23,8 +23,6 @@ import { AnalyticsView } from "./analytics-view.tsx";
 export default function StradaTui(): ReactNode {
   const view = useStore((s) => s.view);
   const projectId = useStore((s) => s.projectId);
-  const timeRange = useStore((s) => s.timeRange);
-
   const { data: orgData, isLoading: orgLoading } = useCachedPromise(async () => {
     const orgs = await fetchOrgs();
     const emptyProjects: CachedProject[] = [];
@@ -44,13 +42,13 @@ export default function StradaTui(): ReactNode {
     }
   }, [projectId, projects]);
 
-  // Fetch services async (never blocks views)
+  // Fetch services async (never blocks views). Default 7-day window for discovery.
   const { data: servicesData, isLoading: servicesLoading } = useCachedPromise(
-    async (pid: string | null, since: string) => {
+    async (pid: string | null) => {
       if (!pid) return [];
-      return queryServices({ projectId: pid, since });
+      return queryServices({ projectId: pid, since: "7d" });
     },
-    [projectId, timeRange],
+    [projectId],
   );
   const services = servicesData ?? [];
 

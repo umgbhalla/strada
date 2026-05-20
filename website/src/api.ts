@@ -34,6 +34,7 @@ import {
   generateFilterResponseSchema,
   type AiSearchView,
 } from './generate-filter.ts'
+export type { AiFilterResult } from './generate-filter.ts'
 
 const createOrgRequestSchema = z.object({ name: z.string().min(1) })
 
@@ -738,7 +739,6 @@ export const api = new Spiceflow({ tracer })
         if (!proj) {
           throw json({ error: 'project not found' }, { status: 404 })
         }
-        // TODO: check user has active subscription before allowing AI search
 
         const body = await request.json()
         const result = await generateSearchFilter({

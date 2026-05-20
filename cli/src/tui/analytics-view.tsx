@@ -29,50 +29,53 @@ import { NavigationDropdown, CommonActions, type ViewProps } from "./shared.tsx"
 
 // ── Analytics view ────────────────────────────────────────────────
 
+// Default time range for analytics queries. Uses 7d to match the default
+// across all views now that the time dropdown has been removed.
+const ANALYTICS_DEFAULT_SINCE = "7d";
+
 export function AnalyticsView({ projectId, projects, services, servicesLoading, isLoading: parentLoading }: ViewProps): ReactNode {
-  const timeRange = useStore((s) => s.timeRange);
   const service = useStore((s) => s.service);
 
   const kpis = useCachedPromise(
-    async (pid: string, since: string, svc: string | null) =>
-      queryAnalyticsKpis({ projectId: pid, since, service: svc ?? undefined }),
-    [projectId, timeRange, service],
+    async (pid: string, svc: string | null) =>
+      queryAnalyticsKpis({ projectId: pid, since: ANALYTICS_DEFAULT_SINCE, service: svc ?? undefined }),
+    [projectId, service],
   );
 
   const pages = useCachedPromise(
-    async (pid: string, since: string, svc: string | null) =>
-      queryAnalyticsPages({ projectId: pid, since, service: svc ?? undefined, limit: 10 }),
-    [projectId, timeRange, service],
+    async (pid: string, svc: string | null) =>
+      queryAnalyticsPages({ projectId: pid, since: ANALYTICS_DEFAULT_SINCE, service: svc ?? undefined, limit: 10 }),
+    [projectId, service],
   );
 
   const browsers = useCachedPromise(
-    async (pid: string, since: string, svc: string | null) =>
-      queryAnalyticsBrowsers({ projectId: pid, since, service: svc ?? undefined, limit: 10 }),
-    [projectId, timeRange, service],
+    async (pid: string, svc: string | null) =>
+      queryAnalyticsBrowsers({ projectId: pid, since: ANALYTICS_DEFAULT_SINCE, service: svc ?? undefined, limit: 10 }),
+    [projectId, service],
   );
 
   const countries = useCachedPromise(
-    async (pid: string, since: string, svc: string | null) =>
-      queryAnalyticsCountries({ projectId: pid, since, service: svc ?? undefined, limit: 10 }),
-    [projectId, timeRange, service],
+    async (pid: string, svc: string | null) =>
+      queryAnalyticsCountries({ projectId: pid, since: ANALYTICS_DEFAULT_SINCE, service: svc ?? undefined, limit: 10 }),
+    [projectId, service],
   );
 
   const referrers = useCachedPromise(
-    async (pid: string, since: string, svc: string | null) =>
-      queryAnalyticsReferrers({ projectId: pid, since, service: svc ?? undefined, limit: 10 }),
-    [projectId, timeRange, service],
+    async (pid: string, svc: string | null) =>
+      queryAnalyticsReferrers({ projectId: pid, since: ANALYTICS_DEFAULT_SINCE, service: svc ?? undefined, limit: 10 }),
+    [projectId, service],
   );
 
   const events = useCachedPromise(
-    async (pid: string, since: string, svc: string | null) =>
-      queryAnalyticsEvents({ projectId: pid, since, service: svc ?? undefined, limit: 10 }),
-    [projectId, timeRange, service],
+    async (pid: string, svc: string | null) =>
+      queryAnalyticsEvents({ projectId: pid, since: ANALYTICS_DEFAULT_SINCE, service: svc ?? undefined, limit: 10 }),
+    [projectId, service],
   );
 
   const realtime = useCachedPromise(
-    async (pid: string, _since: string, svc: string | null) =>
+    async (pid: string, svc: string | null) =>
       queryAnalyticsRealtime({ projectId: pid, service: svc ?? undefined }),
-    [projectId, timeRange, service],
+    [projectId, service],
   );
 
   const revalidateAll = useCallback(() => {

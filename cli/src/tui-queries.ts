@@ -20,14 +20,18 @@ export interface BaseQueryOptions {
 // ── AI search filter generation ───────────────────────────────────
 
 export interface AiFilterResult {
-  condition: string;
-  placement: "where" | "having";
+  /** WHERE conditions (without WHERE keyword). Empty = no filter. */
+  where: string;
+  /** HAVING conditions (without HAVING keyword). For grouped queries only. */
+  having: string;
+  /** ORDER BY clause (without ORDER BY keyword). Empty = use default. */
+  orderBy: string;
 }
 
 /**
- * Call the website's AI endpoint to turn natural language into a ClickHouse
- * boolean condition. Returns the condition string and its placement (where
- * vs having for grouped queries like traces).
+ * Call the website's AI endpoint to turn natural language into structured
+ * SQL fragments (where, having, orderBy). The AI always includes a date
+ * filter in `where` to prevent full-table scans.
  */
 export async function generateAiFilter(opts: {
   projectId: string;
@@ -45,8 +49,9 @@ export async function generateAiFilter(opts: {
   });
   if (res instanceof Error) throw res;
   return {
-    condition: res.condition || "",
-    placement: res.placement === "having" ? "having" : "where",
+    where: res.where || "",
+    having: res.having || "",
+    orderBy: res.orderBy || "",
   };
 }
 
@@ -80,15 +85,29 @@ export interface IssueRow {
 }
 
 export async function queryIssuesList(
-  opts: BaseQueryOptions & { unhandled?: boolean; offset?: number; searchFilter?: string },
+  opts: BaseQueryOptions & { unhandled?: boolean; offset?: number; aiFilter?: AiFilterResult },
 ): Promise<{ data: IssueRow[]; hasMore: boolean }> {
-  const since = parseDuration(opts.since || "24h");
   const limit = opts.limit || 20;
   const offset = opts.offset || 0;
-  const conditions = [`Timestamp >= now() - INTERVAL ${since}`];
+
+  // When AI filter is active, it provides the full WHERE (including date filter).
+  // Otherwise use the default 7-day window (or explicit `since` from CLI commands).
+  const conditions: string[] = [];
+  if (opts.aiFilter?.where) {
+    conditions.push(`(${opts.aiFilter.where})`);
+  } else {
+    const since = parseDuration(opts.since || "7d");
+    conditions.push(`Timestamp >= now() - INTERVAL ${since}`);
+  }
   if (opts.service) conditions.push(`ServiceName = '${opts.service}'`);
   if (opts.unhandled) conditions.push(`MechanismHandled = false`);
-  if (opts.searchFilter) conditions.push(`(${opts.searchFilter})`);
+
+  const havingParts: string[] = [];
+  if (opts.aiFilter?.having) havingParts.push(`(${opts.aiFilter.having})`);
+  const havingClause = havingParts.length > 0 ? `HAVING ${havingParts.join(" AND ")}` : "";
+
+  const defaultOrderBy = "event_count DESC, FingerprintHash ASC";
+  const orderBy = opts.aiFilter?.orderBy || defaultOrderBy;
 
   // Fetch one extra row to determine hasMore without a separate COUNT query
   const sql = dedent`
@@ -106,7 +125,8 @@ export async function queryIssuesList(
     FROM otel_errors
     WHERE ${conditions.join("\n  AND ")}
     GROUP BY FingerprintHash
-    ORDER BY event_count DESC, FingerprintHash ASC
+    ${havingClause}
+    ORDER BY ${orderBy}
     LIMIT ${limit + 1} OFFSET ${offset}
   `.trim();
 
@@ -325,27 +345,36 @@ export async function queryLogsList(
     traceId?: string;
     minLevel?: number;
     cursor?: LogsCursor;
-    searchFilter?: string;
+    aiFilter?: AiFilterResult;
   },
 ): Promise<{ data: LogRow[]; hasMore: boolean; cursor?: LogsCursor }> {
   const limit = opts.limit || 30;
-  const conditions = [
-    `Timestamp >= ${parseTimeBoundary(opts.since || "1h")}`,
-  ];
+
+  // When AI filter is active, it provides the full WHERE (including date filter).
+  // Otherwise use the default 7-day window (or explicit `since` from CLI commands).
+  const conditions: string[] = [];
+  if (opts.aiFilter?.where) {
+    conditions.push(`(${opts.aiFilter.where})`);
+  } else {
+    conditions.push(`Timestamp >= ${parseTimeBoundary(opts.since || "7d")}`);
+  }
   if (opts.service) conditions.push(`ServiceName = '${opts.service}'`);
   if (opts.traceId) conditions.push(`TraceId = '${opts.traceId}'`);
   if (opts.search) conditions.push(`Body LIKE '%${opts.search}%'`);
   if (opts.minLevel) conditions.push(`SeverityNumber >= ${opts.minLevel}`);
-  if (opts.searchFilter) conditions.push(`(${opts.searchFilter})`);
 
   // Cursor-based pagination: (Timestamp DESC, TraceId ASC, SpanId ASC).
   // Nanosecond timestamps + TraceId + SpanId is unique enough for log rows.
-  if (opts.cursor) {
+  // Disabled when AI provides a custom orderBy since cursors depend on fixed sort order.
+  if (opts.cursor && !opts.aiFilter?.orderBy) {
     const c = opts.cursor;
     conditions.push(
       `(Timestamp < '${c.ts}' OR (Timestamp = '${c.ts}' AND TraceId > '${c.traceId}') OR (Timestamp = '${c.ts}' AND TraceId = '${c.traceId}' AND SpanId > '${c.spanId}'))`,
     );
   }
+
+  const defaultOrderBy = "Timestamp DESC, TraceId ASC, SpanId ASC";
+  const orderBy = opts.aiFilter?.orderBy || defaultOrderBy;
 
   const sql = dedent`
     SELECT
@@ -358,7 +387,7 @@ export async function queryLogsList(
         SpanId
     FROM otel_logs
     WHERE ${conditions.join("\n  AND ")}
-    ORDER BY Timestamp DESC, TraceId ASC, SpanId ASC
+    ORDER BY ${orderBy}
     LIMIT ${limit + 1}
   `.trim();
 
@@ -446,36 +475,39 @@ export async function queryTracesList(
   opts: BaseQueryOptions & {
     errorsOnly?: boolean;
     cursor?: TracesCursor;
-    searchFilter?: string;
-    /** "having" when the AI filter references aggregate aliases (DurationNs, SpanCount, etc) */
-    searchFilterPlacement?: "where" | "having";
+    aiFilter?: AiFilterResult;
   },
 ): Promise<{ data: TraceSummaryRow[]; hasMore: boolean; cursor?: TracesCursor }> {
   const limit = opts.limit || 20;
-  const conditions = [
-    `Timestamp >= ${parseTimeBoundary(opts.since || "1h")}`,
-  ];
-  if (opts.service) conditions.push(`ServiceName = '${opts.service}'`);
-  if (opts.searchFilter && opts.searchFilterPlacement !== "having") {
-    conditions.push(`(${opts.searchFilter})`);
-  }
 
-  // Collect HAVING parts: errorsOnly, cursor pagination, and AI search (when placement=having)
+  // When AI filter is active, it provides the full WHERE (including date filter).
+  // Otherwise use the default 7-day window (or explicit `since` from CLI commands).
+  const conditions: string[] = [];
+  if (opts.aiFilter?.where) {
+    conditions.push(`(${opts.aiFilter.where})`);
+  } else {
+    conditions.push(`Timestamp >= ${parseTimeBoundary(opts.since || "7d")}`);
+  }
+  if (opts.service) conditions.push(`ServiceName = '${opts.service}'`);
+
+  // Collect HAVING parts: errorsOnly, AI having, and cursor pagination
   const havingParts: string[] = [];
   if (opts.errorsOnly) havingParts.push("ErrorSpanCount > 0");
-  if (opts.searchFilter && opts.searchFilterPlacement === "having") {
-    havingParts.push(`(${opts.searchFilter})`);
-  }
+  if (opts.aiFilter?.having) havingParts.push(`(${opts.aiFilter.having})`);
 
   // Cursor-based pagination: use (StartTime DESC, TraceId ASC) as a deterministic
-  // compound cursor. TraceId is unique per row, so no rows are skipped or duplicated.
-  if (opts.cursor) {
+  // compound cursor. Disabled when AI provides a custom orderBy since cursors
+  // depend on fixed sort order.
+  if (opts.cursor && !opts.aiFilter?.orderBy) {
     havingParts.push(
       `(StartTime < '${opts.cursor.ts}' OR (StartTime = '${opts.cursor.ts}' AND TraceId > '${opts.cursor.id}'))`,
     );
   }
 
   const havingClause = havingParts.length > 0 ? `HAVING ${havingParts.join(" AND ")}` : "";
+
+  const defaultOrderBy = "StartTime DESC, TraceId ASC";
+  const orderBy = opts.aiFilter?.orderBy || defaultOrderBy;
 
   const sql = dedent`
     SELECT
@@ -492,7 +524,7 @@ export async function queryTracesList(
     WHERE ${conditions.join("\n  AND ")}
     GROUP BY TraceId
     ${havingClause}
-    ORDER BY StartTime DESC, TraceId ASC
+    ORDER BY ${orderBy}
     LIMIT ${limit + 1}
   `.trim();
 

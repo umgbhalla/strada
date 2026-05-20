@@ -27,22 +27,12 @@ export const ICON = {
 } as const;
 
 export type TuiView = "issues" | "analytics" | "logs" | "traces";
-export type TimeRange = "5m" | "1h" | "6h" | "24h" | "7d" | "30d";
 
 export const VIEW_OPTIONS: { id: TuiView; label: string; icon: string }[] = [
   { id: "issues", label: "Issues", icon: ICON.bug },
   { id: "logs", label: "Logs", icon: ICON.terminal },
   { id: "traces", label: "Traces", icon: ICON.network },
   { id: "analytics", label: "Analytics", icon: ICON.barChart },
-];
-
-export const TIME_OPTIONS: { id: TimeRange; label: string }[] = [
-  { id: "5m", label: "Last 5 min" },
-  { id: "1h", label: "Last hour" },
-  { id: "6h", label: "Last 6 hours" },
-  { id: "24h", label: "Last 24 hours" },
-  { id: "7d", label: "Last 7 days" },
-  { id: "30d", label: "Last 30 days" },
 ];
 
 // ── Zustand store ─────────────────────────────────────────────────
@@ -52,7 +42,6 @@ export interface TuiState {
   projectId: string | null;
   projectSlug: string | null;
   service: string | null;
-  timeRange: TimeRange;
 }
 
 // Cache is sync (SQLite-backed) and works at module scope because
@@ -77,7 +66,6 @@ export const store = createStore<TuiState>(() => ({
   projectId: persisted.projectId ?? null,
   projectSlug: persisted.projectSlug ?? null,
   service: persisted.service ?? null,
-  timeRange: persisted.timeRange ?? "24h",
 }));
 
 // Persist every state change synchronously

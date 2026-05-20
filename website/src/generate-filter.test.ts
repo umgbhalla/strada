@@ -1,48 +1,45 @@
 // Integration test for the AI-powered search filter generation.
 // Runs inside workerd via @cloudflare/vitest-pool-workers with the real
 // Cloudflare Workers AI binding (no mocks). Verifies the model returns
-// a valid ClickHouse boolean condition from natural language input.
+// valid ClickHouse SQL fragments from natural language input.
 
 import { test, expect } from 'vitest'
 import { generateSearchFilter } from './generate-filter.ts'
 
-test('generates a condition for issues view', async () => {
+test('generates a where for issues view', async () => {
   const result = await generateSearchFilter({
     view: 'issues',
     searchText: 'show me TypeErrors',
   })
-  expect(result.condition).toBeTruthy()
-  expect(result.condition.toLowerCase()).toContain('typeerror')
-  expect(result.placement).toBe('where')
+  expect(result.where).toBeTruthy()
+  expect(result.where.toLowerCase()).toContain('typeerror')
 }, 30_000)
 
-test('generates a condition for logs view', async () => {
+test('generates a where for logs view', async () => {
   const result = await generateSearchFilter({
     view: 'logs',
     searchText: 'logs containing timeout',
   })
-  expect(result.condition).toBeTruthy()
-  expect(result.condition.toLowerCase()).toContain('timeout')
-  expect(result.placement).toBe('where')
+  expect(result.where).toBeTruthy()
+  expect(result.where.toLowerCase()).toContain('timeout')
 }, 30_000)
 
-test('generates a condition for traces view', async () => {
+test('generates having for traces with span count filter', async () => {
   const result = await generateSearchFilter({
     view: 'traces',
     searchText: 'traces with more than 10 spans',
   })
-  expect(result.condition).toBeTruthy()
-  expect(result.placement).toMatch(/^(where|having)$/)
-  // The condition should reference SpanCount or count
-  expect(result.condition).toMatch(/spancount|count/i)
+  // Should have either a where with date filter or a having with SpanCount
+  expect(result.where || result.having).toBeTruthy()
+  // The having should reference SpanCount or count for the aggregate filter
+  expect(result.having).toMatch(/spancount|count/i)
 }, 30_000)
 
-test('generates a condition for trace span-level filter', async () => {
+test('generates where for trace span-level filter', async () => {
   const result = await generateSearchFilter({
     view: 'traces',
     searchText: 'spans where ServiceName is api-gateway',
   })
-  expect(result.condition).toBeTruthy()
-  expect(result.condition).toMatch(/servicename/i)
-  expect(result.placement).toBe('where')
+  expect(result.where).toBeTruthy()
+  expect(result.where).toMatch(/servicename/i)
 }, 30_000)

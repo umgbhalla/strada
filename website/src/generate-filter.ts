@@ -1,8 +1,9 @@
 // AI search filter generation for the TUI.
 //
-// Turns natural language into a ClickHouse boolean condition that gets AND-ed
-// into existing WHERE clauses. The model returns only a condition expression
-// (no WHERE, ORDER BY, LIMIT, etc).
+// Turns natural language into structured SQL fragments (where, having, orderBy)
+// that get injected into the fixed SELECT...FROM...GROUP BY query structure.
+// The AI controls filtering and sorting; the code controls SELECT, FROM,
+// GROUP BY, and LIMIT.
 //
 // SQL injection is not a concern: all queries are read-only (Tinybird JWT or
 // ClickHouse HTTP interface), and users can already run arbitrary SQL via the
@@ -33,28 +34,103 @@ const THINKING_DISABLED = {
 }
 
 export interface AiFilterResult {
-  condition: string
-  /** For grouped queries (traces), whether the condition uses aggregate aliases
-   * and should go in HAVING instead of WHERE. Defaults to "where". */
-  placement: 'where' | 'having'
+  /** WHERE conditions (without WHERE keyword). Empty string = no filter. */
+  where: string
+  /** HAVING conditions (without HAVING keyword). For grouped queries only. */
+  having: string
+  /** ORDER BY clause (without ORDER BY keyword). Empty = use default. */
+  orderBy: string
 }
 
-// Extra context for the traces view: the query uses GROUP BY TraceId, so the
-// model needs to know which columns are raw (WHERE) vs aggregate (HAVING).
-const TRACES_AGGREGATE_CONTEXT = dedent`
-  The traces query groups spans by TraceId. Some columns are raw span fields
-  (use in WHERE), others are computed aggregates (use in HAVING):
+// Per-view query structure context so the AI knows what's available.
+const VIEW_CONTEXT: Record<AiSearchView, string> = {
+  issues: dedent`
+    ## Query structure (issues)
 
-  Raw span columns (WHERE): TraceId, SpanId, ParentSpanId, SpanName,
-    SpanKind, ServiceName, Duration, StatusCode, Timestamp,
-    SpanAttributes, ResourceAttributes
+    The query groups error rows by FingerprintHash. The fixed SELECT is:
 
-  Aggregate aliases (HAVING): StartTime, DurationNs, SpanCount,
-    ErrorSpanCount, RootSpanName, RootServiceName, RootStatusCode
+    \`\`\`sql
+    SELECT
+        FingerprintHash,
+        anyLast(ExceptionType) AS last_type,
+        anyLast(ExceptionMessage) AS last_message,
+        anyLast(Level) AS last_level,
+        count() AS event_count,
+        min(Timestamp) AS first_seen,
+        max(Timestamp) AS last_seen,
+        countIf(MechanismHandled = false) AS unhandled_count
+    FROM otel_errors
+    WHERE {your where conditions}
+    GROUP BY FingerprintHash
+    HAVING {your having conditions}  -- optional
+    ORDER BY {your order by}
+    \`\`\`
 
-  Set placement to "having" when referencing aggregate aliases,
-  "where" when referencing raw span columns.
-`
+    WHERE can reference any column from otel_errors: ExceptionType, ExceptionMessage,
+    ExceptionStacktrace, ServiceName, Timestamp, MechanismType, MechanismHandled,
+    Level, Release, Environment, Tags (Map), ResourceAttributes (Map), etc.
+
+    HAVING can reference aggregate aliases: event_count, first_seen, last_seen,
+    unhandled_count, last_type, last_message, last_level.
+
+    Default ORDER BY: event_count DESC, FingerprintHash ASC
+  `,
+  logs: dedent`
+    ## Query structure (logs)
+
+    No GROUP BY. The fixed SELECT is:
+
+    \`\`\`sql
+    SELECT Timestamp, SeverityText, SeverityNumber, ServiceName, Body,
+           LogAttributes, ResourceAttributes, TraceId, SpanId
+    FROM otel_logs
+    WHERE {your where conditions}
+    ORDER BY {your order by}
+    \`\`\`
+
+    WHERE can reference any column from otel_logs: Body, SeverityText, SeverityNumber,
+    ServiceName, Timestamp, TraceId, SpanId, EventName, LogAttributes (Map),
+    ResourceAttributes (Map), ScopeAttributes (Map), etc.
+
+    Default ORDER BY: Timestamp DESC
+  `,
+  traces: dedent`
+    ## Query structure (traces)
+
+    The query groups spans by TraceId. The fixed SELECT is:
+
+    \`\`\`sql
+    SELECT
+        TraceId,
+        min(Timestamp) AS StartTime,
+        max(toUnixTimestamp64Nano(Timestamp) + Duration) - min(toUnixTimestamp64Nano(Timestamp)) AS DurationNs,
+        count() AS SpanCount,
+        groupUniqArray(ServiceName) AS Services,
+        countIf(StatusCode = 'Error') AS ErrorSpanCount,
+        anyIf(SpanName, ParentSpanId = '') AS RootSpanName,
+        anyIf(ServiceName, ParentSpanId = '') AS RootServiceName,
+        anyIf(StatusCode, ParentSpanId = '') AS RootStatusCode
+    FROM otel_traces
+    WHERE {your where conditions}
+    GROUP BY TraceId
+    HAVING {your having conditions}  -- optional
+    ORDER BY {your order by}
+    \`\`\`
+
+    WHERE can reference any raw span column from otel_traces: TraceId, SpanId,
+    ParentSpanId, SpanName, SpanKind, ServiceName, Duration, StatusCode, Timestamp,
+    SpanAttributes (Map), ResourceAttributes (Map), EventsName (Array), etc.
+
+    HAVING can reference aggregate aliases: StartTime, DurationNs, SpanCount,
+    ErrorSpanCount, RootSpanName, RootServiceName, RootStatusCode, Services.
+
+    Default ORDER BY: StartTime DESC, TraceId ASC
+
+    Example: "traces with more than 10 spans" →
+      where: "Timestamp >= now() - INTERVAL 7 DAY"
+      having: "SpanCount > 10"
+  `,
+}
 
 export async function generateSearchFilter(opts: {
   view: AiSearchView
@@ -63,12 +139,11 @@ export async function generateSearchFilter(opts: {
 }): Promise<AiFilterResult> {
   const workersai = createWorkersAI({ binding: env.AI })
   const tableName = AI_SEARCH_VIEWS[opts.view]
-  const isTraces = opts.view === 'traces'
 
   const prompt = dedent`
-    Generate a ClickHouse SQL boolean condition to filter rows from the \`${tableName}\` table
+    Generate ClickHouse SQL filter fragments for the \`${tableName}\` table
     based on the user's natural language description.
-    You MUST call the sql_filter tool with the generated condition.
+    You MUST call the sql_filter tool with the generated fragments.
 
     ## ClickHouse schema
 
@@ -76,11 +151,7 @@ export async function generateSearchFilter(opts: {
     ${clickhouseSchema}
     \`\`\`
 
-    ## Table being queried
-
-    ${tableName}
-
-    ${isTraces ? TRACES_AGGREGATE_CONTEXT : ''}
+    ${VIEW_CONTEXT[opts.view]}
 
     ## User's filter request
 
@@ -88,34 +159,45 @@ export async function generateSearchFilter(opts: {
 
     ## Rules
 
-    - Return ONLY a boolean condition expression (e.g. ExceptionType = 'TypeError')
-    - Do NOT include WHERE, ORDER BY, GROUP BY, LIMIT, FORMAT, semicolons, or comments
+    - \`where\`: boolean conditions WITHOUT the WHERE keyword
+    - \`having\`: boolean conditions WITHOUT the HAVING keyword (only for grouped queries)
+    - \`orderBy\`: columns and direction WITHOUT the ORDER BY keyword
     - Column names are PascalCase: ExceptionType, ServiceName, Body, SpanName, etc.
     - Map columns use bracket syntax: SpanAttributes['key'], LogAttributes['key'], Tags['key']
     - Use mapContains(MapColumn, 'key') to check if a key exists in a Map column
     - NEVER reference ProjectId (it is filtered automatically by the system)
     - Use now() - INTERVAL for relative time filters, e.g. Timestamp >= now() - INTERVAL 1 HOUR
+    - ALWAYS include a date/time filter in \`where\` to prevent slow full-table scans.
+      If the user doesn't mention a time range, default to: Timestamp >= now() - INTERVAL 7 DAY
     - Prefer simple conditions. Use ILIKE for text search, e.g. Body ILIKE '%timeout%'
+    - Use HAVING for conditions on aggregate aliases (event_count, SpanCount, DurationNs, etc.)
+    - Use WHERE for conditions on raw table columns (Timestamp, ServiceName, Body, etc.)
     - The user query may be written quickly with low effort; infer intent
+    - Do NOT include semicolons or SQL comments
   `
 
-  const placementSchema = isTraces
-    ? z.enum(['where', 'having']).describe(
-        'Use "having" when the condition references aggregate aliases (StartTime, DurationNs, SpanCount, ErrorSpanCount, RootSpanName, etc). Use "where" for raw span columns.',
-      )
-    : z.literal('where')
+  const hasGroupBy = opts.view === 'traces' || opts.view === 'issues'
 
   const result = await generateText({
     model: workersai('@cf/zai-org/glm-4.7-flash', THINKING_DISABLED),
     prompt,
     tools: {
       sql_filter: tool({
-        description: 'Return the generated SQL boolean condition',
+        description: 'Return the generated SQL filter fragments',
         inputSchema: z.object({
-          condition: z.string().describe(
-            'A ClickHouse boolean expression. No WHERE keyword, no ORDER BY, no semicolons.',
+          where: z.string().describe(
+            'Boolean conditions for WHERE (without WHERE keyword). MUST include a date filter like Timestamp >= now() - INTERVAL 7 DAY.',
           ),
-          placement: placementSchema,
+          ...(hasGroupBy
+            ? {
+                having: z.string().optional().describe(
+                  'Boolean conditions for HAVING (without HAVING keyword). Use for aggregate aliases like event_count > 100, SpanCount > 10, DurationNs > 5000000000.',
+                ),
+              }
+            : {}),
+          orderBy: z.string().optional().describe(
+            'ORDER BY clause (without ORDER BY keyword). e.g. "event_count DESC" or "Timestamp ASC". Leave empty to use default.',
+          ),
         }),
       }),
     },
@@ -128,15 +210,28 @@ export async function generateSearchFilter(opts: {
 
   const toolCall = result.toolCalls.find((c) => c.toolName === 'sql_filter')
   if (!toolCall || toolCall.dynamic) {
-    return { condition: '', placement: 'where' }
+    return { where: '', having: '', orderBy: '' }
   }
-  // Strip WHERE/HAVING prefix if model included it despite instructions, and trailing semicolons
-  const condition = (toolCall.input.condition || '')
-    .replace(/^(WHERE|HAVING)\s+/i, '')
-    .trim()
-    .replace(/;+$/, '')
-  const placement = toolCall.input.placement === 'having' ? 'having' : 'where'
-  return { condition, placement }
+  const input = toolCall.input as { where?: string; having?: string; orderBy?: string }
+
+  // Strip accidental keyword prefixes and trailing semicolons
+  const clean = (raw: string | undefined, keyword: string): string => {
+    if (!raw) return ''
+    let s = raw.trim().replace(/;+$/g, '')
+    const prefix = new RegExp(`^${keyword}\\s+`, 'i')
+    s = s.replace(prefix, '').trim()
+    // Reject if it contains dangerous patterns
+    if (/\bProjectId\b/i.test(s)) return ''
+    if (/(^|\s)(SELECT|FROM|JOIN|UNION|FORMAT)\b/i.test(s)) return ''
+    if (/--|\/\*/.test(s)) return ''
+    return s
+  }
+
+  return {
+    where: clean(input.where, 'WHERE'),
+    having: clean(input.having, 'HAVING'),
+    orderBy: clean(input.orderBy, 'ORDER BY'),
+  }
 }
 
 export const generateFilterRequestSchema = z.object({
@@ -145,6 +240,7 @@ export const generateFilterRequestSchema = z.object({
 })
 
 export const generateFilterResponseSchema = z.object({
-  condition: z.string(),
-  placement: z.enum(['where', 'having']),
+  where: z.string(),
+  having: z.string(),
+  orderBy: z.string(),
 })

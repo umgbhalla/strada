@@ -61,27 +61,27 @@ function flattenSpanTree(rootSpans: SpanNode[]): FlatSpan[] {
 const TRACES_PAGE_SIZE = Math.max(10, (process.stdout.rows || 30) - 5);
 
 export function TracesView({ projectId, projects, services, servicesLoading, isLoading: parentLoading }: ViewProps): ReactNode {
-  const timeRange = useStore((s) => s.timeRange);
   const service = useStore((s) => s.service);
   const { push } = useNavigation();
 
   const aiSearch = useAiSearch({ projectId, view: "traces" });
 
+  // Serialize aiFilter to a stable string for useCachedPromise dependency tracking
+  const aiFilterKey = aiSearch.aiFilter ? JSON.stringify(aiSearch.aiFilter) : "";
+
   const { data, isLoading, revalidate, pagination } = useCachedPromise(
-    (pid: string, since: string, svc: string | null, filter: string, placement: string) =>
+    (pid: string, svc: string | null, _filterKey: string) =>
       async ({ cursor }: { page: number; cursor?: TracesCursor }) => {
         const result = await queryTracesList({
           projectId: pid,
-          since,
           service: svc ?? undefined,
           limit: TRACES_PAGE_SIZE,
           cursor,
-          searchFilter: filter || undefined,
-          searchFilterPlacement: (placement as "where" | "having") || undefined,
+          aiFilter: aiSearch.aiFilter ?? undefined,
         });
         return { data: result.data, hasMore: result.hasMore, cursor: result.cursor };
       },
-    [projectId, timeRange, service, aiSearch.searchFilter, aiSearch.searchFilterPlacement],
+    [projectId, service, aiFilterKey],
     { keepPreviousData: true },
   );
 
@@ -223,7 +223,7 @@ function SpanTreeView({ projectId, traceId }: { projectId: string; traceId: stri
             subtitle={span.serviceName}
             icon={{ source: ICON.circleFilled, tintColor: iconColor }}
             accessories={accessories}
-            keywords={[span.spanName, span.serviceName, span.spanId]}
+            keywords={[span.spanName, span.serviceName, span.spanId, span.spanKind || "", span.statusCode || "", span.statusMessage || ""]}
             detail={
               <List.Item.Detail
                 metadata={

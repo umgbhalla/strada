@@ -78,22 +78,23 @@ function renderStacktraceMarkdown(framesJson?: string, rawStacktrace?: string): 
 const ISSUES_PAGE_SIZE = Math.max(10, (process.stdout.rows || 30) - 5);
 
 export function IssuesView({ projectId, projects, services, servicesLoading, isLoading: parentLoading }: ViewProps): ReactNode {
-  const timeRange = useStore((s) => s.timeRange);
   const service = useStore((s) => s.service);
   const { push } = useNavigation();
 
   const aiSearch = useAiSearch({ projectId, view: "issues" });
 
+  // Serialize aiFilter to a stable string for useCachedPromise dependency tracking
+  const aiFilterKey = aiSearch.aiFilter ? JSON.stringify(aiSearch.aiFilter) : "";
+
   const { data, isLoading, revalidate, pagination } = useCachedPromise(
-    (pid: string, since: string, svc: string | null, filter: string) =>
+    (pid: string, svc: string | null, _filterKey: string) =>
       async ({ page }: { page: number }) => {
         const result = await queryIssuesList({
           projectId: pid,
-          since,
           service: svc ?? undefined,
           limit: ISSUES_PAGE_SIZE,
           offset: page * ISSUES_PAGE_SIZE,
-          searchFilter: filter || undefined,
+          aiFilter: aiSearch.aiFilter ?? undefined,
         });
         // Fetch metadata for the current page's fingerprints.
         // Flatten metadata into each item so it survives JSON serialization
@@ -108,7 +109,7 @@ export function IssuesView({ projectId, projects, services, servicesLoading, isL
           hasMore: result.hasMore,
         };
       },
-    [projectId, timeRange, service, aiSearch.searchFilter],
+    [projectId, service, aiFilterKey],
     { keepPreviousData: true },
   );
 

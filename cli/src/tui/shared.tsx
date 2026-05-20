@@ -11,7 +11,7 @@ import { useCallback } from "react";
 
 import type { CachedProject } from "../config.ts";
 import type { ServiceRow } from "../tui-queries.ts";
-import { store, useStore, ICON, VIEW_OPTIONS, TIME_OPTIONS, type TuiView, type TimeRange } from "./store.ts";
+import { store, useStore, ICON, VIEW_OPTIONS, type TuiView } from "./store.ts";
 
 // ── Shared view props ─────────────────────────────────────────────
 
@@ -30,11 +30,9 @@ export function NavigationDropdown({ projects }: { projects: CachedProject[] }):
   const view = useStore((s) => s.view);
   const projectSlug = useStore((s) => s.projectSlug);
   const projectId = useStore((s) => s.projectId);
-  const timeRange = useStore((s) => s.timeRange);
 
   const viewLabel = VIEW_OPTIONS.find((v) => v.id === view)?.label ?? "Issues";
-  const timeLabel = TIME_OPTIONS.find((t) => t.id === timeRange)?.label ?? "24h";
-  const displayValue = `${viewLabel} · ${projectSlug ?? "…"} · ${timeLabel}`;
+  const displayValue = `${viewLabel} · ${projectSlug ?? "…"}`;
 
   const handleChange = useCallback((value: string) => {
     if (value.startsWith("view::")) {
@@ -42,8 +40,6 @@ export function NavigationDropdown({ projects }: { projects: CachedProject[] }):
     } else if (value.startsWith("project::")) {
       const parts = value.slice(9).split("::");
       store.setState({ projectId: parts[0] ?? null, projectSlug: parts[1] ?? null });
-    } else if (value.startsWith("time::")) {
-      store.setState({ timeRange: value.slice(6) as TimeRange });
     }
   }, []);
 
@@ -71,16 +67,6 @@ export function NavigationDropdown({ projects }: { projects: CachedProject[] }):
             title={p.slug}
             value={`project::${p.id}::${p.slug}`}
             icon={p.id === projectId ? ICON.checkCircle : ICON.circle}
-          />
-        ))}
-      </List.Dropdown.Section>
-      <List.Dropdown.Section title="Time Range">
-        {TIME_OPTIONS.map((t) => (
-          <List.Dropdown.Item
-            key={t.id}
-            title={t.label}
-            value={`time::${t.id}`}
-            icon={t.id === timeRange ? ICON.checkCircle : ICON.circle}
           />
         ))}
       </List.Dropdown.Section>

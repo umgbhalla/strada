@@ -38,26 +38,27 @@ const SEVERITY_COLORS: Record<string, string> = {
 const LOGS_PAGE_SIZE = Math.max(10, (process.stdout.rows || 30) - 5);
 
 export function LogsView({ projectId, projects, services, servicesLoading, isLoading: parentLoading }: ViewProps): ReactNode {
-  const timeRange = useStore((s) => s.timeRange);
   const service = useStore((s) => s.service);
   const { push } = useNavigation();
 
   const aiSearch = useAiSearch({ projectId, view: "logs" });
 
+  // Serialize aiFilter to a stable string for useCachedPromise dependency tracking
+  const aiFilterKey = aiSearch.aiFilter ? JSON.stringify(aiSearch.aiFilter) : "";
+
   const { data, isLoading, revalidate, pagination } = useCachedPromise(
-    (pid: string, since: string, svc: string | null, filter: string) =>
+    (pid: string, svc: string | null, _filterKey: string) =>
       async ({ cursor }: { page: number; cursor?: LogsCursor }) => {
         const result = await queryLogsList({
           projectId: pid,
-          since,
           service: svc ?? undefined,
           limit: LOGS_PAGE_SIZE,
           cursor,
-          searchFilter: filter || undefined,
+          aiFilter: aiSearch.aiFilter ?? undefined,
         });
         return { data: result.data, hasMore: result.hasMore, cursor: result.cursor };
       },
-    [projectId, timeRange, service, aiSearch.searchFilter],
+    [projectId, service, aiFilterKey],
     { keepPreviousData: true },
   );
 

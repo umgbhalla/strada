@@ -69,20 +69,18 @@ export function durationColor(durationMs: number, stats: DurationStats): string 
 // ── AI search hook ────────────────────────────────────────────────
 //
 // Debounces user input, calls generateAiFilter() on the website, and returns
-// the current WHERE clause plus loading state. Each view passes the result
-// as `searchFilter` to its query function.
+// the structured SQL filter (where/having/orderBy) plus loading state. Each
+// view passes the result as `aiFilter` to its query function.
 
 import { useState, useRef, useCallback } from "react";
-import { generateAiFilter } from "../tui-queries.ts";
+import { generateAiFilter, type AiFilterResult } from "../tui-queries.ts";
 
 export interface AiSearchState {
-  /** The boolean condition to inject into SQL, or empty string */
-  searchFilter: string;
-  /** For grouped queries, whether the condition should go in HAVING vs WHERE */
-  searchFilterPlacement: "where" | "having";
+  /** Structured SQL filter from AI, or null when search is empty */
+  aiFilter: AiFilterResult | null;
   /** True while the AI model is generating */
   isSearching: boolean;
-  /** The raw generated clause shown to the user as feedback */
+  /** Summary of what the AI generated, shown to user as feedback */
   lastClause: string;
   /** Handler to pass to List's onSearchTextChange */
   onSearchTextChange: (text: string) => void;
@@ -90,15 +88,14 @@ export interface AiSearchState {
 
 /**
  * Hook that debounces search text and calls the AI filter endpoint.
- * Returns the generated boolean condition to inject into SQL queries.
+ * Returns the structured SQL filter to inject into queries.
  */
 export function useAiSearch(opts: {
   projectId: string;
   view: "issues" | "logs" | "traces";
   debounceMs?: number;
 }): AiSearchState {
-  const [searchFilter, setSearchFilter] = useState("");
-  const [searchFilterPlacement, setSearchFilterPlacement] = useState<"where" | "having">("where");
+  const [aiFilter, setAiFilter] = useState<AiFilterResult | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [lastClause, setLastClause] = useState("");
   const abortRef = useRef<AbortController | null>(null);
@@ -111,8 +108,7 @@ export function useAiSearch(opts: {
       if (timerRef.current) clearTimeout(timerRef.current);
 
       if (!text.trim()) {
-        setSearchFilter("");
-        setSearchFilterPlacement("where");
+        setAiFilter(null);
         setLastClause("");
         setIsSearching(false);
         return;
@@ -131,14 +127,16 @@ export function useAiSearch(opts: {
           });
           if (controller.signal.aborted) return;
 
-          setSearchFilter(result.condition);
-          setSearchFilterPlacement(result.placement);
-          setLastClause(result.condition);
+          // Build a human-readable summary of the generated SQL
+          const parts = [result.where];
+          if (result.having) parts.push(`HAVING ${result.having}`);
+          if (result.orderBy) parts.push(`ORDER BY ${result.orderBy}`);
+          setAiFilter(result);
+          setLastClause(parts.join(" | "));
         } catch (err) {
           if ((err as Error).name === "AbortError") return;
           console.error("AI search failed:", err);
-          setSearchFilter("");
-          setSearchFilterPlacement("where");
+          setAiFilter(null);
           setLastClause("");
         } finally {
           if (!controller.signal.aborted) {
@@ -150,7 +148,7 @@ export function useAiSearch(opts: {
     [opts.projectId, opts.view, opts.debounceMs],
   );
 
-  return { searchFilter, searchFilterPlacement, isSearching, lastClause, onSearchTextChange };
+  return { aiFilter, isSearching, lastClause, onSearchTextChange };
 }
 
 export function parseAttributes(value: unknown): Record<string, string> {
