@@ -22,7 +22,8 @@
   "bin": "dist/bin.js",
   "commands": [
     {
-      "name": "tui",
+      "name": "tui/index",
+
       "title": "Strada",
       "description": "Browse issues, logs, traces, and analytics",
       "mode": "view"
