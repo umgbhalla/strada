@@ -11,7 +11,7 @@ import {
 } from "termcast";
 import { useCachedPromise } from "@termcast/utils";
 import type { ReactNode } from "react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 
 import {
   queryTracesList,
@@ -26,7 +26,7 @@ import {
   type SpanNode,
 } from "../traces.ts";
 import { useStore, ICON } from "./store.ts";
-import { timeAgo, formatTimestamp, truncate } from "./helpers.ts";
+import { timeAgo, formatTimestamp, truncate, computeDurationStats, durationColor } from "./helpers.ts";
 import { NavigationDropdown, CommonActions, type ViewProps } from "./shared.tsx";
 
 // ── Span tree flattening ──────────────────────────────────────────
@@ -82,6 +82,10 @@ export function TracesView({ projectId, projects, services, servicesLoading, isL
   );
 
   const traces = data ?? [];
+  const tracesDurationStats = useMemo(
+    () => computeDurationStats(traces.map((t: TraceSummaryRow) => t.durationNs / 1_000_000)),
+    [traces],
+  );
 
   return (
     <List
@@ -102,7 +106,7 @@ export function TracesView({ projectId, projects, services, servicesLoading, isL
         if (hasErrors) {
           accessories.push({ tag: { value: `${trace.errorSpanCount} err`, color: Color.Red } });
         }
-        accessories.push({ text: formatDurationMs(durationMs) });
+        accessories.push({ tag: { value: formatDurationMs(durationMs), color: durationColor(durationMs, tracesDurationStats) } });
         accessories.push({ text: timeAgo(trace.startTime) });
 
         return (
@@ -177,6 +181,10 @@ function SpanTreeView({ projectId, traceId }: { projectId: string; traceId: stri
 
   const flat = allFlat.slice(0, visibleCount);
   const hasMore = visibleCount < allFlat.length;
+  const spanDurationStats = useMemo(
+    () => computeDurationStats(allFlat.map((f: FlatSpan) => f.span.durationMs)),
+    [allFlat],
+  );
 
   return (
     <List
@@ -196,7 +204,7 @@ function SpanTreeView({ projectId, traceId }: { projectId: string; traceId: stri
         const durationStr = formatDurationMs(span.durationMs);
 
         const accessories: { text?: string; tag?: string | { value: string; color?: string } }[] = [
-          { text: durationStr },
+          { tag: { value: durationStr, color: durationColor(span.durationMs, spanDurationStats) } },
         ];
         if (isError) {
           accessories.unshift({ tag: { value: "ERROR", color: Color.Red } });

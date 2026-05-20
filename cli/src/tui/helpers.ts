@@ -41,6 +41,31 @@ export function truncate(s: string, max: number): string {
   return s.length > max ? s.slice(0, max - 1) + "…" : s;
 }
 
+export interface DurationStats {
+  mean: number;
+  stddev: number;
+}
+
+/** Compute mean and standard deviation for an array of durations in ms. */
+export function computeDurationStats(durationsMs: number[]): DurationStats {
+  if (durationsMs.length < 2) return { mean: 0, stddev: 0 };
+  const mean = durationsMs.reduce((a, b) => a + b, 0) / durationsMs.length;
+  const variance = durationsMs.reduce((sum, d) => sum + (d - mean) ** 2, 0) / durationsMs.length;
+  return { mean, stddev: Math.sqrt(variance) };
+}
+
+/**
+ * Return a color based on how far a duration deviates from the mean.
+ * >=2 stddev above mean → Red, >=1 stddev → Orange, otherwise → Green.
+ */
+export function durationColor(durationMs: number, stats: DurationStats): string {
+  if (stats.stddev === 0) return "#34EE7F"; // Color.Green
+  const z = (durationMs - stats.mean) / stats.stddev;
+  if (z >= 2) return "#FF7B7B"; // Color.Red
+  if (z >= 1) return "#FF9F43"; // Color.Orange
+  return "#34EE7F"; // Color.Green
+}
+
 export function parseAttributes(value: unknown): Record<string, string> {
   if (!value) return {};
   if (typeof value === "object" && !Array.isArray(value)) return value as Record<string, string>;
