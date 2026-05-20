@@ -17,6 +17,7 @@ import {
   queryTracesList,
   queryTraceSpans,
   type TraceSummaryRow,
+  type TracesCursor,
 } from "../tui-queries.ts";
 import {
   buildSpanTree,
@@ -64,15 +65,15 @@ export function TracesView({ projectId, projects, services, servicesLoading, isL
 
   const { data, isLoading, revalidate, pagination } = useCachedPromise(
     (pid: string, since: string, svc: string | null) =>
-      async ({ page }: { page: number }) => {
+      async ({ cursor }: { page: number; cursor?: TracesCursor }) => {
         const result = await queryTracesList({
           projectId: pid,
           since,
           service: svc ?? undefined,
           limit: TRACES_PAGE_SIZE,
-          offset: page * TRACES_PAGE_SIZE,
+          cursor,
         });
-        return { data: result.data, hasMore: result.hasMore };
+        return { data: result.data, hasMore: result.hasMore, cursor: result.cursor };
       },
     [projectId, timeRange, service],
     { keepPreviousData: true },
@@ -159,7 +160,7 @@ function SpanTreeView({ projectId, traceId }: { projectId: string; traceId: stri
   const { data, isLoading } = useCachedPromise(
     async (pid: string, tid: string) => {
       const res = await queryTraceSpans({ projectId: pid, traceId: tid });
-      const rows = (res.data ?? []).map((row) => toTraceRow(row as Record<string, unknown>));
+      const rows = (res.data ?? []).map((row) => toTraceRow(row));
       const tree = buildSpanTree(rows);
       return { tree, flat: flattenSpanTree(tree.rootSpans) };
     },

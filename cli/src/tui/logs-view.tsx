@@ -15,6 +15,7 @@ import type { ReactNode } from "react";
 import {
   queryLogsList,
   type LogRow,
+  type LogsCursor,
 } from "../tui-queries.ts";
 import { useStore, ICON } from "./store.ts";
 import { timeAgo, formatTimestamp, truncate, parseAttributes } from "./helpers.ts";
@@ -42,15 +43,15 @@ export function LogsView({ projectId, projects, services, servicesLoading, isLoa
 
   const { data, isLoading, revalidate, pagination } = useCachedPromise(
     (pid: string, since: string, svc: string | null) =>
-      async ({ page }: { page: number }) => {
+      async ({ cursor }: { page: number; cursor?: LogsCursor }) => {
         const result = await queryLogsList({
           projectId: pid,
           since,
           service: svc ?? undefined,
           limit: LOGS_PAGE_SIZE,
-          offset: page * LOGS_PAGE_SIZE,
+          cursor,
         });
-        return { data: result.data, hasMore: result.hasMore };
+        return { data: result.data, hasMore: result.hasMore, cursor: result.cursor };
       },
     [projectId, timeRange, service],
     { keepPreviousData: true },

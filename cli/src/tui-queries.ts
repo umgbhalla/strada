@@ -71,7 +71,7 @@ export async function queryIssuesList(
     FROM otel_errors
     WHERE ${conditions.join("\n  AND ")}
     GROUP BY FingerprintHash
-    ORDER BY event_count DESC
+    ORDER BY event_count DESC, FingerprintHash ASC
     LIMIT ${limit + 1} OFFSET ${offset}
   `.trim();
 
@@ -278,16 +278,21 @@ export interface LogRow {
   spanId: string;
 }
 
+export interface LogsCursor {
+  ts: string;
+  traceId: string;
+  spanId: string;
+}
+
 export async function queryLogsList(
   opts: BaseQueryOptions & {
     search?: string;
     traceId?: string;
     minLevel?: number;
-    offset?: number;
+    cursor?: LogsCursor;
   },
-): Promise<{ data: LogRow[]; hasMore: boolean }> {
+): Promise<{ data: LogRow[]; hasMore: boolean; cursor?: LogsCursor }> {
   const limit = opts.limit || 30;
-  const offset = opts.offset || 0;
   const conditions = [
     `Timestamp >= ${parseTimeBoundary(opts.since || "1h")}`,
   ];
@@ -296,7 +301,15 @@ export async function queryLogsList(
   if (opts.search) conditions.push(`Body LIKE '%${opts.search}%'`);
   if (opts.minLevel) conditions.push(`SeverityNumber >= ${opts.minLevel}`);
 
-  // Fetch one extra row to determine hasMore without a separate COUNT query
+  // Cursor-based pagination: (Timestamp DESC, TraceId ASC, SpanId ASC).
+  // Nanosecond timestamps + TraceId + SpanId is unique enough for log rows.
+  if (opts.cursor) {
+    const c = opts.cursor;
+    conditions.push(
+      `(Timestamp < '${c.ts}' OR (Timestamp = '${c.ts}' AND TraceId > '${c.traceId}') OR (Timestamp = '${c.ts}' AND TraceId = '${c.traceId}' AND SpanId > '${c.spanId}'))`,
+    );
+  }
+
   const sql = dedent`
     SELECT
         Timestamp,
@@ -308,8 +321,8 @@ export async function queryLogsList(
         SpanId
     FROM otel_logs
     WHERE ${conditions.join("\n  AND ")}
-    ORDER BY Timestamp DESC
-    LIMIT ${limit + 1} OFFSET ${offset}
+    ORDER BY Timestamp DESC, TraceId ASC, SpanId ASC
+    LIMIT ${limit + 1}
   `.trim();
 
   const res = await queryProject(opts.projectId, sql);
@@ -324,7 +337,9 @@ export async function queryLogsList(
     traceId: str(r, "TraceId"),
     spanId: str(r, "SpanId"),
   }));
-  return { data, hasMore };
+  const lastRow = data[data.length - 1];
+  const cursor = lastRow ? { ts: lastRow.timestamp, traceId: lastRow.traceId, spanId: lastRow.spanId } : undefined;
+  return { data, hasMore, cursor };
 }
 
 export interface LogStatsRow {
@@ -385,18 +400,35 @@ export interface TraceSummaryRow {
   rootStatusCode: string;
 }
 
+export interface TracesCursor {
+  ts: string;
+  id: string;
+}
+
 export async function queryTracesList(
-  opts: BaseQueryOptions & { errorsOnly?: boolean; offset?: number },
-): Promise<{ data: TraceSummaryRow[]; hasMore: boolean }> {
+  opts: BaseQueryOptions & { errorsOnly?: boolean; cursor?: TracesCursor },
+): Promise<{ data: TraceSummaryRow[]; hasMore: boolean; cursor?: TracesCursor }> {
   const limit = opts.limit || 20;
-  const offset = opts.offset || 0;
   const conditions = [
     `Timestamp >= ${parseTimeBoundary(opts.since || "1h")}`,
   ];
   if (opts.service) conditions.push(`ServiceName = '${opts.service}'`);
   const having = opts.errorsOnly ? "HAVING ErrorSpanCount > 0" : "";
 
-  // Fetch one extra row to determine hasMore without a separate COUNT query
+  // Cursor-based pagination: use (StartTime DESC, TraceId ASC) as a deterministic
+  // compound cursor. TraceId is unique per row, so no rows are skipped or duplicated.
+  const cursorCondition = opts.cursor
+    ? `HAVING (StartTime < '${opts.cursor.ts}' OR (StartTime = '${opts.cursor.ts}' AND TraceId > '${opts.cursor.id}'))`
+    : "";
+
+  // Combine HAVING clauses if both cursor and errorsOnly are present
+  let havingClause = "";
+  if (having && cursorCondition) {
+    havingClause = `${having} AND (StartTime < '${opts.cursor!.ts}' OR (StartTime = '${opts.cursor!.ts}' AND TraceId > '${opts.cursor!.id}'))`;
+  } else {
+    havingClause = having || cursorCondition;
+  }
+
   const sql = dedent`
     SELECT
         TraceId,
@@ -411,9 +443,9 @@ export async function queryTracesList(
     FROM otel_traces
     WHERE ${conditions.join("\n  AND ")}
     GROUP BY TraceId
-    ${having}
-    ORDER BY StartTime DESC
-    LIMIT ${limit + 1} OFFSET ${offset}
+    ${havingClause}
+    ORDER BY StartTime DESC, TraceId ASC
+    LIMIT ${limit + 1}
   `.trim();
 
   const res = await queryProject(opts.projectId, sql);
@@ -430,7 +462,9 @@ export async function queryTracesList(
     rootServiceName: str(r, "RootServiceName"),
     rootStatusCode: str(r, "RootStatusCode"),
   }));
-  return { data, hasMore };
+  const lastRow = data[data.length - 1];
+  const cursor = lastRow ? { ts: lastRow.startTime, id: lastRow.traceId } : undefined;
+  return { data, hasMore, cursor };
 }
 
 export async function queryTraceSpans(

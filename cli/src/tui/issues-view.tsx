@@ -91,30 +91,27 @@ export function IssuesView({ projectId, projects, services, servicesLoading, isL
           limit: ISSUES_PAGE_SIZE,
           offset: page * ISSUES_PAGE_SIZE,
         });
-        // Fetch metadata for the current page's fingerprints
+        // Fetch metadata for the current page's fingerprints.
+        // Flatten metadata into each item so it survives JSON serialization
+        // (useCachedPromise caches via JSON, and Map serializes to {}).
         const fps = result.data.map((i) => i.fingerprintHash);
-        const metadata = fps.length > 0 ? await queryIssueMetadata(pid, fps) : new Map();
-        return { data: result.data.map((issue) => ({ issue, metadata })), hasMore: result.hasMore };
+        const metadataMap = fps.length > 0 ? await queryIssueMetadata(pid, fps) : new Map<string, IssueMetadata>();
+        return {
+          data: result.data.map((issue) => ({
+            issue,
+            metadata: metadataMap.get(issue.fingerprintHash),
+          })),
+          hasMore: result.hasMore,
+        };
       },
     [projectId, timeRange, service],
     { keepPreviousData: true },
   );
 
-  const items: { issue: IssueRow; metadata: Map<string, IssueMetadata> | Record<string, IssueMetadata> }[] = data ?? [];
+  const items: { issue: IssueRow; metadata?: IssueMetadata }[] = data ?? [];
   const issues = items.map((item) => item.issue);
-  // Collect metadata from all pages into one lookup
   const getMeta = (fp: string): IssueMetadata | undefined => {
-    for (const item of items) {
-      const rawMeta = item.metadata;
-      if (rawMeta instanceof Map) {
-        const m = rawMeta.get(fp);
-        if (m) return m;
-      } else if (rawMeta && typeof rawMeta === "object") {
-        const m = (rawMeta as Record<string, IssueMetadata>)[fp];
-        if (m) return m;
-      }
-    }
-    return undefined;
+    return items.find((item) => item.issue.fingerprintHash === fp)?.metadata;
   };
 
   return (

@@ -6,11 +6,13 @@
 // Each view owns its own <List> with pagination. This component is a thin switcher
 // that resolves org/project/services and delegates to the active view.
 
+import { List } from "termcast";
 import { useCachedPromise } from "@termcast/utils";
 import type { ReactNode } from "react";
 import { useEffect } from "react";
 
 import { fetchOrgs, fetchProjects } from "../orgs.ts";
+import type { CachedProject } from "../config.ts";
 import { queryServices } from "../tui-queries.ts";
 import { store, useStore } from "./store.ts";
 import { IssuesView } from "./issues-view.tsx";
@@ -25,7 +27,8 @@ export default function StradaTui(): ReactNode {
 
   const { data: orgData, isLoading: orgLoading } = useCachedPromise(async () => {
     const orgs = await fetchOrgs();
-    if (orgs.length === 0) return { org: null, projects: [] as ReturnType<typeof fetchProjects> extends Promise<infer T> ? T : never };
+    const emptyProjects: CachedProject[] = [];
+    if (orgs.length === 0) return { org: null, projects: emptyProjects };
     const org = orgs[0]!;
     const projects = await fetchProjects(org.id);
     return { org, projects };
@@ -62,8 +65,6 @@ export default function StradaTui(): ReactNode {
   };
 
   if (!projectId) {
-    // Render a minimal loading List while org/project resolves
-    const { List } = require("termcast");
     return <List isLoading={true} searchBarPlaceholder="Loading…" />;
   }
 

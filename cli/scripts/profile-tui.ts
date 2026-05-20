@@ -304,7 +304,7 @@ for (const profile of profiles) {
   console.log(`${"═".repeat(80)}`);
 
   console.log("\n── Top functions by SELF time (hot leaves) ──\n");
-  const selfResult = spawnSync("npx", ["profano", profilePath, "--sort", "self", "-n", "40"], {
+  const selfResult = spawnSync("profano", [profilePath, "--sort", "self", "-n", "40"], {
     encoding: "utf-8",
     stdio: ["pipe", "pipe", "pipe"],
     timeout: 30_000,
@@ -312,7 +312,7 @@ for (const profile of profiles) {
   console.log(selfResult.stdout || selfResult.stderr);
 
   console.log("\n── Top functions by TOTAL time (expensive callers) ──\n");
-  const totalResult = spawnSync("npx", ["profano", profilePath, "--sort", "total", "-n", "30"], {
+  const totalResult = spawnSync("profano", [profilePath, "--sort", "total", "-n", "30"], {
     encoding: "utf-8",
     stdio: ["pipe", "pipe", "pipe"],
     timeout: 30_000,
