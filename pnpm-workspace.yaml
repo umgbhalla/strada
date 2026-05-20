@@ -6,3 +6,5 @@ onlyBuiltDependencies:
   - protobufjs
   - sharp
   - workerd
+overrides:
+  termcast: link:../termcast/termcast
