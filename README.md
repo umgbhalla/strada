@@ -278,6 +278,119 @@ Strada is **100% OpenTelemetry**. The SDK is a thin wrapper around the official 
 
 These are regular OTel attributes. Any OTel SDK can set them.
 
+## Using Strada without the SDK
+
+Strada speaks **standard OTLP HTTP/JSON**. Any OpenTelemetry SDK in any language can send data to Strada using environment variables alone. No `@strada.sh/sdk` needed.
+
+The OTel spec defines two env vars that cover endpoint and auth:
+
+```bash
+OTEL_EXPORTER_OTLP_ENDPOINT=https://01JTHG5M7XPQR8KNCZ0W4D-ingest.strada.sh
+OTEL_EXPORTER_OTLP_HEADERS="authorization=Bearer str_abc123..."
+OTEL_EXPORTER_OTLP_PROTOCOL=http/json
+```
+
+`OTEL_EXPORTER_OTLP_HEADERS` is a comma-separated list of `key=value` pairs. The OTel SDK adds them as HTTP headers on every export request. `authorization=Bearer str_abc123...` becomes the standard `Authorization: Bearer str_abc123...` header that the Strada collector expects.
+
+`OTEL_EXPORTER_OTLP_PROTOCOL` must be `http/json`. Strada does not support gRPC or protobuf.
+
+These three env vars work with **every OTel SDK**: Node.js, Python, Go, Java, Ruby, Rust, .NET, PHP. The SDK reads them automatically and configures its exporters. No code changes.
+
+### Node.js (without Strada SDK)
+
+```ts
+import { NodeSDK } from "@opentelemetry/sdk-node"
+import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http"
+import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-http"
+
+// env vars are read automatically by the exporters
+const sdk = new NodeSDK({
+  traceExporter: new OTLPTraceExporter(),
+  logRecordProcessor: new SimpleLogRecordProcessor(new OTLPLogExporter()),
+})
+sdk.start()
+```
+
+```bash
+OTEL_EXPORTER_OTLP_ENDPOINT=https://01JTHG5M7XPQR8KNCZ0W4D-ingest.strada.sh \
+OTEL_EXPORTER_OTLP_HEADERS="authorization=Bearer str_abc123..." \
+OTEL_EXPORTER_OTLP_PROTOCOL=http/json \
+OTEL_SERVICE_NAME=my-api \
+node app.js
+```
+
+### Python
+
+```bash
+pip install opentelemetry-sdk opentelemetry-exporter-otlp-proto-http
+```
+
+```bash
+OTEL_EXPORTER_OTLP_ENDPOINT=https://01JTHG5M7XPQR8KNCZ0W4D-ingest.strada.sh \
+OTEL_EXPORTER_OTLP_HEADERS="authorization=Bearer str_abc123..." \
+OTEL_EXPORTER_OTLP_PROTOCOL=http/json \
+OTEL_SERVICE_NAME=my-api \
+opentelemetry-instrument python app.py
+```
+
+### Go
+
+```bash
+OTEL_EXPORTER_OTLP_ENDPOINT=https://01JTHG5M7XPQR8KNCZ0W4D-ingest.strada.sh \
+OTEL_EXPORTER_OTLP_HEADERS="authorization=Bearer str_abc123..." \
+OTEL_EXPORTER_OTLP_PROTOCOL=http/json \
+OTEL_SERVICE_NAME=my-api \
+go run .
+```
+
+Go's `go.opentelemetry.io/otel` SDK reads the same env vars when using the OTLP HTTP exporter.
+
+### Per-signal headers
+
+You can also set headers per signal if you need different auth for different endpoints:
+
+```bash
+OTEL_EXPORTER_OTLP_TRACES_HEADERS="authorization=Bearer str_abc123..."
+OTEL_EXPORTER_OTLP_LOGS_HEADERS="authorization=Bearer str_abc123..."
+OTEL_EXPORTER_OTLP_METRICS_HEADERS="authorization=Bearer str_abc123..."
+```
+
+### Programmatic headers (any OTel SDK)
+
+If you prefer setting headers in code instead of env vars, every OTel exporter accepts a `headers` option:
+
+```ts
+// Node.js
+new OTLPTraceExporter({
+  url: "https://01JTHG5M7XPQR8KNCZ0W4D-ingest.strada.sh/v1/traces",
+  headers: { authorization: "Bearer str_abc123..." },
+})
+```
+
+```python
+# Python
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+
+exporter = OTLPSpanExporter(
+    endpoint="https://01JTHG5M7XPQR8KNCZ0W4D-ingest.strada.sh/v1/traces",
+    headers={"authorization": "Bearer str_abc123..."},
+)
+```
+
+```go
+// Go
+import "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
+
+exporter, _ := otlptracehttp.New(ctx,
+    otlptracehttp.WithEndpointURL("https://01JTHG5M7XPQR8KNCZ0W4D-ingest.strada.sh"),
+    otlptracehttp.WithHeaders(map[string]string{
+        "authorization": "Bearer str_abc123...",
+    }),
+)
+```
+
+The endpoint URL format is always `https://{projectId}-ingest.strada.sh`. The project ID comes from `strada projects create <slug>`.
+
 ## CLI-first, agent-first
 
 Strada is designed for the terminal. Every operation is a CLI command. No clunky web UI that agents can't use.
