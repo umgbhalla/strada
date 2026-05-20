@@ -43,9 +43,8 @@ alertsCli
       return;
     }
 
-    const rule = res.rule as typeof res.rule & { projectId?: string | null; projectSlug?: string | null };
-    const projectLabel = rule.projectSlug
-      ? cyan(rule.projectSlug)
+    const projectLabel = res.rule.projectSlug
+      ? cyan(res.rule.projectSlug)
       : dim("all projects");
 
     output.log("");
@@ -84,7 +83,7 @@ alertsCli
   .command("alerts add", "Add an alert destination (creates error_threshold rule if needed)")
   .option("--channel <type>", z.enum(["email", "webhook", "slack"]).describe("Notification channel"))
   .option("--to <destination>", "Email address, webhook URL, or Slack webhook URL")
-  .option("--project [slug]", "Project slug to scope the alert to (omit for all projects)")
+  .option("--project <slug>", "Project slug to scope the alert to (omit for all projects)")
   .option("--threshold [count]", "Min errors to trigger (default: 1)")
   .option("--window [minutes]", "Time window in minutes (default: 5)")
   .option("--cooldown [minutes]", "Re-alert cooldown in minutes (default: 60)")
@@ -122,8 +121,6 @@ alertsCli
     const res = await safeFetch("/api/v0/orgs/:orgId/alerts/destinations", {
       method: "POST",
       params: { orgId: org.id },
-      // projectId is accepted by the API but the stale website d.ts doesn't know yet.
-      // Rebuild website declarations to remove this cast.
       body: {
         channel: options.channel,
         destination: options.to,
@@ -131,7 +128,7 @@ alertsCli
         ...(options.threshold ? { errorThreshold: Number(options.threshold) } : {}),
         ...(options.window ? { errorWindowMinutes: Number(options.window) } : {}),
         ...(options.cooldown ? { cooldownMinutes: Number(options.cooldown) } : {}),
-      } as any,
+      },
     });
     if (res instanceof Error) throw res;
 

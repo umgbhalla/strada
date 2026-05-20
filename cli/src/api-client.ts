@@ -1,5 +1,10 @@
 // Typed API client for the Strada website. Uses spiceflow's typed fetch client
-// with the built website declaration type for compile-time route validation.
+// with the website App type imported from source for compile-time route validation.
+//
+// The App type is imported from "strada-website/src/app.tsx" (source, not dist).
+// This avoids build-order dependencies: the website doesn't need to be built for
+// the CLI to typecheck. Ambient stubs in website-stubs.d.ts cover modules that
+// don't resolve under the CLI's nodenext resolution (echarts, etc).
 //
 // Prefer getApiClient() which reads auth from config automatically.
 // Use createApiClient() only when you have explicit credentials (e.g. database create).
@@ -9,7 +14,7 @@
 // JSON.stringify() or Content-Type headers. Auth header is set globally on the client.
 
 import { createSpiceflowFetch } from "spiceflow/client";
-import type { App } from "strada-website/dist/src/app.d.ts";
+import type { App } from "strada-website/src/app.tsx";
 import { requireAuth } from "./config.ts";
 
 export function createApiClient(baseUrl: string, sessionToken: string) {
