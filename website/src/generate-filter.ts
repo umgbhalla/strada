@@ -172,6 +172,9 @@ export async function generateSearchFilter(opts: {
     - Prefer simple conditions. Use ILIKE for text search, e.g. Body ILIKE '%timeout%'
     - Use HAVING for conditions on aggregate aliases (event_count, SpanCount, DurationNs, etc.)
     - Use WHERE for conditions on raw table columns (Timestamp, ServiceName, Body, etc.)
+    - For grouped queries (issues, traces), orderBy MUST use aggregate aliases or group keys,
+      NOT raw non-grouped columns. Use DurationNs not Duration, last_seen not Timestamp,
+      event_count not count(). For logs (no GROUP BY), any column works in orderBy.
     - The user query may be written quickly with low effort; infer intent
     - Do NOT include semicolons or SQL comments
   `
@@ -220,9 +223,9 @@ export async function generateSearchFilter(opts: {
     let s = raw.trim().replace(/;+$/g, '')
     const prefix = new RegExp(`^${keyword}\\s+`, 'i')
     s = s.replace(prefix, '').trim()
-    // Reject if it contains dangerous patterns
+    // Reject if it contains clause keywords or dangerous patterns
     if (/\bProjectId\b/i.test(s)) return ''
-    if (/(^|\s)(SELECT|FROM|JOIN|UNION|FORMAT)\b/i.test(s)) return ''
+    if (/(^|\s)(SELECT|FROM|JOIN|UNION|FORMAT|LIMIT|OFFSET|SETTINGS|INSERT|ALTER|DROP|CREATE|TRUNCATE)\b/i.test(s)) return ''
     if (/--|\/\*/.test(s)) return ''
     return s
   }

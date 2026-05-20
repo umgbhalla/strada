@@ -393,7 +393,10 @@ export async function queryLogsList(
 
   const res = await queryProject(opts.projectId, sql);
   const rows = res.data ?? [];
-  const hasMore = rows.length > limit;
+  // Cursor pagination depends on a fixed sort order. When AI provides a custom
+  // orderBy, cursors would return duplicate pages, so disable pagination entirely.
+  const customOrder = Boolean(opts.aiFilter?.orderBy);
+  const hasMore = customOrder ? false : rows.length > limit;
   const data = (hasMore ? rows.slice(0, limit) : rows).map((r) => ({
     timestamp: str(r, "Timestamp"),
     severityText: str(r, "SeverityText"),
@@ -404,7 +407,7 @@ export async function queryLogsList(
     spanId: str(r, "SpanId"),
   }));
   const lastRow = data[data.length - 1];
-  const cursor = lastRow ? { ts: lastRow.timestamp, traceId: lastRow.traceId, spanId: lastRow.spanId } : undefined;
+  const cursor = customOrder ? undefined : lastRow ? { ts: lastRow.timestamp, traceId: lastRow.traceId, spanId: lastRow.spanId } : undefined;
   return { data, hasMore, cursor };
 }
 
@@ -530,7 +533,10 @@ export async function queryTracesList(
 
   const res = await queryProject(opts.projectId, sql);
   const rows = res.data ?? [];
-  const hasMore = rows.length > limit;
+  // Cursor pagination depends on a fixed sort order. When AI provides a custom
+  // orderBy, cursors would return duplicate pages, so disable pagination entirely.
+  const customOrder = Boolean(opts.aiFilter?.orderBy);
+  const hasMore = customOrder ? false : rows.length > limit;
   const data = (hasMore ? rows.slice(0, limit) : rows).map((r) => ({
     traceId: str(r, "TraceId"),
     startTime: str(r, "StartTime"),
@@ -543,7 +549,7 @@ export async function queryTracesList(
     rootStatusCode: str(r, "RootStatusCode"),
   }));
   const lastRow = data[data.length - 1];
-  const cursor = lastRow ? { ts: lastRow.startTime, id: lastRow.traceId } : undefined;
+  const cursor = customOrder ? undefined : lastRow ? { ts: lastRow.startTime, id: lastRow.traceId } : undefined;
   return { data, hasMore, cursor };
 }
 
