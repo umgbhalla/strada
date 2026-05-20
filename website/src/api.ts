@@ -1017,8 +1017,10 @@ export const api = new Spiceflow({ tracer })
             .returning()
           rule = created!
         } else {
+          // Only update threshold/window/cooldown on existing rules. projectId
+          // is intentionally NOT updated here: adding a destination should not
+          // silently rescope the rule for all existing destinations.
           const updates: Record<string, unknown> = { updatedAt: Date.now() }
-          if (body.projectId !== undefined) updates.projectId = body.projectId
           if (body.errorThreshold != null) updates.errorThreshold = body.errorThreshold
           if (body.errorWindowMinutes != null) updates.errorWindowMinutes = body.errorWindowMinutes
           if (body.cooldownMinutes != null) updates.cooldownMinutes = body.cooldownMinutes
