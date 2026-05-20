@@ -7,8 +7,8 @@
 import { use } from 'react';
 import type * as React from 'react';
 
-import { ChartArea, type AreaChartDataPoint } from '@ui/components/chart-area.tsx';
-import { WidgetHeader } from '@ui/components/widget-card.tsx';
+import { ChartArea, type AreaChartDataPoint } from 'strada-website/src/ui/components/chart-area.tsx';
+import { WidgetHeader } from 'strada-website/src/ui/components/widget-card.tsx';
 
 export type SparkAreaPanelDataItem = AreaChartDataPoint & {
   value: number;

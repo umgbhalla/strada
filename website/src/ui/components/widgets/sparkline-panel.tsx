@@ -7,8 +7,8 @@
 
 import { use } from 'react';
 
-import { TimeseriesChart, type TimeseriesItem } from '@ui/components/timeseries-chart.tsx';
-import { WidgetHeader } from '@ui/components/widget-card.tsx';
+import { TimeseriesChart, type TimeseriesItem } from 'strada-website/src/ui/components/timeseries-chart.tsx';
+import { WidgetHeader } from 'strada-website/src/ui/components/widget-card.tsx';
 
 export type SparklinePanelProps = Pick<
   React.ComponentProps<typeof WidgetHeader>,

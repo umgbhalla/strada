@@ -5,7 +5,7 @@
 
 import { use } from 'react'
 import type { EChartsOption } from 'echarts'
-import { EChart } from '@ui/components/echart.tsx'
+import { EChart } from 'strada-website/src/ui/components/echart.tsx'
 
 export type TimeseriesItem = {
   name: string

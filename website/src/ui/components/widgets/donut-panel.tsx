@@ -6,10 +6,10 @@
 import { use } from 'react';
 import * as React from 'react';
 
-import { LegendDot } from '@ui/components/legend-dot.tsx';
-import PieChart from '@ui/components/pie-chart.tsx';
-import { ShowMore } from '@ui/components/show-more.tsx';
-import { WidgetHeader } from '@ui/components/widget-card.tsx';
+import { LegendDot } from 'strada-website/src/ui/components/legend-dot.tsx';
+import PieChart from 'strada-website/src/ui/components/pie-chart.tsx';
+import { ShowMore } from 'strada-website/src/ui/components/show-more.tsx';
+import { WidgetHeader } from 'strada-website/src/ui/components/widget-card.tsx';
 
 import { FILL_CLASSES, DOT_CLASSES } from '../../../lib/chart-colors.ts';
 

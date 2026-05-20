@@ -5,7 +5,7 @@
 import * as React from 'react';
 import * as TooltipPrimitive from '@radix-ui/react-tooltip';
 
-import { tv, type VariantProps } from '@ui/utils/tv.ts';
+import { tv, type VariantProps } from 'strada-website/src/ui/utils/tv.ts';
 
 const TooltipProvider = TooltipPrimitive.Provider;
 const TooltipRoot = TooltipPrimitive.Root;

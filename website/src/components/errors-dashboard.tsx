@@ -5,10 +5,10 @@
 "use client";
 
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
-import { Grid } from "@ui/components/grid.tsx";
-import { SparkAreaPanel } from "@ui/components/widgets/spark-area-panel.tsx";
-import { DonutPanel } from "@ui/components/widgets/donut-panel.tsx";
-import { SparklinePanel } from "@ui/components/widgets/sparkline-panel.tsx";
+import { Grid } from "strada-website/src/ui/components/grid.tsx";
+import { SparkAreaPanel } from "strada-website/src/ui/components/widgets/spark-area-panel.tsx";
+import { DonutPanel } from "strada-website/src/ui/components/widgets/donut-panel.tsx";
+import { SparklinePanel } from "strada-website/src/ui/components/widgets/sparkline-panel.tsx";
 
 // ── Demo data ────────────────────────────────────────────────────
 

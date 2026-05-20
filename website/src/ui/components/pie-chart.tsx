@@ -4,7 +4,7 @@
 
 import { Cell, Pie, PieChart as RechartsPieChart, Sector } from 'recharts';
 
-import { cn } from '@ui/utils/cn.ts';
+import { cn } from 'strada-website/src/ui/utils/cn.ts';
 
 export const CIRCLE_SIZE = 90;
 

@@ -13,10 +13,10 @@
 import { SafeMdxRenderer } from 'safe-mdx'
 import { mdxParse } from 'safe-mdx/parse'
 
-import { Grid } from '@ui/components/grid.tsx'
-import { DonutPanel } from '@ui/components/widgets/donut-panel.tsx'
-import { SparklinePanel } from '@ui/components/widgets/sparkline-panel.tsx'
-import { SparkAreaPanel } from '@ui/components/widgets/spark-area-panel.tsx'
+import { Grid } from 'strada-website/src/ui/components/grid.tsx'
+import { DonutPanel } from 'strada-website/src/ui/components/widgets/donut-panel.tsx'
+import { SparklinePanel } from 'strada-website/src/ui/components/widgets/sparkline-panel.tsx'
+import { SparkAreaPanel } from 'strada-website/src/ui/components/widgets/spark-area-panel.tsx'
 
 // ── Component map for safe-mdx ──────────────────────────────────
 
