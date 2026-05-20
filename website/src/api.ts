@@ -976,7 +976,7 @@ export const api = new Spiceflow({ tracer })
       request: z.object({
         channel: z.enum(['email', 'webhook', 'slack']),
         destination: z.string().min(1),
-        projectId: z.string().nullable().optional(),
+        projectId: z.string().min(1).nullable().optional(),
         errorThreshold: z.number().int().min(1).optional(),
         errorWindowMinutes: z.number().int().min(1).optional(),
         cooldownMinutes: z.number().int().min(1).optional(),
@@ -989,7 +989,7 @@ export const api = new Spiceflow({ tracer })
         const body = await request.json()
 
         // Validate projectId belongs to this org when provided
-        if (body.projectId) {
+        if (body.projectId != null) {
           const proj = await db.query.project.findFirst({
             where: { id: body.projectId, orgId: params.orgId },
           })
