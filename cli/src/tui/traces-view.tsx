@@ -56,7 +56,9 @@ function flattenSpanTree(rootSpans: SpanNode[]): FlatSpan[] {
 
 // ── Traces list view ──────────────────────────────────────────────
 
-const TRACES_PAGE_SIZE = 20;
+// Use terminal height as page size so the first page fills the visible area.
+// Subtract chrome (search bar, footer, borders) to avoid fetching more than visible.
+const TRACES_PAGE_SIZE = Math.max(10, (process.stdout.rows || 30) - 5);
 
 export function TracesView({ projectId, projects, services, servicesLoading, isLoading: parentLoading }: ViewProps): ReactNode {
   const timeRange = useStore((s) => s.timeRange);
@@ -150,7 +152,7 @@ export function TracesView({ projectId, projects, services, servicesLoading, isL
 
 // ── Span tree view (pushed from trace list) ───────────────────────
 
-const SPAN_PAGE_SIZE = 50;
+const SPAN_PAGE_SIZE = Math.max(10, (process.stdout.rows || 30) - 5);
 
 function SpanTreeView({ projectId, traceId }: { projectId: string; traceId: string }): ReactNode {
   const { push } = useNavigation();
@@ -179,7 +181,7 @@ function SpanTreeView({ projectId, traceId }: { projectId: string; traceId: stri
   return (
     <List
       isLoading={isLoading}
-      // isShowingDetail={true}
+      isShowingDetail={true}
       navigationTitle={`Trace ${traceId.slice(0, 16)}…`}
       searchBarPlaceholder="Search spans…"
       pagination={hasMore ? {

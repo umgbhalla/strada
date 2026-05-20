@@ -34,7 +34,8 @@ const SEVERITY_COLORS: Record<string, string> = {
 
 // ── Logs list view ────────────────────────────────────────────────
 
-const LOGS_PAGE_SIZE = 30;
+// Use terminal height as page size so the first page fills the visible area.
+const LOGS_PAGE_SIZE = Math.max(10, (process.stdout.rows || 30) - 5);
 
 export function LogsView({ projectId, projects, services, servicesLoading, isLoading: parentLoading }: ViewProps): ReactNode {
   const timeRange = useStore((s) => s.timeRange);
