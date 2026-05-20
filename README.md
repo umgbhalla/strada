@@ -280,19 +280,19 @@ These are regular OTel attributes. Any OTel SDK can set them.
 
 ## Using Strada without the SDK
 
-Strada speaks **standard OTLP HTTP/JSON**. Any OpenTelemetry SDK that supports `http/json` can send data to Strada using environment variables alone. No `@strada.sh/sdk` needed.
+Strada speaks **standard OTLP HTTP/JSON**. Any OpenTelemetry SDK in any language can send data to Strada using environment variables alone. No `@strada.sh/sdk` needed.
 
 The OTel spec defines three env vars that cover endpoint, auth, and protocol:
 
 ```bash
 OTEL_EXPORTER_OTLP_ENDPOINT=https://01JTHG5M7XPQR8KNCZ0W4D-ingest.strada.sh
-OTEL_EXPORTER_OTLP_HEADERS="authorization=Bearer%20str_abc123..."
+OTEL_EXPORTER_OTLP_HEADERS="authorization=Bearer str_abc123..."
 OTEL_EXPORTER_OTLP_PROTOCOL=http/json
 ```
 
-`OTEL_EXPORTER_OTLP_HEADERS` is a comma-separated list of `key=value` pairs following W3C Baggage syntax. Spaces and special characters in values must be percent-encoded: `Bearer%20str_abc123...` becomes the `Authorization: Bearer str_abc123...` HTTP header.
+`OTEL_EXPORTER_OTLP_HEADERS` is a comma-separated list of `key=value` pairs. The OTel SDK adds them as HTTP headers on every export request. `authorization=Bearer str_abc123...` becomes the standard `Authorization: Bearer str_abc123...` header that the Strada collector expects.
 
-`OTEL_EXPORTER_OTLP_PROTOCOL` must be `http/json`. Strada does not support gRPC or protobuf. Not all OTel SDKs support `http/json`; check your language's SDK docs. The **Node.js** SDK has first-class support via the `-http` exporter packages.
+`OTEL_EXPORTER_OTLP_PROTOCOL` must be `http/json`. Strada does not support gRPC or protobuf. Most OTel SDKs default to protobuf, so this env var is required.
 
 ### Node.js (without Strada SDK)
 
@@ -312,34 +312,65 @@ sdk.start()
 
 ```bash
 OTEL_EXPORTER_OTLP_ENDPOINT=https://01JTHG5M7XPQR8KNCZ0W4D-ingest.strada.sh \
-OTEL_EXPORTER_OTLP_HEADERS="authorization=Bearer%20str_abc123..." \
+OTEL_EXPORTER_OTLP_HEADERS="authorization=Bearer str_abc123..." \
 OTEL_EXPORTER_OTLP_PROTOCOL=http/json \
 OTEL_SERVICE_NAME=my-api \
 node app.js
 ```
 
-### Python and Go
+### Python
 
-Python and Go OTel SDKs default to **protobuf** over HTTP, not JSON. Their standard OTLP HTTP exporters send `application/x-protobuf`, which Strada's collector rejects.
+```bash
+pip install opentelemetry-sdk opentelemetry-exporter-otlp-proto-http
+```
 
-To use these languages with Strada, you need to either:
+```bash
+OTEL_EXPORTER_OTLP_ENDPOINT=https://01JTHG5M7XPQR8KNCZ0W4D-ingest.strada.sh \
+OTEL_EXPORTER_OTLP_HEADERS="authorization=Bearer str_abc123..." \
+OTEL_EXPORTER_OTLP_PROTOCOL=http/json \
+OTEL_SERVICE_NAME=my-api \
+opentelemetry-instrument python app.py
+```
 
-- **Use an OTel Collector as a proxy**: run the standard [OTel Collector](https://opentelemetry.io/docs/collector/) locally, receive protobuf from your app, and configure an OTLP HTTP/JSON exporter pointed at Strada
-- **Use the programmatic headers approach** below with a JSON-capable exporter if your SDK provides one
+### Go
+
+The Go SDK defaults to protobuf. Set the protocol env var, or use `WithEncoding` in code:
+
+```bash
+OTEL_EXPORTER_OTLP_ENDPOINT=https://01JTHG5M7XPQR8KNCZ0W4D-ingest.strada.sh \
+OTEL_EXPORTER_OTLP_HEADERS="authorization=Bearer str_abc123..." \
+OTEL_EXPORTER_OTLP_PROTOCOL=http/json \
+OTEL_SERVICE_NAME=my-api \
+go run .
+```
+
+Or explicitly in code:
+
+```go
+import "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
+
+exporter, _ := otlptracehttp.New(ctx,
+    otlptracehttp.WithEndpointURL("https://01JTHG5M7XPQR8KNCZ0W4D-ingest.strada.sh"),
+    otlptracehttp.WithEncoding(otlptracehttp.EncodingJSON),
+    otlptracehttp.WithHeaders(map[string]string{
+        "authorization": "Bearer str_abc123...",
+    }),
+)
+```
 
 ### Per-signal headers
 
 You can set headers per signal if you need different auth for different endpoints:
 
 ```bash
-OTEL_EXPORTER_OTLP_TRACES_HEADERS="authorization=Bearer%20str_abc123..."
-OTEL_EXPORTER_OTLP_LOGS_HEADERS="authorization=Bearer%20str_abc123..."
-OTEL_EXPORTER_OTLP_METRICS_HEADERS="authorization=Bearer%20str_abc123..."
+OTEL_EXPORTER_OTLP_TRACES_HEADERS="authorization=Bearer str_abc123..."
+OTEL_EXPORTER_OTLP_LOGS_HEADERS="authorization=Bearer str_abc123..."
+OTEL_EXPORTER_OTLP_METRICS_HEADERS="authorization=Bearer str_abc123..."
 ```
 
 ### Programmatic headers
 
-If you prefer setting headers in code instead of env vars, OTel exporters accept a `headers` option:
+If you prefer setting headers in code instead of env vars, every OTel exporter accepts a `headers` option:
 
 ```ts
 // Node.js
@@ -349,7 +380,15 @@ new OTLPTraceExporter({
 })
 ```
 
-When setting headers programmatically, use the decoded value (`Bearer str_abc123...`). Percent-encoding is only needed in the `OTEL_EXPORTER_OTLP_HEADERS` env var.
+```python
+# Python
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+
+exporter = OTLPSpanExporter(
+    endpoint="https://01JTHG5M7XPQR8KNCZ0W4D-ingest.strada.sh/v1/traces",
+    headers={"authorization": "Bearer str_abc123..."},
+)
+```
 
 The endpoint URL format is always `https://{projectId}-ingest.strada.sh`. The project ID comes from `strada projects create <slug>`.
 
