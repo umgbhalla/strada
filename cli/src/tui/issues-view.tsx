@@ -14,7 +14,6 @@ import {
 } from "termcast";
 import { useCachedPromise } from "@termcast/utils";
 import type { ReactNode } from "react";
-import { useEffect } from "react";
 
 import { getApiClient } from "../api-client.ts";
 import {
@@ -24,9 +23,9 @@ import {
   type IssueRow,
   type IssueMetadata,
 } from "../tui-queries.ts";
-import { store, useStore, ICON } from "./store.ts";
+import { useStore, ICON } from "./store.ts";
 import { timeAgo, truncate, formatCount } from "./helpers.ts";
-import { CommonActions, type ViewProps } from "./shared.tsx";
+import { NavigationDropdown, CommonActions, type ViewProps } from "./shared.tsx";
 
 // ── Stacktrace rendering ─────────────────────────────────────────
 
@@ -77,7 +76,7 @@ function renderStacktraceMarkdown(framesJson?: string, rawStacktrace?: string): 
 
 const ISSUES_PAGE_SIZE = 15;
 
-export function IssuesView({ projectId, services, servicesLoading }: ViewProps): ReactNode {
+export function IssuesView({ projectId, projects, services, servicesLoading, isLoading: parentLoading }: ViewProps): ReactNode {
   const timeRange = useStore((s) => s.timeRange);
   const service = useStore((s) => s.service);
   const { push } = useNavigation();
@@ -118,17 +117,14 @@ export function IssuesView({ projectId, services, servicesLoading }: ViewProps):
     return undefined;
   };
 
-  // Sync pagination to global store so the parent List can use it
-  useEffect(() => {
-    const p = pagination
-      ? { pageSize: ISSUES_PAGE_SIZE, hasMore: pagination.hasMore, onLoadMore: pagination.onLoadMore }
-      : undefined;
-    store.setState({ pagination: p });
-    return () => { store.setState({ pagination: undefined }); };
-  }, [pagination?.hasMore]);
-
   return (
-    <>
+    <List
+      isLoading={isLoading || parentLoading}
+      isShowingDetail={true}
+      searchBarPlaceholder="Search…"
+      pagination={pagination ? { pageSize: ISSUES_PAGE_SIZE, hasMore: pagination.hasMore, onLoadMore: pagination.onLoadMore } : undefined}
+      searchBarAccessory={<NavigationDropdown projects={projects} />}
+    >
       {issues.map((issue: IssueRow) => {
         const meta = getMeta(issue.fingerprintHash);
         const status = meta?.status || "open";
@@ -216,7 +212,7 @@ export function IssuesView({ projectId, services, servicesLoading }: ViewProps):
           />
         );
       })}
-    </>
+    </List>
   );
 }
 

@@ -17,8 +17,11 @@ import { store, useStore, ICON, VIEW_OPTIONS, TIME_OPTIONS, type TuiView, type T
 
 export interface ViewProps {
   projectId: string;
+  projects: CachedProject[];
   services: ServiceRow[];
   servicesLoading: boolean;
+  /** Parent-level loading (org/project resolution) */
+  isLoading?: boolean;
 }
 
 // ── Dropdown ──────────────────────────────────────────────────────

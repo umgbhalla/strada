@@ -24,9 +24,9 @@ import {
   formatDurationMs,
   type SpanNode,
 } from "../traces.ts";
-import { store, useStore, ICON } from "./store.ts";
+import { useStore, ICON } from "./store.ts";
 import { timeAgo, formatTimestamp, truncate } from "./helpers.ts";
-import { CommonActions, type ViewProps } from "./shared.tsx";
+import { NavigationDropdown, CommonActions, type ViewProps } from "./shared.tsx";
 
 // ── Span tree flattening ──────────────────────────────────────────
 
@@ -57,7 +57,7 @@ function flattenSpanTree(rootSpans: SpanNode[]): FlatSpan[] {
 
 const TRACES_PAGE_SIZE = 20;
 
-export function TracesView({ projectId, services, servicesLoading }: ViewProps): ReactNode {
+export function TracesView({ projectId, projects, services, servicesLoading, isLoading: parentLoading }: ViewProps): ReactNode {
   const timeRange = useStore((s) => s.timeRange);
   const service = useStore((s) => s.service);
   const { push } = useNavigation();
@@ -80,17 +80,14 @@ export function TracesView({ projectId, services, servicesLoading }: ViewProps):
 
   const traces = data ?? [];
 
-  // Sync pagination to global store so the parent List can use it
-  useEffect(() => {
-    const p = pagination
-      ? { pageSize: TRACES_PAGE_SIZE, hasMore: pagination.hasMore, onLoadMore: pagination.onLoadMore }
-      : undefined;
-    store.setState({ pagination: p });
-    return () => { store.setState({ pagination: undefined }); };
-  }, [pagination?.hasMore]);
-
   return (
-    <>
+    <List
+      isLoading={isLoading || parentLoading}
+      isShowingDetail={true}
+      searchBarPlaceholder="Search…"
+      pagination={pagination ? { pageSize: TRACES_PAGE_SIZE, hasMore: pagination.hasMore, onLoadMore: pagination.onLoadMore } : undefined}
+      searchBarAccessory={<NavigationDropdown projects={projects} />}
+    >
       {traces.map((trace: TraceSummaryRow) => {
         const hasErrors = trace.errorSpanCount > 0;
         const iconColor = hasErrors ? Color.Red : Color.Green;
@@ -146,7 +143,7 @@ export function TracesView({ projectId, services, servicesLoading }: ViewProps):
           />
         );
       })}
-    </>
+    </List>
   );
 }
 

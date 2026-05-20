@@ -25,11 +25,11 @@ import {
 } from "../tui-queries.ts";
 import { useStore, ICON } from "./store.ts";
 import { formatCount, formatDuration, truncate } from "./helpers.ts";
-import { CommonActions, type ViewProps } from "./shared.tsx";
+import { NavigationDropdown, CommonActions, type ViewProps } from "./shared.tsx";
 
 // ── Analytics view ────────────────────────────────────────────────
 
-export function AnalyticsView({ projectId, services, servicesLoading }: ViewProps): ReactNode {
+export function AnalyticsView({ projectId, projects, services, servicesLoading, isLoading: parentLoading }: ViewProps): ReactNode {
   const timeRange = useStore((s) => s.timeRange);
   const service = useStore((s) => s.service);
 
@@ -196,7 +196,12 @@ export function AnalyticsView({ projectId, services, servicesLoading }: ViewProp
   ];
 
   return (
-    <>
+    <List
+      isLoading={parentLoading}
+      isShowingDetail={true}
+      searchBarPlaceholder="Search…"
+      searchBarAccessory={<NavigationDropdown projects={projects} />}
+    >
       {cards.map((card) => (
         <List.Item
           key={card.id}
@@ -210,6 +215,6 @@ export function AnalyticsView({ projectId, services, servicesLoading }: ViewProp
           }
         />
       ))}
-    </>
+    </List>
   );
 }

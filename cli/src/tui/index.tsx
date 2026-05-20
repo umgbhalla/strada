@@ -3,11 +3,9 @@
 // Uses zustand/vanilla for global state (view, project, service, time range) persisted
 // via termcast Cache so selections survive restarts.
 //
-// Single dropdown accessory with 3 sections: View, Project, Time Range.
-// Service filter is in the action panel (shared across all views via zustand).
-// All queries come from tui-queries.ts so they stay in sync with CLI commands.
+// Each view owns its own <List> with pagination. This component is a thin switcher
+// that resolves org/project/services and delegates to the active view.
 
-import { List } from "termcast";
 import { useCachedPromise } from "@termcast/utils";
 import type { ReactNode } from "react";
 import { useEffect } from "react";
@@ -15,7 +13,6 @@ import { useEffect } from "react";
 import { fetchOrgs, fetchProjects } from "../orgs.ts";
 import { queryServices } from "../tui-queries.ts";
 import { store, useStore } from "./store.ts";
-import { NavigationDropdown } from "./shared.tsx";
 import { IssuesView } from "./issues-view.tsx";
 import { LogsView } from "./logs-view.tsx";
 import { TracesView } from "./traces-view.tsx";
@@ -24,7 +21,6 @@ import { AnalyticsView } from "./analytics-view.tsx";
 export default function StradaTui(): ReactNode {
   const view = useStore((s) => s.view);
   const projectId = useStore((s) => s.projectId);
-  const projectSlug = useStore((s) => s.projectSlug);
   const timeRange = useStore((s) => s.timeRange);
 
   const { data: orgData, isLoading: orgLoading } = useCachedPromise(async () => {
@@ -57,31 +53,23 @@ export default function StradaTui(): ReactNode {
 
   const isLoading = orgLoading || !projectId;
 
-  // TODO: Use AI to generate SQL WHERE clause from natural language search query.
-  // For now, search filters client-side on List.Item title/keywords.
+  const viewProps = {
+    projectId: projectId!,
+    projects,
+    services,
+    servicesLoading,
+    isLoading,
+  };
 
-  const pagination = useStore((s) => s.pagination);
+  if (!projectId) {
+    // Render a minimal loading List while org/project resolves
+    const { List } = require("termcast");
+    return <List isLoading={true} searchBarPlaceholder="Loading…" />;
+  }
 
-  return (
-    <List
-      isLoading={isLoading}
-      isShowingDetail={true}
-      searchBarPlaceholder="Search…"
-      pagination={pagination}
-      searchBarAccessory={<NavigationDropdown projects={projects} />}
-    >
-      {projectId && view === "issues" && (
-        <IssuesView projectId={projectId} services={services} servicesLoading={servicesLoading} />
-      )}
-      {projectId && view === "logs" && (
-        <LogsView projectId={projectId} services={services} servicesLoading={servicesLoading} />
-      )}
-      {projectId && view === "traces" && (
-        <TracesView projectId={projectId} services={services} servicesLoading={servicesLoading} />
-      )}
-      {projectId && view === "analytics" && (
-        <AnalyticsView projectId={projectId} services={services} servicesLoading={servicesLoading} />
-      )}
-    </List>
-  );
+  if (view === "issues") return <IssuesView {...viewProps} />;
+  if (view === "logs") return <LogsView {...viewProps} />;
+  if (view === "traces") return <TracesView {...viewProps} />;
+  if (view === "analytics") return <AnalyticsView {...viewProps} />;
+  return <IssuesView {...viewProps} />;
 }

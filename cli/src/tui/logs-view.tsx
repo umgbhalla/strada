@@ -11,15 +11,14 @@ import {
 } from "termcast";
 import { useCachedPromise } from "@termcast/utils";
 import type { ReactNode } from "react";
-import { useEffect } from "react";
 
 import {
   queryLogsList,
   type LogRow,
 } from "../tui-queries.ts";
-import { store, useStore, ICON } from "./store.ts";
+import { useStore, ICON } from "./store.ts";
 import { timeAgo, formatTimestamp, truncate, parseAttributes } from "./helpers.ts";
-import { CommonActions, type ViewProps } from "./shared.tsx";
+import { NavigationDropdown, CommonActions, type ViewProps } from "./shared.tsx";
 
 // ── Severity color mapping ────────────────────────────────────────
 
@@ -36,7 +35,7 @@ const SEVERITY_COLORS: Record<string, string> = {
 
 const LOGS_PAGE_SIZE = 30;
 
-export function LogsView({ projectId, services, servicesLoading }: ViewProps): ReactNode {
+export function LogsView({ projectId, projects, services, servicesLoading, isLoading: parentLoading }: ViewProps): ReactNode {
   const timeRange = useStore((s) => s.timeRange);
   const service = useStore((s) => s.service);
   const { push } = useNavigation();
@@ -59,17 +58,14 @@ export function LogsView({ projectId, services, servicesLoading }: ViewProps): R
 
   const logs = data ?? [];
 
-  // Sync pagination to global store so the parent List can use it
-  useEffect(() => {
-    const p = pagination
-      ? { pageSize: LOGS_PAGE_SIZE, hasMore: pagination.hasMore, onLoadMore: pagination.onLoadMore }
-      : undefined;
-    store.setState({ pagination: p });
-    return () => { store.setState({ pagination: undefined }); };
-  }, [pagination?.hasMore]);
-
   return (
-    <>
+    <List
+      isLoading={isLoading || parentLoading}
+      isShowingDetail={true}
+      searchBarPlaceholder="Search…"
+      pagination={pagination ? { pageSize: LOGS_PAGE_SIZE, hasMore: pagination.hasMore, onLoadMore: pagination.onLoadMore } : undefined}
+      searchBarAccessory={<NavigationDropdown projects={projects} />}
+    >
       {logs.map((log: LogRow, i: number) => {
         const severity = (log.severityText || "INFO").toUpperCase();
         const iconColor = SEVERITY_COLORS[severity] ?? Color.SecondaryText;
@@ -119,7 +115,7 @@ export function LogsView({ projectId, services, servicesLoading }: ViewProps): R
           />
         );
       })}
-    </>
+    </List>
   );
 }
 
