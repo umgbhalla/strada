@@ -76,8 +76,10 @@ import { useState, useRef, useCallback } from "react";
 import { generateAiFilter } from "../tui-queries.ts";
 
 export interface AiSearchState {
-  /** The WHERE clause conditions (without "WHERE" prefix) to inject into SQL, or empty string */
+  /** The boolean condition to inject into SQL, or empty string */
   searchFilter: string;
+  /** For grouped queries, whether the condition should go in HAVING vs WHERE */
+  searchFilterPlacement: "where" | "having";
   /** True while the AI model is generating */
   isSearching: boolean;
   /** The raw generated clause shown to the user as feedback */
@@ -96,6 +98,7 @@ export function useAiSearch(opts: {
   debounceMs?: number;
 }): AiSearchState {
   const [searchFilter, setSearchFilter] = useState("");
+  const [searchFilterPlacement, setSearchFilterPlacement] = useState<"where" | "having">("where");
   const [isSearching, setIsSearching] = useState(false);
   const [lastClause, setLastClause] = useState("");
   const abortRef = useRef<AbortController | null>(null);
@@ -103,12 +106,13 @@ export function useAiSearch(opts: {
 
   const onSearchTextChange = useCallback(
     (text: string) => {
-      // Cancel previous in-flight request and AI generation on the server
+      // Cancel previous debounce timer; stale results are discarded via abortRef
       if (abortRef.current) abortRef.current.abort();
       if (timerRef.current) clearTimeout(timerRef.current);
 
       if (!text.trim()) {
         setSearchFilter("");
+        setSearchFilterPlacement("where");
         setLastClause("");
         setIsSearching(false);
         return;
@@ -120,19 +124,21 @@ export function useAiSearch(opts: {
         const controller = new AbortController();
         abortRef.current = controller;
         try {
-          const condition = await generateAiFilter({
+          const result = await generateAiFilter({
             projectId: opts.projectId,
             searchText: text,
             view: opts.view,
           });
           if (controller.signal.aborted) return;
 
-          setSearchFilter(condition);
-          setLastClause(condition);
+          setSearchFilter(result.condition);
+          setSearchFilterPlacement(result.placement);
+          setLastClause(result.condition);
         } catch (err) {
           if ((err as Error).name === "AbortError") return;
           console.error("AI search failed:", err);
           setSearchFilter("");
+          setSearchFilterPlacement("where");
           setLastClause("");
         } finally {
           if (!controller.signal.aborted) {
@@ -144,7 +150,7 @@ export function useAiSearch(opts: {
     [opts.projectId, opts.view, opts.debounceMs],
   );
 
-  return { searchFilter, isSearching, lastClause, onSearchTextChange };
+  return { searchFilter, searchFilterPlacement, isSearching, lastClause, onSearchTextChange };
 }
 
 export function parseAttributes(value: unknown): Record<string, string> {

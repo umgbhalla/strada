@@ -32,13 +32,38 @@ const THINKING_DISABLED = {
   chat_template_kwargs: { enable_thinking: false },
 }
 
+export interface AiFilterResult {
+  condition: string
+  /** For grouped queries (traces), whether the condition uses aggregate aliases
+   * and should go in HAVING instead of WHERE. Defaults to "where". */
+  placement: 'where' | 'having'
+}
+
+// Extra context for the traces view: the query uses GROUP BY TraceId, so the
+// model needs to know which columns are raw (WHERE) vs aggregate (HAVING).
+const TRACES_AGGREGATE_CONTEXT = dedent`
+  The traces query groups spans by TraceId. Some columns are raw span fields
+  (use in WHERE), others are computed aggregates (use in HAVING):
+
+  Raw span columns (WHERE): TraceId, SpanId, ParentSpanId, SpanName,
+    SpanKind, ServiceName, Duration, StatusCode, Timestamp,
+    SpanAttributes, ResourceAttributes
+
+  Aggregate aliases (HAVING): StartTime, DurationNs, SpanCount,
+    ErrorSpanCount, RootSpanName, RootServiceName, RootStatusCode
+
+  Set placement to "having" when referencing aggregate aliases,
+  "where" when referencing raw span columns.
+`
+
 export async function generateSearchFilter(opts: {
   view: AiSearchView
   searchText: string
   signal?: AbortSignal
-}): Promise<string> {
+}): Promise<AiFilterResult> {
   const workersai = createWorkersAI({ binding: env.AI })
   const tableName = AI_SEARCH_VIEWS[opts.view]
+  const isTraces = opts.view === 'traces'
 
   const prompt = dedent`
     Generate a ClickHouse SQL boolean condition to filter rows from the \`${tableName}\` table
@@ -54,6 +79,8 @@ export async function generateSearchFilter(opts: {
     ## Table being queried
 
     ${tableName}
+
+    ${isTraces ? TRACES_AGGREGATE_CONTEXT : ''}
 
     ## User's filter request
 
@@ -72,6 +99,12 @@ export async function generateSearchFilter(opts: {
     - The user query may be written quickly with low effort; infer intent
   `
 
+  const placementSchema = isTraces
+    ? z.enum(['where', 'having']).describe(
+        'Use "having" when the condition references aggregate aliases (StartTime, DurationNs, SpanCount, ErrorSpanCount, RootSpanName, etc). Use "where" for raw span columns.',
+      )
+    : z.literal('where')
+
   const result = await generateText({
     model: workersai('@cf/zai-org/glm-4.7-flash', THINKING_DISABLED),
     prompt,
@@ -80,8 +113,9 @@ export async function generateSearchFilter(opts: {
         description: 'Return the generated SQL boolean condition',
         inputSchema: z.object({
           condition: z.string().describe(
-            'A ClickHouse boolean expression to AND into an existing WHERE clause. No WHERE keyword, no ORDER BY, no semicolons.',
+            'A ClickHouse boolean expression. No WHERE keyword, no ORDER BY, no semicolons.',
           ),
+          placement: placementSchema,
         }),
       }),
     },
@@ -94,10 +128,15 @@ export async function generateSearchFilter(opts: {
 
   const toolCall = result.toolCalls.find((c) => c.toolName === 'sql_filter')
   if (!toolCall || toolCall.dynamic) {
-    return ''
+    return { condition: '', placement: 'where' }
   }
-  // Strip WHERE prefix if model included it despite instructions, and trailing semicolons
-  return (toolCall.input.condition || '').replace(/^WHERE\s+/i, '').trim().replace(/;+$/, '')
+  // Strip WHERE/HAVING prefix if model included it despite instructions, and trailing semicolons
+  const condition = (toolCall.input.condition || '')
+    .replace(/^(WHERE|HAVING)\s+/i, '')
+    .trim()
+    .replace(/;+$/, '')
+  const placement = toolCall.input.placement === 'having' ? 'having' : 'where'
+  return { condition, placement }
 }
 
 export const generateFilterRequestSchema = z.object({
@@ -107,4 +146,5 @@ export const generateFilterRequestSchema = z.object({
 
 export const generateFilterResponseSchema = z.object({
   condition: z.string(),
+  placement: z.enum(['where', 'having']),
 })

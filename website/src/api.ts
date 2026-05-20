@@ -741,12 +741,12 @@ export const api = new Spiceflow({ tracer })
         // TODO: check user has active subscription before allowing AI search
 
         const body = await request.json()
-        const condition = await generateSearchFilter({
+        const result = await generateSearchFilter({
           view: body.view as AiSearchView,
           searchText: body.searchText,
           signal: request.signal,
         })
-        return { condition }
+        return result
       },
     })
     // ── Issue management (status + assignee) ───────────────────────────

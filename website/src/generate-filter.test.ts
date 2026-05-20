@@ -7,28 +7,42 @@ import { test, expect } from 'vitest'
 import { generateSearchFilter } from './generate-filter.ts'
 
 test('generates a condition for issues view', async () => {
-  const condition = await generateSearchFilter({
+  const result = await generateSearchFilter({
     view: 'issues',
     searchText: 'show me TypeErrors',
   })
-  expect(condition).toBeTruthy()
-  expect(condition.toLowerCase()).toContain('typeerror')
+  expect(result.condition).toBeTruthy()
+  expect(result.condition.toLowerCase()).toContain('typeerror')
+  expect(result.placement).toBe('where')
 }, 30_000)
 
 test('generates a condition for logs view', async () => {
-  const condition = await generateSearchFilter({
+  const result = await generateSearchFilter({
     view: 'logs',
     searchText: 'logs containing timeout',
   })
-  expect(condition).toBeTruthy()
-  expect(condition.toLowerCase()).toContain('timeout')
+  expect(result.condition).toBeTruthy()
+  expect(result.condition.toLowerCase()).toContain('timeout')
+  expect(result.placement).toBe('where')
 }, 30_000)
 
 test('generates a condition for traces view', async () => {
-  const condition = await generateSearchFilter({
+  const result = await generateSearchFilter({
     view: 'traces',
-    searchText: 'slow spans over 5 seconds',
+    searchText: 'traces with more than 10 spans',
   })
-  expect(condition).toBeTruthy()
-  expect(condition).toMatch(/duration/i)
+  expect(result.condition).toBeTruthy()
+  expect(result.placement).toMatch(/^(where|having)$/)
+  // The condition should reference SpanCount or count
+  expect(result.condition).toMatch(/spancount|count/i)
+}, 30_000)
+
+test('generates a condition for trace span-level filter', async () => {
+  const result = await generateSearchFilter({
+    view: 'traces',
+    searchText: 'spans where ServiceName is api-gateway',
+  })
+  expect(result.condition).toBeTruthy()
+  expect(result.condition).toMatch(/servicename/i)
+  expect(result.placement).toBe('where')
 }, 30_000)

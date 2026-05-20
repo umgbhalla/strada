@@ -68,7 +68,7 @@ export function TracesView({ projectId, projects, services, servicesLoading, isL
   const aiSearch = useAiSearch({ projectId, view: "traces" });
 
   const { data, isLoading, revalidate, pagination } = useCachedPromise(
-    (pid: string, since: string, svc: string | null, filter: string) =>
+    (pid: string, since: string, svc: string | null, filter: string, placement: string) =>
       async ({ cursor }: { page: number; cursor?: TracesCursor }) => {
         const result = await queryTracesList({
           projectId: pid,
@@ -77,10 +77,11 @@ export function TracesView({ projectId, projects, services, servicesLoading, isL
           limit: TRACES_PAGE_SIZE,
           cursor,
           searchFilter: filter || undefined,
+          searchFilterPlacement: (placement as "where" | "having") || undefined,
         });
         return { data: result.data, hasMore: result.hasMore, cursor: result.cursor };
       },
-    [projectId, timeRange, service, aiSearch.searchFilter],
+    [projectId, timeRange, service, aiSearch.searchFilter, aiSearch.searchFilterPlacement],
     { keepPreviousData: true },
   );
 

@@ -19,16 +19,21 @@ export interface BaseQueryOptions {
 
 // ── AI search filter generation ───────────────────────────────────
 
+export interface AiFilterResult {
+  condition: string;
+  placement: "where" | "having";
+}
+
 /**
  * Call the website's AI endpoint to turn natural language into a ClickHouse
- * boolean condition. Returns the condition string (e.g. "Body ILIKE '%timeout%'")
- * or empty string if the model produced nothing useful.
+ * boolean condition. Returns the condition string and its placement (where
+ * vs having for grouped queries like traces).
  */
 export async function generateAiFilter(opts: {
   projectId: string;
   searchText: string;
   view: "issues" | "logs" | "traces";
-}): Promise<string> {
+}): Promise<AiFilterResult> {
   const { safeFetch } = getApiClient();
   const res = await safeFetch("/api/v0/projects/:projectId/generate-filter", {
     method: "POST",
@@ -39,7 +44,10 @@ export async function generateAiFilter(opts: {
     },
   });
   if (res instanceof Error) throw res;
-  return res.condition || "";
+  return {
+    condition: res.condition || "",
+    placement: res.placement === "having" ? "having" : "where",
+  };
 }
 
 type Row = Record<string, unknown>;
@@ -435,29 +443,39 @@ export interface TracesCursor {
 }
 
 export async function queryTracesList(
-  opts: BaseQueryOptions & { errorsOnly?: boolean; cursor?: TracesCursor; searchFilter?: string },
+  opts: BaseQueryOptions & {
+    errorsOnly?: boolean;
+    cursor?: TracesCursor;
+    searchFilter?: string;
+    /** "having" when the AI filter references aggregate aliases (DurationNs, SpanCount, etc) */
+    searchFilterPlacement?: "where" | "having";
+  },
 ): Promise<{ data: TraceSummaryRow[]; hasMore: boolean; cursor?: TracesCursor }> {
   const limit = opts.limit || 20;
   const conditions = [
     `Timestamp >= ${parseTimeBoundary(opts.since || "1h")}`,
   ];
   if (opts.service) conditions.push(`ServiceName = '${opts.service}'`);
-  if (opts.searchFilter) conditions.push(`(${opts.searchFilter})`);
-  const having = opts.errorsOnly ? "HAVING ErrorSpanCount > 0" : "";
+  if (opts.searchFilter && opts.searchFilterPlacement !== "having") {
+    conditions.push(`(${opts.searchFilter})`);
+  }
+
+  // Collect HAVING parts: errorsOnly, cursor pagination, and AI search (when placement=having)
+  const havingParts: string[] = [];
+  if (opts.errorsOnly) havingParts.push("ErrorSpanCount > 0");
+  if (opts.searchFilter && opts.searchFilterPlacement === "having") {
+    havingParts.push(`(${opts.searchFilter})`);
+  }
 
   // Cursor-based pagination: use (StartTime DESC, TraceId ASC) as a deterministic
   // compound cursor. TraceId is unique per row, so no rows are skipped or duplicated.
-  const cursorCondition = opts.cursor
-    ? `HAVING (StartTime < '${opts.cursor.ts}' OR (StartTime = '${opts.cursor.ts}' AND TraceId > '${opts.cursor.id}'))`
-    : "";
-
-  // Combine HAVING clauses if both cursor and errorsOnly are present
-  let havingClause = "";
-  if (having && cursorCondition) {
-    havingClause = `${having} AND (StartTime < '${opts.cursor!.ts}' OR (StartTime = '${opts.cursor!.ts}' AND TraceId > '${opts.cursor!.id}'))`;
-  } else {
-    havingClause = having || cursorCondition;
+  if (opts.cursor) {
+    havingParts.push(
+      `(StartTime < '${opts.cursor.ts}' OR (StartTime = '${opts.cursor.ts}' AND TraceId > '${opts.cursor.id}'))`,
+    );
   }
+
+  const havingClause = havingParts.length > 0 ? `HAVING ${havingParts.join(" AND ")}` : "";
 
   const sql = dedent`
     SELECT
