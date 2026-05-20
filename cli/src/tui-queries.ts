@@ -5,6 +5,7 @@
 
 import dedent from "string-dedent";
 import { queryProject, type QueryResult } from "./issues.ts";
+import { getApiClient } from "./api-client.ts";
 import { parseDuration, parseTimeBoundary } from "./parse-duration.ts";
 
 // ── Shared types ──────────────────────────────────────────────────
@@ -14,6 +15,31 @@ export interface BaseQueryOptions {
   since?: string; // "1h", "24h", "7d" — each query has its own default
   service?: string; // null/undefined = all services
   limit?: number;
+}
+
+// ── AI search filter generation ───────────────────────────────────
+
+/**
+ * Call the website's AI endpoint to turn natural language into a ClickHouse
+ * boolean condition. Returns the condition string (e.g. "Body ILIKE '%timeout%'")
+ * or empty string if the model produced nothing useful.
+ */
+export async function generateAiFilter(opts: {
+  projectId: string;
+  searchText: string;
+  view: "issues" | "logs" | "traces";
+}): Promise<string> {
+  const { safeFetch } = getApiClient();
+  const res = await safeFetch("/api/v0/projects/:projectId/generate-filter", {
+    method: "POST",
+    params: { projectId: opts.projectId },
+    body: {
+      searchText: opts.searchText,
+      view: opts.view,
+    },
+  });
+  if (res instanceof Error) throw res;
+  return res.condition || "";
 }
 
 type Row = Record<string, unknown>;
@@ -46,7 +72,7 @@ export interface IssueRow {
 }
 
 export async function queryIssuesList(
-  opts: BaseQueryOptions & { unhandled?: boolean; offset?: number },
+  opts: BaseQueryOptions & { unhandled?: boolean; offset?: number; searchFilter?: string },
 ): Promise<{ data: IssueRow[]; hasMore: boolean }> {
   const since = parseDuration(opts.since || "24h");
   const limit = opts.limit || 20;
@@ -54,6 +80,7 @@ export async function queryIssuesList(
   const conditions = [`Timestamp >= now() - INTERVAL ${since}`];
   if (opts.service) conditions.push(`ServiceName = '${opts.service}'`);
   if (opts.unhandled) conditions.push(`MechanismHandled = false`);
+  if (opts.searchFilter) conditions.push(`(${opts.searchFilter})`);
 
   // Fetch one extra row to determine hasMore without a separate COUNT query
   const sql = dedent`
@@ -290,6 +317,7 @@ export async function queryLogsList(
     traceId?: string;
     minLevel?: number;
     cursor?: LogsCursor;
+    searchFilter?: string;
   },
 ): Promise<{ data: LogRow[]; hasMore: boolean; cursor?: LogsCursor }> {
   const limit = opts.limit || 30;
@@ -300,6 +328,7 @@ export async function queryLogsList(
   if (opts.traceId) conditions.push(`TraceId = '${opts.traceId}'`);
   if (opts.search) conditions.push(`Body LIKE '%${opts.search}%'`);
   if (opts.minLevel) conditions.push(`SeverityNumber >= ${opts.minLevel}`);
+  if (opts.searchFilter) conditions.push(`(${opts.searchFilter})`);
 
   // Cursor-based pagination: (Timestamp DESC, TraceId ASC, SpanId ASC).
   // Nanosecond timestamps + TraceId + SpanId is unique enough for log rows.
@@ -406,13 +435,14 @@ export interface TracesCursor {
 }
 
 export async function queryTracesList(
-  opts: BaseQueryOptions & { errorsOnly?: boolean; cursor?: TracesCursor },
+  opts: BaseQueryOptions & { errorsOnly?: boolean; cursor?: TracesCursor; searchFilter?: string },
 ): Promise<{ data: TraceSummaryRow[]; hasMore: boolean; cursor?: TracesCursor }> {
   const limit = opts.limit || 20;
   const conditions = [
     `Timestamp >= ${parseTimeBoundary(opts.since || "1h")}`,
   ];
   if (opts.service) conditions.push(`ServiceName = '${opts.service}'`);
+  if (opts.searchFilter) conditions.push(`(${opts.searchFilter})`);
   const having = opts.errorsOnly ? "HAVING ErrorSpanCount > 0" : "";
 
   // Cursor-based pagination: use (StartTime DESC, TraceId ASC) as a deterministic

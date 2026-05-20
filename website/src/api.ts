@@ -28,6 +28,12 @@ import {
   type DbConfig,
   type QueryResult,
 } from './query-backend.ts'
+import {
+  generateSearchFilter,
+  generateFilterRequestSchema,
+  generateFilterResponseSchema,
+  type AiSearchView,
+} from './generate-filter.ts'
 
 const createOrgRequestSchema = z.object({ name: z.string().min(1) })
 
@@ -714,6 +720,33 @@ export const api = new Spiceflow({ tracer })
         }
 
         throw json({ error: 'unknown backend' }, { status: 500 })
+      },
+    })
+    // ── AI-powered search filter generation ────────────────────────────
+    .route({
+      method: 'POST',
+      path: '/api/v0/projects/:projectId/generate-filter',
+      request: generateFilterRequestSchema,
+      response: generateFilterResponseSchema,
+      detail: {
+        summary: 'Generate a ClickHouse WHERE clause from natural language',
+        tags: ['query'],
+      },
+      async handler({ request, params }) {
+        const session = await requireSession(request)
+        const proj = await getAccessibleProject({ userId: session.userId, projectId: params.projectId })
+        if (!proj) {
+          throw json({ error: 'project not found' }, { status: 404 })
+        }
+        // TODO: check user has active subscription before allowing AI search
+
+        const body = await request.json()
+        const condition = await generateSearchFilter({
+          view: body.view as AiSearchView,
+          searchText: body.searchText,
+          signal: request.signal,
+        })
+        return { condition }
       },
     })
     // ── Issue management (status + assignee) ───────────────────────────

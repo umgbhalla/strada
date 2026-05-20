@@ -1,4 +1,4 @@
-// TUI shared utility functions — formatting, parsing, truncation.
+// TUI shared utility functions — formatting, parsing, truncation, AI search hook.
 
 export function timeAgo(ts: string): string {
   if (!ts) return "";
@@ -64,6 +64,87 @@ export function durationColor(durationMs: number, stats: DurationStats): string 
   if (z >= 2) return "#FF7B7B"; // Color.Red
   if (z >= 1) return "#FF9F43"; // Color.Orange
   return "#34EE7F"; // Color.Green
+}
+
+// ── AI search hook ────────────────────────────────────────────────
+//
+// Debounces user input, calls generateAiFilter() on the website, and returns
+// the current WHERE clause plus loading state. Each view passes the result
+// as `searchFilter` to its query function.
+
+import { useState, useRef, useCallback } from "react";
+import { generateAiFilter } from "../tui-queries.ts";
+
+export interface AiSearchState {
+  /** The WHERE clause conditions (without "WHERE" prefix) to inject into SQL, or empty string */
+  searchFilter: string;
+  /** True while the AI model is generating */
+  isSearching: boolean;
+  /** The raw generated clause shown to the user as feedback */
+  lastClause: string;
+  /** Handler to pass to List's onSearchTextChange */
+  onSearchTextChange: (text: string) => void;
+}
+
+/**
+ * Hook that debounces search text and calls the AI filter endpoint.
+ * Returns the generated boolean condition to inject into SQL queries.
+ */
+export function useAiSearch(opts: {
+  projectId: string;
+  view: "issues" | "logs" | "traces";
+  debounceMs?: number;
+}): AiSearchState {
+  const [searchFilter, setSearchFilter] = useState("");
+  const [isSearching, setIsSearching] = useState(false);
+  const [lastClause, setLastClause] = useState("");
+  const abortRef = useRef<AbortController | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const onSearchTextChange = useCallback(
+    (text: string) => {
+      // Cancel previous in-flight request and AI generation on the server
+      if (abortRef.current) abortRef.current.abort();
+      if (timerRef.current) clearTimeout(timerRef.current);
+
+      if (!text.trim()) {
+        setSearchFilter("");
+        setLastClause("");
+        setIsSearching(false);
+        return;
+      }
+
+      setIsSearching(true);
+
+      timerRef.current = setTimeout(async () => {
+        const controller = new AbortController();
+        abortRef.current = controller;
+        try {
+          const condition = await generateAiFilter({
+            projectId: opts.projectId,
+            searchText: text,
+            view: opts.view,
+          });
+          if (controller.signal.aborted) return;
+
+          setSearchFilter(condition);
+          setLastClause(condition);
+        } catch (err) {
+          if ((err as Error).name === "AbortError") return;
+          console.error("AI search failed:", err);
+          setSearchFilter("");
+          setLastClause("");
+        } finally {
+          if (!controller.signal.aborted) {
+            setIsSearching(false);
+          }
+        }
+      }, opts.debounceMs ?? 500);
+    },
+    [opts.projectId, opts.view, opts.debounceMs],
+  );
+
+  return { searchFilter, isSearching, lastClause, onSearchTextChange };
 }
 
 export function parseAttributes(value: unknown): Record<string, string> {

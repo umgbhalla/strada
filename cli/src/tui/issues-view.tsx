@@ -24,7 +24,7 @@ import {
   type IssueMetadata,
 } from "../tui-queries.ts";
 import { useStore, ICON } from "./store.ts";
-import { timeAgo, truncate, formatCount } from "./helpers.ts";
+import { timeAgo, truncate, formatCount, useAiSearch } from "./helpers.ts";
 import { NavigationDropdown, CommonActions, type ViewProps } from "./shared.tsx";
 
 // ── Stacktrace rendering ─────────────────────────────────────────
@@ -82,8 +82,10 @@ export function IssuesView({ projectId, projects, services, servicesLoading, isL
   const service = useStore((s) => s.service);
   const { push } = useNavigation();
 
+  const aiSearch = useAiSearch({ projectId, view: "issues" });
+
   const { data, isLoading, revalidate, pagination } = useCachedPromise(
-    (pid: string, since: string, svc: string | null) =>
+    (pid: string, since: string, svc: string | null, filter: string) =>
       async ({ page }: { page: number }) => {
         const result = await queryIssuesList({
           projectId: pid,
@@ -91,6 +93,7 @@ export function IssuesView({ projectId, projects, services, servicesLoading, isL
           service: svc ?? undefined,
           limit: ISSUES_PAGE_SIZE,
           offset: page * ISSUES_PAGE_SIZE,
+          searchFilter: filter || undefined,
         });
         // Fetch metadata for the current page's fingerprints.
         // Flatten metadata into each item so it survives JSON serialization
@@ -105,7 +108,7 @@ export function IssuesView({ projectId, projects, services, servicesLoading, isL
           hasMore: result.hasMore,
         };
       },
-    [projectId, timeRange, service],
+    [projectId, timeRange, service, aiSearch.searchFilter],
     { keepPreviousData: true },
   );
 
@@ -117,9 +120,11 @@ export function IssuesView({ projectId, projects, services, servicesLoading, isL
 
   return (
     <List
-      isLoading={isLoading || parentLoading}
+      isLoading={isLoading || parentLoading || aiSearch.isSearching}
       isShowingDetail={true}
-      searchBarPlaceholder="Search…"
+      filtering={false}
+      onSearchTextChange={aiSearch.onSearchTextChange}
+      searchBarPlaceholder="AI search errors…"
       pagination={pagination ? { pageSize: ISSUES_PAGE_SIZE, hasMore: pagination.hasMore, onLoadMore: pagination.onLoadMore } : undefined}
       searchBarAccessory={<NavigationDropdown projects={projects} />}
     >

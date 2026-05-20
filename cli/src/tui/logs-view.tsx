@@ -18,7 +18,7 @@ import {
   type LogsCursor,
 } from "../tui-queries.ts";
 import { useStore, ICON } from "./store.ts";
-import { timeAgo, formatTimestamp, truncate, parseAttributes } from "./helpers.ts";
+import { timeAgo, formatTimestamp, truncate, parseAttributes, useAiSearch } from "./helpers.ts";
 import { NavigationDropdown, CommonActions, type ViewProps } from "./shared.tsx";
 
 // ── Severity color mapping ────────────────────────────────────────
@@ -42,8 +42,10 @@ export function LogsView({ projectId, projects, services, servicesLoading, isLoa
   const service = useStore((s) => s.service);
   const { push } = useNavigation();
 
+  const aiSearch = useAiSearch({ projectId, view: "logs" });
+
   const { data, isLoading, revalidate, pagination } = useCachedPromise(
-    (pid: string, since: string, svc: string | null) =>
+    (pid: string, since: string, svc: string | null, filter: string) =>
       async ({ cursor }: { page: number; cursor?: LogsCursor }) => {
         const result = await queryLogsList({
           projectId: pid,
@@ -51,10 +53,11 @@ export function LogsView({ projectId, projects, services, servicesLoading, isLoa
           service: svc ?? undefined,
           limit: LOGS_PAGE_SIZE,
           cursor,
+          searchFilter: filter || undefined,
         });
         return { data: result.data, hasMore: result.hasMore, cursor: result.cursor };
       },
-    [projectId, timeRange, service],
+    [projectId, timeRange, service, aiSearch.searchFilter],
     { keepPreviousData: true },
   );
 
@@ -62,9 +65,11 @@ export function LogsView({ projectId, projects, services, servicesLoading, isLoa
 
   return (
     <List
-      isLoading={isLoading || parentLoading}
+      isLoading={isLoading || parentLoading || aiSearch.isSearching}
       isShowingDetail={true}
-      searchBarPlaceholder="Search…"
+      filtering={false}
+      onSearchTextChange={aiSearch.onSearchTextChange}
+      searchBarPlaceholder="AI search logs…"
       pagination={pagination ? { pageSize: LOGS_PAGE_SIZE, hasMore: pagination.hasMore, onLoadMore: pagination.onLoadMore } : undefined}
       searchBarAccessory={<NavigationDropdown projects={projects} />}
     >

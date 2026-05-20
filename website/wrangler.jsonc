@@ -16,6 +16,9 @@
   "send_email": [
     { "name": "EMAIL", "remote": true },
   ],
+  "ai": {
+    "binding": "AI",
+  },
   "vars": {
     "STRADA_PROJECT_ID": "01KPVGTT9CJW4ZNEF414VHGRFD"
   },
@@ -44,6 +47,9 @@
   "env": {
     "preview": {
       "name": "strada-website-preview",
+      "ai": {
+        "binding": "AI",
+      },
       "limits": {
         "subrequests": 100000,
       },

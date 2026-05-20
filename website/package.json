@@ -37,6 +37,7 @@
     "@remixicon/react": "^4.9.0",
     "@strada.sh/sdk": "workspace:^",
     "@tailwindcss/vite": "^4.2.2",
+    "ai": "^6.0.168",
     "better-auth": "https://pkg.pr.new/better-auth@9489",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -60,10 +61,12 @@
     "tailwindcss": "^4.2.2",
     "ulid": "latest",
     "vaul": "^1.1.2",
+    "workers-ai-provider": "^3.1.14",
     "zod": "latest"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.33.2",
+    "@cloudflare/vitest-pool-workers": "^0.16.7",
     "@types/node": "^25.6.0",
     "@types/react": "latest",
     "@types/react-dom": "latest",
@@ -71,6 +74,7 @@
     "tsx": "^4.21.0",
     "typescript": "latest",
     "vite": "latest",
+    "vitest": "^4.1.6",
     "wrangler": "latest"
   }
 }
