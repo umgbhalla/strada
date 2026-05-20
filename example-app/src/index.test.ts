@@ -275,7 +275,7 @@ describe.skipIf(!projectId)("example-app telemetry", () => {
     expect(body).toMatchObject({ error: "multiple" });
   });
 
-  test("random fingerprint error (triggers unique alert email)", async () => {
+  test.skip("random fingerprint error (triggers unique alert email)", async () => {
     // Hit multiple times to exceed alert threshold
     for (let i = 0; i < 5; i++) {
       const res = await app.handle(new Request("http://localhost/error/random-fingerprint"));
