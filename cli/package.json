@@ -23,7 +23,6 @@
   "commands": [
     {
       "name": "tui",
-
       "title": "Strada",
       "description": "Browse issues, logs, traces, and analytics",
       "mode": "view"
