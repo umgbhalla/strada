@@ -171,21 +171,6 @@ LIMIT 100
 FORMAT JSON
 ```
 
-### Trace duration (using materialized view)
-
-```sql
-SELECT
-    TraceId,
-    minMerge(Start) AS Start,
-    maxMerge(End) AS End,
-    dateDiff('millisecond', minMerge(Start), maxMerge(End)) AS duration_ms
-FROM otel_traces_trace_id_ts
-GROUP BY TraceId
-ORDER BY duration_ms DESC
-LIMIT 20
-FORMAT JSON
-```
-
 ### Service dependency map
 
 ```sql

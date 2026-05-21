@@ -119,7 +119,6 @@ You can modify TTL on an existing datasource by updating the `.datasource` file 
 | `otel_traces` | Medium | 90 days | Traces are useful for debugging recent issues |
 | `otel_errors` | Small (denormalized summaries) | 180 days | Error trends matter over longer periods |
 | `otel_metrics_*` | Small per row, high volume | 90 days | Metrics are compact; 90 days covers most trend analysis |
-| `otel_traces_trace_id_ts` | Very small (MV aggregate) | 90 days | Matches trace retention |
 
 With 30-day log retention and 90-day everything else, a mid-size SaaS backend would use roughly **400-500 GB total**, costing about **$23-29/mo in storage** plus the base plan fee.
 

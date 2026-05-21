@@ -52,31 +52,6 @@ PARTITION BY toDate(Timestamp)
 ORDER BY (ProjectId, ServiceName, SpanName, toDateTime(Timestamp))
 SETTINGS index_granularity = 8192;
 
--- ============================================================================
--- TRACES: TraceId → timestamp range lookup (materialized view)
--- ============================================================================
-
-CREATE TABLE IF NOT EXISTS otel_traces_trace_id_ts
-(
-    `ProjectId`  LowCardinality(String) CODEC(ZSTD(1)),
-    `TraceId`  String,
-    `Start`    AggregateFunction(min, DateTime64(9)),
-    `End`      AggregateFunction(max, DateTime64(9))
-)
-ENGINE = AggregatingMergeTree
-ORDER BY (ProjectId, TraceId);
-
-CREATE MATERIALIZED VIEW IF NOT EXISTS otel_traces_trace_id_ts_mv
-TO otel_traces_trace_id_ts
-AS
-SELECT
-    ProjectId,
-    TraceId,
-    minState(Timestamp) AS Start,
-    maxState(Timestamp) AS End
-FROM otel_traces
-WHERE TraceId != ''
-GROUP BY ProjectId, TraceId;
 
 -- ============================================================================
 -- ANALYTICS: Page aggregates from browser pageview spans

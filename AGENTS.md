@@ -401,16 +401,6 @@ A **span** is one unit of work (HTTP request, DB query, function call). Spans li
 
 **Answers:** "why was this request slow?", "which service errored?", "what's the call graph?", "show me the p95 latency for GET /users"
 
-### Traces materialized view — `otel_traces_trace_id_ts`
-
-**Populated by:** `otel_traces_trace_id_ts_mv` (fires automatically on every insert to `otel_traces`)
-
-Aggregates `minState(Timestamp)` and `maxState(Timestamp)` per `ProjectId + TraceId` using `AggregatingMergeTree`. Without it, answering "how long did trace X take?" requires scanning all spans. With it, it's a single grouped lookup. Read with `minMerge(Start)` / `maxMerge(End)` and `GROUP BY TraceId`.
-
-**Sorting key:** `ProjectId, TraceId`
-
-**Key columns:** `Start` (`AggregateFunction(min, DateTime64(9))`), `End` (`AggregateFunction(max, DateTime64(9))`)
-
 ### Browser analytics pages — `otel_analytics_pages`
 
 **Populated by:** `otel_analytics_pages_mv` from `otel_traces` pageview spans only.

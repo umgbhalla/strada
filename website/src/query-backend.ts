@@ -58,7 +58,6 @@ export interface QueryResult {
 /** All Strada tables that have a ProjectId column and need project-scoped filtering. */
 const STRADA_TABLES = [
   'otel_traces',
-  'otel_traces_trace_id_ts',
   'otel_logs',
   'otel_errors',
   'otel_metrics_gauge',

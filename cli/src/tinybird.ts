@@ -24,7 +24,6 @@ import * as errore from "errore";
  */
 export const TINYBIRD_DATASOURCES = [
   "otel_traces",
-  "otel_traces_trace_id_ts",
   "otel_logs",
   "otel_errors",
   "otel_metrics_gauge",
