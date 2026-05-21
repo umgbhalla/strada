@@ -226,11 +226,8 @@ export interface ProjectJwtContext {
   tinybirdAdminToken: string
   /** Existing cached JWT, if any */
   tinybirdJwt: string | null
-  /** Comma-joined datasource names the cached JWT was created with (project-level cache) */
+  /** Comma-joined datasource names the cached JWT was created with */
   tinybirdJwtDatasources: string | null
-  /** Comma-joined datasource names deployed to the Tinybird workspace (org-level, from database row).
-   *  This is the source of truth for which tables exist in Tinybird. */
-  deployedDatasources: string | null
 }
 
 /**
@@ -246,12 +243,11 @@ export async function getOrCreateProjectJwt(ctx: ProjectJwtContext): Promise<str
     return ctx.tinybirdJwt
   }
 
-  // No cached JWT: create one. Priority for datasource list:
-  // 1. deployedDatasources (org-level, set by database upgrade) — source of truth
-  // 2. tinybirdJwtDatasources (project-level, from last JWT creation)
-  // 3. TINYBIRD_DATASOURCES (code fallback, only for first-ever database create)
-  const datasources = (ctx.deployedDatasources || ctx.tinybirdJwtDatasources)
-    ? (ctx.deployedDatasources || ctx.tinybirdJwtDatasources)!.split(',')
+  // No cached JWT: create one. Use the datasource list stored in D1 (set by
+  // database upgrade) if available, otherwise fall back to the code's list
+  // for first-ever JWT creation (database create flow).
+  const datasources = ctx.tinybirdJwtDatasources
+    ? ctx.tinybirdJwtDatasources.split(',')
     : [...TINYBIRD_DATASOURCES]
 
   const client = new TinybirdClient({
