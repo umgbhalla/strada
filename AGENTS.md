@@ -112,7 +112,7 @@ Migrations are hand-written SQL files in `db/drizzle/`. Drizzle-orm does not rea
 
 **Statement separator:** use `--> statement-breakpoint` between SQL statements. D1 wrangler splits files on this marker.
 
-See the `drizzle` skill's `cloudflare.md` for the full type mapping table (drizzle types to SQLite SQL) and SQLite DDL limitations (no column rename, no DROP COLUMN, ALTER TABLE ADD COLUMN constraints).
+See the `drizzle` skill's `cloudflare.md` for the full D1 migration workflow.
 
 ## Upgrading ClickHouse/Tinybird schema
 
