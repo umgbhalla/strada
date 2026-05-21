@@ -5,53 +5,56 @@ description: How Tinybird pricing works for OTel observability workloads, cost e
 
 # Tinybird Pricing Breakdown
 
-Tinybird bills on a **reserved capacity + pay-per-use** model. You pick a plan that reserves a vCPU ceiling and QPS limit, then pay for actual usage (active minutes, storage, data transfer) within that ceiling. There is no per-query pricing or per-GB-ingested pricing.
+Tinybird bills on a **fixed plan fee + vCPU overage** model. You pick a plan that includes a baseline vCPU allocation, then pay overage only when usage exceeds that baseline per second. Both reads (queries) and writes (ingestion, MV processing) consume vCPU time. There is no per-query pricing, no per-GB-ingested pricing, and no per-row pricing.
 
-Sources: https://www.tinybird.co/pricing, https://www.tinybird.co/docs/forward/pricing, https://www.tinybird.co/docs/forward/pricing/shared-infrastructure
+Sources: https://www.tinybird.co/pricing, https://www.tinybird.co/docs/forward/pricing, https://www.tinybird.co/docs/forward/pricing/shared-infrastructure, https://www.tinybird.co/docs/forward/pricing/developer
 
 ## Plans overview
 
-| Plan | Base price | vCPUs | Storage included | QPS included |
-|------|-----------|-------|-----------------|-------------|
-| Free | $0 | 0.25 | 10 GB | 10 |
-| Developer | $25-$299/mo | 0.25-3 | 25 GB | 10-55 |
-| SaaS | Custom | 4-32 | 500 GB+ | 55-200 |
-| Enterprise | Custom | Unlimited | Bottomless | 80+ |
+| Plan | Base price | vCPUs | Storage included | Threads/request |
+|------|-----------|-------|-----------------|-----------------|
+| Free | $0 | 0.25 (burst 3x) | 10 GB | 1 |
+| Developer | $49+/mo | 0.5-8 | 25 GB | 1-8 |
+| SaaS | Custom | 4-32 | 500 GB+ | 4-16 |
+| Enterprise | Custom | Unlimited | Bottomless | Configurable |
 
 ## What you pay for
 
 ### 1. Fixed monthly base fee
 
-The **Free plan costs $0** and includes 0.25 vCPU, 10 GB storage, 10 QPS, and 300 vCPU hours/month. No credit card required, no time limit.
+The **Free plan costs $0** and includes 0.25 vCPU, 10 GB storage, and 1k requests/day. No credit card required, no time limit.
 
-Paid Developer plans start at $25/mo (0.25 vCPU, 25 GB storage). The base fee reserves your vCPU capacity ceiling and QPS limit. You pay it even if you do nothing.
+Paid Developer plans start at **$49/mo** (0.5 vCPU, 25 GB storage). The base fee reserves your vCPU baseline. You pay it even if you do nothing. Plans scale up to 8 vCPUs in self-service; beyond that requires SaaS or Enterprise.
 
-### 2. Active vCPU minutes (usage-based)
+### 2. vCPU overages (usage-based)
 
-An **active minute** is any calendar minute where at least one operation (query, ingestion, materialized view) used a vCPU. If nobody is querying and nothing is being ingested, **zero active minutes are consumed**.
+Each plan includes a baseline vCPU allocation (e.g. 0.5 vCPU on the smallest Developer plan). You can consume up to that many vCPU-seconds per second without overage. Usage above the baseline is billed at **$0.0002/vCPU-second**.
 
-Each plan includes a bundle of active minutes. Overage beyond that: **$0.162/vCPU-hour**.
+**Both reads and writes count.** Queries, ingestion, and materialized view processing all consume vCPU time.
 
-Burst mode allows temporarily using 2x your plan's vCPU without overage charges. For batch operations (populates, copies), the entire job is allowed to finish even if it exceeds the per-minute limit.
+Burst mode allows temporarily using **2x your plan's vCPU** without overage. For batch operations (populates, copies), the entire job is allowed to finish even if it exceeds the per-second limit.
+
+If nobody is querying and nothing is being ingested, **zero vCPU-seconds are consumed** beyond the baseline. No compute overage.
 
 ### 3. Storage (usage-based)
 
 **$0.058/GB/month** for compressed data beyond the included amount. This is the average of daily maximum usage across all data sources.
 
-### 4. QPS overages (usage-based)
+### 4. Data transfer (usage-based)
 
-Each plan has a QPS limit. Requests above that limit (up to 4x the plan's QPS ceiling) cost **$0.0005/request**. Beyond 4x, you get rate-limited.
+- Intra-cloud (same provider + region): **$0.01/GB**
+- Inter-cloud (different provider or region): **$0.10/GB**
+- Private networking: **$0.016/GB**
 
-### 5. Data transfer (usage-based)
+### 5. On-demand CPUs
 
-- Intra-cloud: **$0.01/GB**
-- Inter-cloud: **$0.10/GB**
+Temporary compute for jobs that run outside the baseline cluster (e.g. populate jobs). Billed by CPU cores and duration. Rates may vary by region.
 
 ## What happens when nobody is querying
 
-You pay **only the fixed base fee (or $0 on Free) + storage**. Zero active minutes are consumed. No compute overage.
+You pay **only the fixed base fee (or $0 on Free) + storage**. Zero vCPU overage.
 
-For an OTel use case like Strada, you're almost never truly idle because data is continuously ingested. Every ingestion batch burns active minutes. Materialized views firing on insert burn more. But if traffic goes quiet (e.g. overnight for a dev tool), active minutes stop accumulating.
+For an OTel use case like Strada, you're almost never truly idle because data is continuously ingested. Every ingestion batch uses vCPU time. Materialized views firing on insert use more. But if traffic goes quiet (e.g. overnight for a dev tool), vCPU usage drops to near zero and stays well within your baseline allocation.
 
 ## Cost estimates for OTel log storage
 
@@ -78,7 +81,7 @@ Traces and metrics typically add 2-3x the log volume.
 | 3 months | ~2.1 TB | **$122/mo** |
 | 6 months | ~4.2 TB | **$244/mo** |
 
-These are **storage costs only**. Add the base plan fee and compute overage from continuous ingestion + MV processing + user queries on top.
+These are **storage costs only**. Add the base plan fee and vCPU overage from continuous ingestion + MV processing + user queries on top.
 
 ### Comparison to Datadog
 
@@ -123,7 +126,9 @@ With 30-day log retention and 90-day everything else, a mid-size SaaS backend wo
 ## Key takeaways
 
 - **Storage is cheap** ($0.058/GB/mo). Even at TB scale, it's a fraction of Datadog/Sentry.
-- **Compute is the hidden cost driver.** Continuous ingestion + MV processing + dashboard queries all burn active minutes.
-- **No idle compute cost.** If nothing is running, only the base plan fee and storage are charged.
+- **Compute is per-second, not per-minute.** vCPU overage is $0.0002/vCPU-second above your plan's baseline. Both reads and writes count.
+- **No idle compute cost.** If nothing is running, only the base plan fee and storage are charged. No "always-on" vCPU billing.
+- **Ingestion is included.** No per-event or per-GB ingestion fee. The Events API, Kafka, S3, and all connectors are included in every plan.
+- **MV processing is negligible.** Materialized view incremental updates have near-zero compute cost for typical workloads.
 - **Per-table TTL is fully supported.** Use shorter retention for logs, longer for errors. This is the main lever for controlling storage costs.
 - **Self-hosted ClickHouse** ($150-300/mo for a small VM) is the cheapest option if you don't need Tinybird's managed infra, JWT row-level filtering, or Events API.
