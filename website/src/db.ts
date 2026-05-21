@@ -255,11 +255,10 @@ export async function getOrCreateProjectJwt(ctx: ProjectJwtContext): Promise<str
     // code references a datasource that doesn't exist in the workspace yet. This
     // happens after a Strada update adds new tables. The fix is `strada database upgrade`.
     const msg = String(result.cause ?? result.message ?? '')
-    const resourceMatch = msg.match(/Resource '(\w+)' not found/)
-    if (resourceMatch) {
+    if (/Resource '.*' not found/.test(msg)) {
       throw new Error(
-        `Tinybird datasource "${resourceMatch[1]}" does not exist in the workspace. `
-        + 'Your database schema is out of date. Run `strada database upgrade` to deploy the latest tables.',
+        'Database schema is out of date. Run `strada database upgrade` to deploy the latest tables.',
+        { cause: result },
       )
     }
     throw result

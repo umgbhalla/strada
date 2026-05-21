@@ -670,28 +670,11 @@ export const api = new Spiceflow({ tracer })
             tinybirdJwtDatasources: proj.tinybirdJwtDatasources,
           }
 
-          let jwt: string
-          try {
-            jwt = await getOrCreateProjectJwt(jwtCtx)
-          } catch (err) {
-            const msg = String(err instanceof Error ? err.message : err)
-            if (msg.includes('strada database upgrade')) {
-              throw json({ error: msg }, { status: 424 })
-            }
-            throw err
-          }
+          let jwt = await getOrCreateProjectJwt(jwtCtx)
           let res = await queryWithJwt(jwt)
 
           if (res.status === 403) {
-            try {
-              jwt = await getOrCreateProjectJwt({ ...jwtCtx, tinybirdJwt: null, tinybirdJwtDatasources: null })
-            } catch (err) {
-              const msg = String(err instanceof Error ? err.message : err)
-              if (msg.includes('strada database upgrade')) {
-                throw json({ error: msg }, { status: 424 })
-              }
-              throw err
-            }
+            jwt = await getOrCreateProjectJwt({ ...jwtCtx, tinybirdJwt: null, tinybirdJwtDatasources: null })
             res = await queryWithJwt(jwt)
           }
 

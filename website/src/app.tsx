@@ -203,7 +203,8 @@ export const app = new Spiceflow({ tracer })
   .onError(({ error }) => {
     console.error('onError caught:', error)
     captureException(error)
-    return new Response('Internal Server Error', { status: 500 })
+    const message = error instanceof Error ? error.message : String(error)
+    return Response.json({ error: message }, { status: 500 })
   })
 
   // ── BetterAuth middleware ──────────────────────────────────────
