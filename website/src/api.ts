@@ -319,6 +319,7 @@ export const api = new Spiceflow({ tracer })
         }
 
         const updatedAt = Date.now()
+        const currentDatasources = TINYBIRD_DATASOURCES.join(',')
         const updateDatabase = body.backend === 'tinybird'
           ? db.update(schema.database)
             .set({
@@ -326,6 +327,7 @@ export const api = new Spiceflow({ tracer })
               tinybirdEndpoint: body.tinybirdEndpoint,
               tinybirdAdminToken: body.tinybirdAdminToken,
               tinybirdReadToken: body.tinybirdReadToken,
+              tinybirdDatasources: currentDatasources,
               clickhouseUrl: null,
               clickhouseDatabase: null,
               clickhouseUser: null,
@@ -343,6 +345,7 @@ export const api = new Spiceflow({ tracer })
               tinybirdEndpoint: null,
               tinybirdAdminToken: null,
               tinybirdReadToken: null,
+              tinybirdDatasources: null,
               updatedAt,
             })
             .where(orm.eq(schema.database.id, existing.id))
@@ -420,16 +423,17 @@ export const api = new Spiceflow({ tracer })
           throw json({ error: readToken.message }, { status: 502 })
         }
 
-        // Clear cached JWTs and update the datasource list so the next query
-        // creates a fresh JWT with the full set of deployed tables.
+        // Store the deployed datasource list on the database row (org-level source
+        // of truth) and clear cached project JWTs so the next query creates fresh
+        // ones using the updated list.
         const updatedAt = Date.now()
         const currentDatasources = TINYBIRD_DATASOURCES.join(',')
         await db.batch([
           db.update(schema.database)
-            .set({ tinybirdReadToken: readToken.token, updatedAt })
+            .set({ tinybirdReadToken: readToken.token, tinybirdDatasources: currentDatasources, updatedAt })
             .where(orm.eq(schema.database.id, existing.id)),
           db.update(schema.project)
-            .set({ tinybirdJwt: null, tinybirdJwtDatasources: currentDatasources, updatedAt })
+            .set({ tinybirdJwt: null, tinybirdJwtDatasources: null, updatedAt })
             .where(orm.eq(schema.project.orgId, params.orgId)),
         ])
 
@@ -671,6 +675,7 @@ export const api = new Spiceflow({ tracer })
             tinybirdAdminToken: dbConfig.tinybirdAdminToken,
             tinybirdJwt: proj.tinybirdJwt,
             tinybirdJwtDatasources: proj.tinybirdJwtDatasources,
+            deployedDatasources: dbConfig.tinybirdDatasources,
           }
 
           let jwt = await getOrCreateProjectJwt(jwtCtx)

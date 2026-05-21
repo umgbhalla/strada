@@ -192,6 +192,10 @@ export const database = s.sqliteTable(
     tinybirdEndpoint: s.text("tinybird_endpoint"),
     tinybirdAdminToken: s.text("tinybird_admin_token"),
     tinybirdReadToken: s.text("tinybird_read_token"),
+    // Comma-joined datasource names deployed to the Tinybird workspace.
+    // Set by `database create` and `database upgrade`. Used by JWT creation
+    // so new projects use the deployed list, not the code's TINYBIRD_DATASOURCES.
+    tinybirdDatasources: s.text("tinybird_datasources"),
 
     // ClickHouse fields (null when backend = tinybird)
     clickhouseUrl: s.text("clickhouse_url"),

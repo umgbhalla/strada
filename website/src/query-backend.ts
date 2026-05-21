@@ -19,6 +19,8 @@ export interface DbConfig {
   tinybirdEndpoint: string | null
   tinybirdAdminToken: string | null
   tinybirdReadToken?: string | null
+  /** Comma-joined datasource names deployed to Tinybird (org-level source of truth) */
+  tinybirdDatasources?: string | null
   clickhouseUrl: string | null
   clickhouseDatabase: string | null
   clickhouseUser: string | null
@@ -165,6 +167,7 @@ export async function executeBackendQuery(ctx: {
       tinybirdAdminToken: dbConfig.tinybirdAdminToken,
       tinybirdJwt: project.tinybirdJwt,
       tinybirdJwtDatasources: project.tinybirdJwtDatasources,
+      deployedDatasources: dbConfig.tinybirdDatasources ?? null,
     })
     const res = await fetch(`${dbConfig.tinybirdEndpoint}/v0/sql`, {
       method: 'POST',
