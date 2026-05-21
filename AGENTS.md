@@ -110,7 +110,7 @@ Migrations are hand-written SQL files in `db/drizzle/`. Drizzle-orm does not rea
 
 **File naming:** zero-padded four-digit sequence number, underscore, kebab-case description, `.sql` extension.
 
-**Statement separator:** use `--> statement-breakpoint` between SQL statements. D1 wrangler splits files on this marker.
+D1 splits statements on **semicolons**. The `--> statement-breakpoint` comments in drizzle-kit output are just visual separators; you can keep or remove them.
 
 See the `drizzle` skill's `cloudflare.md` for the full D1 migration workflow.
 
