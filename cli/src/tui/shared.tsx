@@ -26,6 +26,14 @@ export interface ViewProps {
 
 // ── Navigation title with timing ──────────────────────────────────
 
+/** Format milliseconds as padded string: "120ms" or "1.2s" if >= 1000. */
+function formatMs(ms: number): string {
+  if (ms >= 1000) {
+    return `${(ms / 1000).toFixed(1)}s`.padStart(5);
+  }
+  return `${ms}ms`.padStart(5);
+}
+
 /** Formatted title for the List showing view name + timing info. */
 export function useNavigationTitle(): string {
   const view = useStore((s) => s.view);
@@ -35,8 +43,8 @@ export function useNavigationTitle(): string {
 
   const label = VIEW_OPTIONS.find((v) => v.id === view)?.label ?? "Issues";
   const parts = [label];
-  if (queryMs != null) parts.push(`query ${queryMs}ms`);
-  if (aiMs != null) parts.push(`ai ${aiMs}ms`);
+  if (queryMs != null) parts.push(`sql ${formatMs(queryMs)}`);
+  if (aiMs != null) parts.push(`ai ${formatMs(aiMs)}`);
   if (aiSql) parts.push(aiSql);
   return parts.join(" · ");
 }
