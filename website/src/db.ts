@@ -250,7 +250,20 @@ export async function getOrCreateProjectJwt(ctx: ProjectJwtContext): Promise<str
       filter: `ProjectId = '${ctx.projectId}'`,
     })),
   })
-  if (result instanceof Error) throw result
+  if (result instanceof Error) {
+    // Detect schema drift: Tinybird returns "Resource 'xxx' not found" when the
+    // code references a datasource that doesn't exist in the workspace yet. This
+    // happens after a Strada update adds new tables. The fix is `strada database upgrade`.
+    const msg = String(result.cause ?? result.message ?? '')
+    const resourceMatch = msg.match(/Resource '(\w+)' not found/)
+    if (resourceMatch) {
+      throw new Error(
+        `Tinybird datasource "${resourceMatch[1]}" does not exist in the workspace. `
+        + 'Your database schema is out of date. Run `strada database upgrade` to deploy the latest tables.',
+      )
+    }
+    throw result
+  }
 
   // Cache the JWT and datasource list in D1
   const db = getDb()
