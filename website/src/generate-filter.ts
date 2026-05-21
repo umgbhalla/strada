@@ -115,17 +115,36 @@ const VIEW_CONTEXT: Record<AiSearchView, string> = {
     \`\`\`
 
     WHERE can reference any raw span column from otel_traces: TraceId, SpanId,
-    ParentSpanId, SpanName, SpanKind, ServiceName, Duration, StatusCode, Timestamp,
-    SpanAttributes (Map), ResourceAttributes (Map), EventsName (Array), etc.
+    ParentSpanId, SpanName, SpanKind, ServiceName, Duration (per-span, nanoseconds),
+    StatusCode, Timestamp, SpanAttributes (Map), ResourceAttributes (Map),
+    EventsName (Array), etc.
 
-    HAVING can reference aggregate aliases: StartTime, DurationNs, SpanCount,
-    ErrorSpanCount, RootSpanName, RootServiceName, RootStatusCode, Services.
+    HAVING can reference aggregate aliases: StartTime, DurationNs (per-trace total
+    duration, nanoseconds), SpanCount, ErrorSpanCount, RootSpanName,
+    RootServiceName, RootStatusCode, Services.
+
+    Duration units: both Duration (per-span, WHERE) and DurationNs (per-trace,
+    HAVING) are in NANOSECONDS. Common conversions:
+      100ms = 100000000
+      500ms = 500000000
+      1s    = 1000000000
+      5s    = 5000000000
+      10s   = 10000000000
 
     Default ORDER BY: StartTime DESC, TraceId ASC
+
+    Example: "traces longer than 1 second" →
+      where: "Timestamp >= now() - INTERVAL 1 DAY"
+      having: "DurationNs > 1000000000"
 
     Example: "traces with more than 10 spans" →
       where: "Timestamp >= now() - INTERVAL 1 DAY"
       having: "SpanCount > 10"
+
+    Example: "slow traces with errors sorted by duration" →
+      where: "Timestamp >= now() - INTERVAL 1 DAY"
+      having: "DurationNs > 1000000000 AND ErrorSpanCount > 0"
+      orderBy: "DurationNs DESC"
   `,
 }
 

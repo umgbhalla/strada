@@ -82,7 +82,7 @@ export function LogsView({ projectId, projects, services, servicesLoading, isLoa
       filtering={false}
       navigationTitle={navigationTitle}
       onSearchTextChange={aiSearch.onSearchTextChange}
-      searchBarPlaceholder="AI search logs…"
+      searchBarPlaceholder="errors since yesterday, service worker…"
       pagination={pagination ? { pageSize: LOGS_PAGE_SIZE, hasMore: pagination.hasMore, onLoadMore: pagination.onLoadMore } : undefined}
       searchBarAccessory={<NavigationDropdown projects={projects} />}
     >

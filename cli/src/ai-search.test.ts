@@ -85,6 +85,19 @@ describe("SQL builders", () => {
     expect(sql).toContain("LIMIT 16");
   });
 
+  test("buildTracesListSQL with DurationNs having for slow traces", () => {
+    const aiFilter: AiFilterResult = {
+      where: "Timestamp >= now() - INTERVAL 1 DAY",
+      having: "DurationNs > 1000000000",
+      orderBy: "DurationNs DESC",
+    };
+    const sql = buildTracesListSQL({ projectId: PROJECT_ID, aiFilter, limit: 10 });
+
+    expect(sql).toContain("HAVING (DurationNs > 1000000000)");
+    expect(sql).toContain("ORDER BY DurationNs DESC");
+    expect(sql).toContain("GROUP BY TraceId");
+  });
+
   test("buildTracesListSQL without AI filter uses 1d default", () => {
     const sql = buildTracesListSQL({ projectId: PROJECT_ID, limit: 10 });
 
@@ -203,7 +216,9 @@ describe("AI search end-to-end", () => {
 
   test("traces: slow traces over 1 second", async () => {
     if (skipIfUnavailable()) return;
-    // Just verify the pipeline works; model output for duration filters is unreliable
-    await testEndToEnd({ view: "traces", searchText: "slow traces over 1 second" });
+    const { filter, sql } = await testEndToEnd({ view: "traces", searchText: "slow traces over 1 second" });
+    // The AI should use DurationNs in HAVING with a nanosecond value (1s = 1e9)
+    expect(filter.having).toMatch(/DurationNs/i);
+    expect(sql).toContain("HAVING");
   }, 60_000);
 });

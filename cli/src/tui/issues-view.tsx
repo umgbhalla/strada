@@ -137,7 +137,7 @@ export function IssuesView({ projectId, projects, services, servicesLoading, isL
       filtering={false}
       navigationTitle={navigationTitle}
       onSearchTextChange={aiSearch.onSearchTextChange}
-      searchBarPlaceholder="AI search errors…"
+      searchBarPlaceholder="unresolved since last week, service api…"
       pagination={pagination ? { pageSize: ISSUES_PAGE_SIZE, hasMore: pagination.hasMore, onLoadMore: pagination.onLoadMore } : undefined}
       searchBarAccessory={<NavigationDropdown projects={projects} />}
     >

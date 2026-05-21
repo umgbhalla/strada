@@ -111,7 +111,7 @@ export function TracesView({ projectId, projects, services, servicesLoading, isL
       accessoryTagsLayout={
         [8,8]
       }
-      searchBarPlaceholder="AI search traces…"
+      searchBarPlaceholder="since 2 hours ago, only service api…"
       pagination={pagination ? { pageSize: TRACES_PAGE_SIZE, hasMore: pagination.hasMore, onLoadMore: pagination.onLoadMore } : undefined}
       searchBarAccessory={<NavigationDropdown projects={projects} />}
     >
