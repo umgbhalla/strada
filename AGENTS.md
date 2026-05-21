@@ -94,6 +94,26 @@ If the preview migration or deploy fails, **stop**. Do not continue to productio
 
 The website `deploy` and `deploy:prod` scripts run the D1 migration before building and deploying. If migration fails, the `&&` chain stops and the deploy never happens.
 
+## D1 migrations (manual SQL, no drizzle-kit generate)
+
+Migrations are hand-written SQL files in `db/drizzle/`. Drizzle-orm does not read migration files at runtime; D1 tracks applied migrations in its own internal table via `wrangler d1 migrations apply`.
+
+**Workflow after editing `db/src/schema.ts`:**
+
+1. Run `drizzle-kit generate` from the `db/` package to get a starting point SQL diff
+2. Read all existing `.sql` files in `db/drizzle/` to understand the current database state
+3. Find the highest migration number (e.g. `0008`)
+4. Create a new file: `db/drizzle/NNNN_kebab-description.sql` (e.g. `0009_add-user-preferences.sql`)
+5. Copy the generated SQL from the drizzle-kit subdirectory, improve it (add comments, simplify, handle SQLite limitations)
+6. Delete the generated subdirectory (drizzle-kit artifact, D1 ignores it)
+7. Deploy preview first (`pnpm --dir website deploy`), then production
+
+**File naming:** zero-padded four-digit sequence number, underscore, kebab-case description, `.sql` extension.
+
+**Statement separator:** use `--> statement-breakpoint` between SQL statements. D1 wrangler splits files on this marker.
+
+See the `drizzle` skill's `cloudflare.md` for the full type mapping table (drizzle types to SQLite SQL) and SQLite DDL limitations (no column rename, no DROP COLUMN, ALTER TABLE ADD COLUMN constraints).
+
 ## Upgrading ClickHouse/Tinybird schema
 
 When you add or modify a `.datasource` or `.pipe` file in `tinybird/`, the new schema must be deployed to each user's Tinybird workspace. The flow has two steps because schema definitions are **bundled into the website worker** at build time and deployed to Tinybird via the website's migrate API.

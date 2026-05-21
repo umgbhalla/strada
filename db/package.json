@@ -16,9 +16,7 @@
     }
   },
   "scripts": {
-    "typecheck": "tsc --noEmit",
-    "generate": "drizzle-kit generate && tsx scripts/flatten-migrations.ts ./drizzle",
-    "flatten": "tsx scripts/flatten-migrations.ts ./drizzle"
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "drizzle-kit": "1.0.0-beta.21",
