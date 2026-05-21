@@ -68,9 +68,14 @@ export function durationColor(durationMs: number, stats: DurationStats): string 
 
 // ── AI search hook ────────────────────────────────────────────────
 //
-// Debounces user input, calls generateAiFilter() on the website, and returns
-// the structured SQL filter (where/having/orderBy) plus loading state. Each
-// view passes the result as `aiFilter` to its query function.
+// Debounces user input, calls generateAiFilter() on the website via
+// useCachedPromise, and returns the structured SQL filter (where/having/orderBy)
+// plus loading state. Each view passes the result as `aiFilter` to its query
+// function.
+//
+// useCachedPromise handles caching by (text, view, projectId) key so navigating
+// away and back with the same search text is instant. Abort is handled via the
+// abortable ref pattern.
 //
 // Retry loop (inspired by crisp search-database-raycast):
 // After generating a filter, the hook calls the `probe` callback to validate
@@ -78,7 +83,8 @@ export function durationColor(durationMs: number, stats: DurationStats): string 
 // error), the error is fed back to the AI model and generation is retried.
 // Up to MAX_RETRIES attempts. Retry progress is shown in the navigation title.
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
+import { useCachedPromise } from "@termcast/utils";
 import { generateAiFilter, type AiFilterResult, type PreviousFilterError } from "../tui-queries.ts";
 import { store } from "./store.ts";
 
@@ -89,8 +95,6 @@ export interface AiSearchState {
   aiFilter: AiFilterResult | null;
   /** True while the AI model is generating */
   isSearching: boolean;
-  /** Summary of what the AI generated, shown to user as feedback */
-  lastClause: string;
   /** Handler to pass to List's onSearchTextChange */
   onSearchTextChange: (text: string) => void;
 }
@@ -104,8 +108,11 @@ function summarizeFilter(result: AiFilterResult): string {
 }
 
 /**
- * Hook that debounces search text and calls the AI filter endpoint.
- * Returns the structured SQL filter to inject into queries.
+ * Hook that debounces search text and calls the AI filter endpoint via
+ * useCachedPromise. Returns the structured SQL filter to inject into queries.
+ *
+ * Results are cached by (searchText, view, projectId) so navigating between
+ * views and back is instant when the search text hasn't changed.
  *
  * `probe` is called after each generation to validate the SQL. If it
  * throws, the error message is fed back to the AI for self-correction.
@@ -118,103 +125,123 @@ export function useAiSearch(opts: {
   /** Validate the generated filter by executing a probe query. Throw on failure. */
   probe?: (filter: AiFilterResult) => Promise<void>;
 }): AiSearchState {
-  const [aiFilter, setAiFilter] = useState<AiFilterResult | null>(null);
-  const [isSearching, setIsSearching] = useState(false);
-  const [lastClause, setLastClause] = useState("");
-  const abortRef = useRef<AbortController | null>(null);
+  const [debouncedText, setDebouncedText] = useState("");
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const probeRef = useRef(opts.probe);
+  probeRef.current = opts.probe;
 
   const onSearchTextChange = useCallback(
     (text: string) => {
-      // Cancel previous debounce timer; stale results are discarded via abortRef
-      if (abortRef.current) abortRef.current.abort();
+      // Abort immediately on every keystroke so in-flight requests don't
+      // complete and update the store with stale results.
+      abortRef.current?.abort();
+
       if (timerRef.current) clearTimeout(timerRef.current);
 
       if (!text.trim()) {
-        setAiFilter(null);
-        setLastClause("");
-        setIsSearching(false);
+        setDebouncedText("");
         store.setState({ lastAiMs: null, lastAiSql: null });
         return;
       }
 
-      setIsSearching(true);
-
-      timerRef.current = setTimeout(async () => {
-        const controller = new AbortController();
-        abortRef.current = controller;
-
-        const previousErrors: PreviousFilterError[] = [];
-
-        try {
-          // Retry loop: generate filter, probe, retry with error context if it fails
-          for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-            if (controller.signal.aborted) return;
-
-            const aiT0 = performance.now();
-            const result = await generateAiFilter({
-              projectId: opts.projectId,
-              searchText: text,
-              view: opts.view,
-              previousErrors: previousErrors.length > 0 ? previousErrors : undefined,
-            });
-            const aiMs = Math.round(performance.now() - aiT0);
-            store.setState({ lastAiMs: aiMs });
-            if (controller.signal.aborted) return;
-
-            const summary = summarizeFilter(result);
-
-            // If no probe, accept the filter as-is
-            if (!opts.probe) {
-              setAiFilter(result);
-              setLastClause(summary);
-              store.setState({ lastAiSql: summary });
-              return;
-            }
-
-            // Probe: run a lightweight query to validate the SQL
-            try {
-              await opts.probe(result);
-              if (controller.signal.aborted) return;
-
-              // Probe succeeded: accept the filter
-              setAiFilter(result);
-              setLastClause(summary);
-              store.setState({ lastAiSql: summary });
-              return;
-            } catch (probeErr) {
-              if ((probeErr as Error).name === "AbortError") return;
-
-              const errorMsg = String((probeErr as Error).message || probeErr).slice(0, 500);
-              previousErrors.push({ sql: summary, error: errorMsg });
-
-              if (attempt < MAX_RETRIES) {
-                store.setState({ lastAiSql: `retrying (${attempt + 2}/${MAX_RETRIES + 1})…` });
-              } else {
-                // All retries exhausted
-                store.setState({ lastAiSql: "AI search failed" });
-                setAiFilter(null);
-                setLastClause("");
-              }
-            }
-          }
-        } catch (err) {
-          if ((err as Error).name === "AbortError") return;
-          console.error("AI search failed:", err);
-          store.setState({ lastAiSql: "AI search failed" });
-          setAiFilter(null);
-          setLastClause("");
-        } finally {
-          if (!controller.signal.aborted) {
-            setIsSearching(false);
-          }
-        }
+      timerRef.current = setTimeout(() => {
+        setDebouncedText(text.trim());
       }, opts.debounceMs ?? 300);
     },
-    [opts.projectId, opts.view, opts.debounceMs, opts.probe],
+    [opts.debounceMs],
   );
 
-  return { aiFilter, isSearching, lastClause, onSearchTextChange };
+  // Clear debounce timer on unmount
+  useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
+
+  const { data, isLoading } = useCachedPromise(
+    async (searchText: string, view: string, projectId: string) => {
+      // Capture the signal once at the start so we always check the controller
+      // associated with *this* invocation, not a newer one that usePromise may
+      // have swapped in after aborting us.
+      const signal = abortRef.current?.signal;
+      const throwIfAborted = () => {
+        if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+      };
+
+      const previousErrors: PreviousFilterError[] = [];
+      const probe = probeRef.current;
+
+      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        throwIfAborted();
+
+        const aiT0 = performance.now();
+        const result = await generateAiFilter({
+          projectId,
+          searchText,
+          view: view as "issues" | "logs" | "traces",
+          previousErrors: previousErrors.length > 0 ? previousErrors : undefined,
+        });
+        const aiMs = Math.round(performance.now() - aiT0);
+        store.setState({ lastAiMs: aiMs });
+
+        throwIfAborted();
+
+        const summary = summarizeFilter(result);
+
+        // If no probe, accept the filter as-is
+        if (!probe) {
+          store.setState({ lastAiSql: summary });
+          return result;
+        }
+
+        // Probe: run a lightweight query to validate the SQL
+        try {
+          await probe(result);
+          throwIfAborted();
+
+          store.setState({ lastAiSql: summary });
+          return result;
+        } catch (probeErr) {
+          if ((probeErr as Error).name === "AbortError") throw probeErr;
+
+          const errorMsg = String((probeErr as Error).message || probeErr).slice(0, 500);
+          previousErrors.push({ sql: summary, error: errorMsg });
+
+          if (attempt < MAX_RETRIES) {
+            store.setState({ lastAiSql: `retrying (${attempt + 2}/${MAX_RETRIES + 1})…` });
+          } else {
+            store.setState({ lastAiSql: "AI search failed" });
+            throw new Error(`AI search failed after ${MAX_RETRIES + 1} attempts: ${errorMsg}`);
+          }
+        }
+      }
+
+      // Unreachable, but satisfies TypeScript
+      throw new Error("AI search failed");
+    },
+    [debouncedText, opts.view, opts.projectId],
+    {
+      execute: debouncedText.length > 0,
+      abortable: abortRef,
+      onError(error: Error) {
+        if (error.name === "AbortError") return;
+        console.error("AI search failed:", error);
+        store.setState({ lastAiSql: "AI search failed" });
+      },
+    },
+  );
+
+  // Update the navigation title SQL on both fresh results and cache hits.
+  // Cache hits skip the callback so lastAiSql wouldn't update without this.
+  useEffect(() => {
+    if (!debouncedText) return;
+    if (data) {
+      store.setState({ lastAiSql: summarizeFilter(data as AiFilterResult) });
+    }
+  }, [debouncedText, data]);
+
+  return {
+    aiFilter: debouncedText ? (data as AiFilterResult | undefined) ?? null : null,
+    isSearching: isLoading,
+    onSearchTextChange,
+  };
 }
 
 export function parseAttributes(value: unknown): Record<string, string> {
