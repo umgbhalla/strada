@@ -206,13 +206,21 @@ export function generateIngestToken(): { fullKey: string; prefix: string } {
 // ── Per-project Tinybird JWT ────────────────────────────────────────
 // Each project gets a JWT with DATASOURCES:READ scopes filtered to its
 // ProjectId. Tinybird enforces the filter server-side, so SQL queries
-// never need WHERE ProjectId = '...'. The JWT is cached in the project
-// table and regenerated when it expires (24h TTL, 5min early renewal buffer).
+// never need WHERE ProjectId = '...'.
+//
+// JWTs are only regenerated when null (after `strada database upgrade`
+// clears them) or on first project creation. They are NOT regenerated
+// when the code's TINYBIRD_DATASOURCES list changes. This prevents
+// deploying new code with new tables from breaking existing users who
+// haven't run `database upgrade` yet. Users who want access to new
+// tables must run `database upgrade`, which deploys the tables to
+// Tinybird and clears cached JWTs so the next query creates a fresh
+// one with the full datasource list.
 
 // 100 years in seconds. Tinybird requires exp but has no way to skip it.
 const JWT_TTL_SEC = 100 * 365 * 24 * 60 * 60
 
-interface ProjectJwtContext {
+export interface ProjectJwtContext {
   projectId: string
   tinybirdEndpoint: string
   tinybirdAdminToken: string
@@ -223,16 +231,24 @@ interface ProjectJwtContext {
 }
 
 /**
- * Get a valid Tinybird JWT for a project, generating one if missing or stale.
- * Regenerates when the datasource list changes (new table added to TINYBIRD_DATASOURCES).
+ * Get a valid Tinybird JWT for a project, generating one if missing.
+ * Never regenerates based on code changes to TINYBIRD_DATASOURCES.
+ * Only `strada database upgrade` clears cached JWTs to trigger regeneration.
  */
 export async function getOrCreateProjectJwt(ctx: ProjectJwtContext): Promise<string> {
-  const currentDatasources = TINYBIRD_DATASOURCES.join(',')
-
-  // Return cached JWT if it covers the same datasources
-  if (ctx.tinybirdJwt && ctx.tinybirdJwtDatasources === currentDatasources) {
+  // Use cached JWT if it exists, regardless of whether the code's datasource
+  // list has changed. This prevents new code deploys from breaking queries
+  // when new tables haven't been deployed to Tinybird yet.
+  if (ctx.tinybirdJwt) {
     return ctx.tinybirdJwt
   }
+
+  // No cached JWT: create one. Use the datasource list stored in D1 (set by
+  // database upgrade) if available, otherwise fall back to the code's list
+  // for first-ever JWT creation (database create flow).
+  const datasources = ctx.tinybirdJwtDatasources
+    ? ctx.tinybirdJwtDatasources.split(',')
+    : [...TINYBIRD_DATASOURCES]
 
   const client = new TinybirdClient({
     baseUrl: ctx.tinybirdEndpoint,
@@ -244,28 +260,17 @@ export async function getOrCreateProjectJwt(ctx: ProjectJwtContext): Promise<str
   const result = await client.createJwt({
     name: `project_${ctx.projectId}`,
     expirationTime: expirationTimeSec,
-    scopes: TINYBIRD_DATASOURCES.map((resource) => ({
+    scopes: datasources.map((resource) => ({
       type: "DATASOURCES:READ" as const,
       resource,
       filter: `ProjectId = '${ctx.projectId}'`,
     })),
   })
-  if (result instanceof Error) {
-    // Detect schema drift: Tinybird returns "Resource 'xxx' not found" when the
-    // code references a datasource that doesn't exist in the workspace yet. This
-    // happens after a Strada update adds new tables. The fix is `strada database upgrade`.
-    const msg = String(result.cause ?? result.message ?? '')
-    if (/Resource '.*' not found/.test(msg)) {
-      throw new Error(
-        'Database schema is out of date. Run `strada database upgrade` to deploy the latest tables.',
-        { cause: result },
-      )
-    }
-    throw result
-  }
+  if (result instanceof Error) throw result
 
   // Cache the JWT and datasource list in D1
   const db = getDb()
+  const currentDatasources = datasources.join(',')
   await db.update(schema.project)
     .set({ tinybirdJwt: result.token, tinybirdJwtDatasources: currentDatasources, updatedAt: Date.now() })
     .where(orm.eq(schema.project.id, ctx.projectId))

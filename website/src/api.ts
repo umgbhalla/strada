@@ -8,7 +8,7 @@ import * as schema from 'db/src/schema.ts'
 import { ulid } from 'ulid'
 import { env } from 'cloudflare:workers'
 import { trace } from '@strada.sh/sdk'
-import { deployTinybirdResources, getDeploymentManagedReadToken, TinybirdClient } from 'strada/src/tinybird'
+import { deployTinybirdResources, getDeploymentManagedReadToken, TinybirdClient, TINYBIRD_DATASOURCES } from 'strada/src/tinybird'
 import { bundledTinybirdResources } from './tinybird-bundled-resources.ts'
 import {
   getAccessibleOrgDatabase,
@@ -420,13 +420,16 @@ export const api = new Spiceflow({ tracer })
           throw json({ error: readToken.message }, { status: 502 })
         }
 
+        // Clear cached JWTs and update the datasource list so the next query
+        // creates a fresh JWT with the full set of deployed tables.
         const updatedAt = Date.now()
+        const currentDatasources = TINYBIRD_DATASOURCES.join(',')
         await db.batch([
           db.update(schema.database)
             .set({ tinybirdReadToken: readToken.token, updatedAt })
             .where(orm.eq(schema.database.id, existing.id)),
           db.update(schema.project)
-            .set({ tinybirdJwt: null, tinybirdJwtDatasources: null, updatedAt })
+            .set({ tinybirdJwt: null, tinybirdJwtDatasources: currentDatasources, updatedAt })
             .where(orm.eq(schema.project.orgId, params.orgId)),
         ])
 
@@ -674,7 +677,9 @@ export const api = new Spiceflow({ tracer })
           let res = await queryWithJwt(jwt)
 
           if (res.status === 403) {
-            jwt = await getOrCreateProjectJwt({ ...jwtCtx, tinybirdJwt: null, tinybirdJwtDatasources: null })
+            // Force JWT regeneration but keep the stored datasource list so we
+            // don't accidentally reference tables that haven't been deployed yet.
+            jwt = await getOrCreateProjectJwt({ ...jwtCtx, tinybirdJwt: null })
             res = await queryWithJwt(jwt)
           }
 
