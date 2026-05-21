@@ -2,8 +2,9 @@
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "strada-website",
   "compatibility_date": "2026-04-14",
-  "compatibility_flags": ["nodejs_compat"],
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "main": "spiceflow/cloudflare-entrypoint",
+  "placement": { "mode": "smart" },
   "observability": {
     "enabled": true,
   },
@@ -20,7 +21,7 @@
     "binding": "AI",
   },
   "vars": {
-    "STRADA_PROJECT_ID": "01KPVGTT9CJW4ZNEF414VHGRFD"
+    "STRADA_PROJECT_ID": "01KS5334MX8A0S99YXK8MD7ZVJ"
   },
   "d1_databases": [
     {
@@ -36,6 +37,7 @@
       "BETTER_AUTH_URL",
       "GOOGLE_CLIENT_ID",
       "GOOGLE_CLIENT_SECRET",
+      "STRADA_TOKEN",
     ],
   },
   "routes": [
@@ -60,7 +62,7 @@
         { "name": "EMAIL" },
       ],
       "vars": {
-        "STRADA_PROJECT_ID": "01KPVGTT9CJW4ZNEF414VHGRFD"
+        "STRADA_PROJECT_ID": "01KS5334MX8A0S99YXK8MD7ZVJ"
       },
       "d1_databases": [
         {
@@ -76,6 +78,7 @@
           "BETTER_AUTH_URL",
           "GOOGLE_CLIENT_ID",
           "GOOGLE_CLIENT_SECRET",
+          "STRADA_TOKEN",
         ],
       },
       "routes": [

@@ -192,7 +192,23 @@ function DashFooter() {
 }
 
 if (env.STRADA_PROJECT_ID) {
-  initStrada({ projectId: env.STRADA_PROJECT_ID, service: 'strada-website' })
+  initStrada({
+    projectId: env.STRADA_PROJECT_ID,
+    token: env.STRADA_TOKEN,
+    service: 'strada-website',
+    telemetry: {
+      traces: {
+        exportTimeoutMillis: 5000,
+        scheduledDelayMillis: 1000,
+        maxExportBatchSize: 64,
+      },
+      logs: {
+        exportTimeoutMillis: 5000,
+        scheduledDelayMillis: 1000,
+        maxExportBatchSize: 64,
+      },
+    },
+  })
 }
 
 const tracer = trace.getTracer('strada-website')
