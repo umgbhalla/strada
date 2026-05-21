@@ -15,7 +15,7 @@ import { getActionRequest, json, parseFormData, Spiceflow, redirect } from 'spic
 import { Head, Link, ProgressBar, router } from 'spiceflow/react'
 import { z } from 'zod'
 import { env } from 'cloudflare:workers'
-import { initStrada, captureException, trace } from '@strada.sh/sdk'
+import { initStrada, captureException, trace, getLogger } from '@strada.sh/sdk'
 import { Button } from './components/ui/button.tsx'
 import { DeviceActionButtons } from './components/device-action-buttons.tsx'
 import { api } from './api.ts'
@@ -212,12 +212,13 @@ if (env.STRADA_PROJECT_ID) {
 }
 
 const tracer = trace.getTracer('strada-website')
+const logger = getLogger('strada-website')
 
 export const app = new Spiceflow({ tracer })
 
   // ── Strada SDK (error capture) ────────────────────────────────
   .onError(({ error }) => {
-    console.error('onError caught:', error)
+    logger.error({ message: 'onError caught', error: String(error) })
     captureException(error)
     const message = error instanceof Error ? error.message : String(error)
     return Response.json({ error: message }, { status: 500 })
@@ -391,7 +392,7 @@ export const app = new Spiceflow({ tracer })
         return Response.redirect(new URL(`/dash/orgs/${encodeURIComponent(firstOrg.org!.id)}`, base).toString(), 302)
       }
     } catch (err) {
-      console.error('Root redirect failed:', err)
+      logger.error({ message: 'root redirect failed', error: String(err) })
     }
     return Response.redirect(new URL('/dash/new-org', base).toString(), 302)
   })

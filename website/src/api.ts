@@ -7,7 +7,7 @@ import * as orm from 'drizzle-orm'
 import * as schema from 'db/src/schema.ts'
 import { ulid } from 'ulid'
 import { env } from 'cloudflare:workers'
-import { trace } from '@strada.sh/sdk'
+import { trace, getLogger } from '@strada.sh/sdk'
 import { deployTinybirdResources, getDeploymentManagedReadToken, TinybirdClient, TINYBIRD_DATASOURCES } from 'strada/src/tinybird'
 import { bundledTinybirdResources } from './tinybird-bundled-resources.ts'
 import {
@@ -216,7 +216,7 @@ async function queryActiveDeploymentIds(ctx: { dbConfig: DbConfig; proj: { id: s
       .filter(Boolean)
     return ids.join(',')
   } catch (err) {
-    console.error('queryActiveDeploymentIds failed:', err)
+    logger.error({ message: 'queryActiveDeploymentIds failed', error: String(err) })
     return ''
   }
 }
@@ -226,7 +226,7 @@ async function writeIssueState(ctx: { dbConfig: DbConfig; row: IssueStateRow }):
   try {
     await insertBackendRow({ dbConfig: ctx.dbConfig, table: 'otel_issue_state', row: { ...ctx.row } })
   } catch (err) {
-    console.error('writeIssueState failed:', err)
+    logger.error({ message: 'writeIssueState failed', error: String(err) })
     throw json({ error: 'failed to write issue state' }, { status: 500 })
   }
 }
@@ -246,6 +246,7 @@ async function createOrgForUser(userId: string, name: string) {
 }
 
 const tracer = trace.getTracer('strada-website-api')
+const logger = getLogger('strada-website-api')
 
 export const api = new Spiceflow({ tracer })
   .route({
@@ -1211,7 +1212,7 @@ export const api = new Spiceflow({ tracer })
               results.push({ channel: dest.channel, destination: dest.destination, ok: true })
             }
           } catch (err) {
-            console.error(`Test alert failed for ${dest.channel}:${dest.destination}`, err)
+            logger.error({ message: 'test alert failed', channel: dest.channel, destination: dest.destination, error: String(err) })
             results.push({ channel: dest.channel, destination: dest.destination, ok: false })
           }
         }

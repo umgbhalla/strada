@@ -10,7 +10,10 @@
 // This file is simpler: it covers SQL reads and single-row writes that the
 // website control plane needs (issue state, alert checks, query bridge).
 
+import { getLogger } from '@strada.sh/sdk'
 import { getOrCreateProjectJwt } from './db.ts'
+
+const logger = getLogger('query-backend')
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -236,7 +239,7 @@ export async function insertBackendRow(ctx: {
     })
     if (!res.ok) {
       const text = await res.text()
-      console.error(`Failed to write to Tinybird table "${table}": ${res.status} ${text}`)
+      logger.error({ message: `failed to write to Tinybird table "${table}"`, status: res.status, response: text })
       throw new Error(`failed to write to ${table}`)
     }
     const resBody = await res.json().catch(() => null) as null | {
@@ -244,7 +247,7 @@ export async function insertBackendRow(ctx: {
       quarantined_rows?: number
     }
     if (resBody && ((resBody.quarantined_rows ?? 0) > 0 || (resBody.successful_rows ?? 0) !== 1)) {
-      console.error(`Tinybird write warning for table "${table}": ${JSON.stringify(resBody)}`)
+      logger.error({ message: `Tinybird write warning for table "${table}"`, result: JSON.stringify(resBody) })
       throw new Error(`failed to write to ${table}`)
     }
     return
@@ -267,7 +270,7 @@ export async function insertBackendRow(ctx: {
     })
     if (!res.ok) {
       const text = await res.text()
-      console.error(`Failed to write to ClickHouse table "${table}": ${res.status} ${text}`)
+      logger.error({ message: `failed to write to ClickHouse table "${table}"`, status: res.status, response: text })
       throw new Error(`failed to write to ${table}`)
     }
     return

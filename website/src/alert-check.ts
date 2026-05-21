@@ -49,7 +49,7 @@ export async function checkAlerts(): Promise<void> {
     with: { destinations: true, org: true },
   })
 
-  logger.info({ message: `found ${rules.length} error_threshold rules`, rulesCount: rules.length })
+  // logger.info({ message: `found ${rules.length} error_threshold rules`, rulesCount: rules.length })
 
   if (rules.length === 0) return
 
@@ -228,7 +228,6 @@ async function checkProjectAlerts(ctx: {
     let anyDelivered = false
     for (const result of results) {
       if (result.status === 'rejected') {
-        console.error('[alert-check] sendNotification rejected:', result.reason)
         logger.error({ message: 'sendNotification rejected', error: String(result.reason) })
       } else if (result.value) {
         anyDelivered = true
@@ -391,25 +390,22 @@ async function sendNotification(
     const html = await buildAlertEmailHtml(data)
 
     try {
-      console.log(`[alert-check] sending email to ${dest.destination}, subject: ${subject}`)
-      logger.info({ message: `sending alert email`, to: dest.destination, subject })
+      logger.info({ message: 'sending alert email', to: dest.destination, subject })
       await env.EMAIL.send({
         from: { email: 'alerts@updates.strada.sh', name: 'Strada' },
         to: dest.destination,
         subject,
         html,
       })
-      console.log(`[alert-check] email sent to ${dest.destination}`)
-      logger.info({ message: `alert email sent`, to: dest.destination })
+      logger.info({ message: 'alert email sent', to: dest.destination })
       return true
     } catch (err) {
-      console.error(`[alert-check] email send failed:`, err)
-      logger.error({ message: `failed to send alert email`, to: dest.destination, error: String(err) })
+      logger.error({ message: 'failed to send alert email', to: dest.destination, error: String(err) })
       return false
     }
   } else if (dest.channel === 'webhook') {
     try {
-      console.log(`[alert-check] sending webhook to ${dest.destination}`)
+      logger.info({ message: 'sending webhook', destination: dest.destination })
       await fetch(dest.destination, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -428,8 +424,7 @@ async function sendNotification(
       })
       return true
     } catch (err) {
-      console.error(`[alert-check] webhook send failed:`, err)
-      logger.error({ message: `failed to send webhook`, destination: dest.destination, error: String(err) })
+      logger.error({ message: 'failed to send webhook', destination: dest.destination, error: String(err) })
       return false
     }
   } else {

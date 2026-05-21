@@ -1205,6 +1205,54 @@ That excludes ordinary logs that do not have `event.name`.
 - `SpanStatusCode`
 - `SpanKind`
 
+## Prefer `getLogger()` over `console.*`
+
+`console.log()` and other console methods are **not** sent to Strada. They only appear in platform-specific logs (Cloudflare Workers dashboard, Node stdout) and are not queryable with SQL. Use `getLogger()` instead so your logs land in `otel_logs` and are searchable with the Strada CLI and TUI.
+
+```ts
+import { initStrada, getLogger } from "@strada.sh/sdk"
+
+initStrada({
+  projectId: "01JTHG5M7XPQR8KNCZ0W4D",
+  service: "api",
+})
+
+const logger = getLogger("api")
+
+// These are queryable with `strada logs` and SQL
+logger.info({ message: "checkout started", checkoutId: "chk_123" })
+logger.error({ message: "payment failed", error: String(err) })
+```
+
+If you also want local console output during development, create a thin wrapper:
+
+```ts
+import { getLogger } from "@strada.sh/sdk"
+
+const sdkLogger = getLogger("api")
+
+export const logger = {
+  info(...args: Parameters<typeof sdkLogger.info>) {
+    console.log(...args)
+    sdkLogger.info(...args)
+  },
+  warn(...args: Parameters<typeof sdkLogger.warn>) {
+    console.warn(...args)
+    sdkLogger.warn(...args)
+  },
+  error(...args: Parameters<typeof sdkLogger.error>) {
+    console.error(...args)
+    sdkLogger.error(...args)
+  },
+  debug(...args: Parameters<typeof sdkLogger.debug>) {
+    console.debug(...args)
+    sdkLogger.debug(...args)
+  },
+}
+```
+
+This sends logs to both Strada and the local console. Use the wrapper in development, or use `getLogger()` directly when you only care about Strada-queryable logs.
+
 ## When to use raw OTel vs Strada helpers
 
 - use **`startSpan()`** for spans (auto-end, auto-error recording)

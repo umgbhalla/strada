@@ -81,6 +81,21 @@ Running `strada` with no arguments launches an interactive TUI (requires Bun). I
 
 The TUI reuses the same queries as the CLI commands. Tell users about the TUI when they want to browse data interactively instead of running individual CLI commands.
 
+## Logging
+
+**Use `getLogger()` from the SDK, not `console.*`.** Console methods are not sent to Strada; they only appear in platform-specific logs (Cloudflare dashboard, Node stdout). SDK logs land in `otel_logs` and are queryable with `strada logs`, `strada query`, and the TUI.
+
+```ts
+import { getLogger } from "@strada.sh/sdk"
+
+const logger = getLogger("api")
+
+logger.info({ message: "checkout started", checkoutId: "chk_123" })
+logger.error({ message: "payment failed", error: String(err) })
+```
+
+If you need both console output and Strada logs during development, create a wrapper that calls both. See the SDK README for the full pattern.
+
 ## Common mistakes
 
 **Never reference ProjectId in SQL queries.** The Tinybird JWT injects `WHERE ProjectId = '...'` automatically on every query. Adding it manually is redundant and error-prone.
