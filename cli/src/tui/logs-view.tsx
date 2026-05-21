@@ -11,15 +11,17 @@ import {
 } from "termcast";
 import { useCachedPromise } from "@termcast/utils";
 import type { ReactNode } from "react";
+import { useCallback } from "react";
 
 import {
   queryLogsList,
   type LogRow,
   type LogsCursor,
+  type AiFilterResult,
 } from "../tui-queries.ts";
-import { useStore, ICON } from "./store.ts";
+import { store, useStore, ICON } from "./store.ts";
 import { timeAgo, formatTimestamp, truncate, parseAttributes, useAiSearch } from "./helpers.ts";
-import { NavigationDropdown, CommonActions, type ViewProps } from "./shared.tsx";
+import { NavigationDropdown, CommonActions, useNavigationTitle, type ViewProps } from "./shared.tsx";
 
 // ── Severity color mapping ────────────────────────────────────────
 
@@ -40,22 +42,31 @@ const LOGS_PAGE_SIZE = Math.max(10, (process.stdout.rows || 30) - 5);
 export function LogsView({ projectId, projects, services, servicesLoading, isLoading: parentLoading }: ViewProps): ReactNode {
   const service = useStore((s) => s.service);
   const { push } = useNavigation();
+  const navigationTitle = useNavigationTitle();
 
-  const aiSearch = useAiSearch({ projectId, view: "logs" });
+  const probe = useCallback(
+    async (filter: AiFilterResult) => { await queryLogsList({ projectId, aiFilter: filter, limit: 1 }); },
+    [projectId],
+  );
+  const aiSearch = useAiSearch({ projectId, view: "logs", probe });
 
-  // Serialize aiFilter to a stable string for useCachedPromise dependency tracking
+  // Serialize aiFilter to a stable string for useCachedPromise dependency tracking.
+  // The callback parses it back from the arg so it never captures a stale closure.
   const aiFilterKey = aiSearch.aiFilter ? JSON.stringify(aiSearch.aiFilter) : "";
 
   const { data, isLoading, revalidate, pagination } = useCachedPromise(
-    (pid: string, svc: string | null, _filterKey: string) =>
+    (pid: string, svc: string | null, filterKey: string) =>
       async ({ cursor }: { page: number; cursor?: LogsCursor }) => {
+        const aiFilter: AiFilterResult | undefined = filterKey ? JSON.parse(filterKey) : undefined;
+        const t0 = performance.now();
         const result = await queryLogsList({
           projectId: pid,
           service: svc ?? undefined,
           limit: LOGS_PAGE_SIZE,
           cursor,
-          aiFilter: aiSearch.aiFilter ?? undefined,
+          aiFilter,
         });
+        store.setState({ lastQueryMs: Math.round(performance.now() - t0) });
         return { data: result.data, hasMore: result.hasMore, cursor: result.cursor };
       },
     [projectId, service, aiFilterKey],
@@ -69,6 +80,7 @@ export function LogsView({ projectId, projects, services, servicesLoading, isLoa
       isLoading={isLoading || parentLoading || aiSearch.isSearching}
       isShowingDetail={true}
       filtering={false}
+      navigationTitle={navigationTitle}
       onSearchTextChange={aiSearch.onSearchTextChange}
       searchBarPlaceholder="AI search logs…"
       pagination={pagination ? { pageSize: LOGS_PAGE_SIZE, hasMore: pagination.hasMore, onLoadMore: pagination.onLoadMore } : undefined}

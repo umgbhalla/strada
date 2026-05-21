@@ -42,6 +42,12 @@ export interface TuiState {
   projectId: string | null;
   projectSlug: string | null;
   service: string | null;
+  /** Last SQL query execution time in ms (transient, not persisted) */
+  lastQueryMs: number | null;
+  /** Last AI filter generation time in ms (transient, not persisted) */
+  lastAiMs: number | null;
+  /** Last AI-generated SQL clause summary (transient, shown in title) */
+  lastAiSql: string | null;
 }
 
 // Cache is sync (SQLite-backed) and works at module scope because
@@ -66,11 +72,16 @@ export const store = createStore<TuiState>(() => ({
   projectId: persisted.projectId ?? null,
   projectSlug: persisted.projectSlug ?? null,
   service: persisted.service ?? null,
+  lastQueryMs: null,
+  lastAiMs: null,
+  lastAiSql: null,
 }));
 
-// Persist every state change synchronously
+// Persist every state change synchronously. Timing fields are transient
+// (reset on restart) so they're excluded from the cache.
 store.subscribe((state) => {
-  cache.set("state", JSON.stringify(state));
+  const { lastQueryMs: _, lastAiMs: __, lastAiSql: ___, ...persisted } = state;
+  cache.set("state", JSON.stringify(persisted));
 });
 
 export function useStore<T>(selector: (s: TuiState) => T): T {

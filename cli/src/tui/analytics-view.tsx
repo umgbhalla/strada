@@ -25,7 +25,7 @@ import {
 } from "../tui-queries.ts";
 import { useStore, ICON } from "./store.ts";
 import { formatCount, formatDuration, truncate } from "./helpers.ts";
-import { NavigationDropdown, CommonActions, type ViewProps } from "./shared.tsx";
+import { NavigationDropdown, CommonActions, useNavigationTitle, type ViewProps } from "./shared.tsx";
 
 // ── Analytics view ────────────────────────────────────────────────
 
@@ -35,6 +35,7 @@ const ANALYTICS_DEFAULT_SINCE = "7d";
 
 export function AnalyticsView({ projectId, projects, services, servicesLoading, isLoading: parentLoading }: ViewProps): ReactNode {
   const service = useStore((s) => s.service);
+  const navigationTitle = useNavigationTitle();
 
   const kpis = useCachedPromise(
     async (pid: string, svc: string | null) =>
@@ -202,6 +203,7 @@ export function AnalyticsView({ projectId, projects, services, servicesLoading, 
     <List
       isLoading={parentLoading}
       isShowingDetail={true}
+      navigationTitle={navigationTitle}
       searchBarPlaceholder="Search…"
       searchBarAccessory={<NavigationDropdown projects={projects} />}
     >

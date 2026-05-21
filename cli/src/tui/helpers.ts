@@ -71,9 +71,18 @@ export function durationColor(durationMs: number, stats: DurationStats): string 
 // Debounces user input, calls generateAiFilter() on the website, and returns
 // the structured SQL filter (where/having/orderBy) plus loading state. Each
 // view passes the result as `aiFilter` to its query function.
+//
+// Retry loop (inspired by crisp search-database-raycast):
+// After generating a filter, the hook calls the `probe` callback to validate
+// the SQL against the real database. If the query fails (bad column, syntax
+// error), the error is fed back to the AI model and generation is retried.
+// Up to MAX_RETRIES attempts. Retry progress is shown in the navigation title.
 
 import { useState, useRef, useCallback } from "react";
-import { generateAiFilter, type AiFilterResult } from "../tui-queries.ts";
+import { generateAiFilter, type AiFilterResult, type PreviousFilterError } from "../tui-queries.ts";
+import { store } from "./store.ts";
+
+const MAX_RETRIES = 3;
 
 export interface AiSearchState {
   /** Structured SQL filter from AI, or null when search is empty */
@@ -86,14 +95,28 @@ export interface AiSearchState {
   onSearchTextChange: (text: string) => void;
 }
 
+/** Build a human-readable summary of the generated SQL for the navigation title. */
+function summarizeFilter(result: AiFilterResult): string {
+  const parts = [result.where];
+  if (result.having) parts.push(`HAVING ${result.having}`);
+  if (result.orderBy) parts.push(`ORDER BY ${result.orderBy}`);
+  return parts.join(" | ");
+}
+
 /**
  * Hook that debounces search text and calls the AI filter endpoint.
  * Returns the structured SQL filter to inject into queries.
+ *
+ * `probe` is called after each generation to validate the SQL. If it
+ * throws, the error message is fed back to the AI for self-correction.
+ * Pass a lightweight query call (e.g. with `limit: 1`) as the probe.
  */
 export function useAiSearch(opts: {
   projectId: string;
   view: "issues" | "logs" | "traces";
   debounceMs?: number;
+  /** Validate the generated filter by executing a probe query. Throw on failure. */
+  probe?: (filter: AiFilterResult) => Promise<void>;
 }): AiSearchState {
   const [aiFilter, setAiFilter] = useState<AiFilterResult | null>(null);
   const [isSearching, setIsSearching] = useState(false);
@@ -111,6 +134,7 @@ export function useAiSearch(opts: {
         setAiFilter(null);
         setLastClause("");
         setIsSearching(false);
+        store.setState({ lastAiMs: null, lastAiSql: null });
         return;
       }
 
@@ -119,23 +143,65 @@ export function useAiSearch(opts: {
       timerRef.current = setTimeout(async () => {
         const controller = new AbortController();
         abortRef.current = controller;
-        try {
-          const result = await generateAiFilter({
-            projectId: opts.projectId,
-            searchText: text,
-            view: opts.view,
-          });
-          if (controller.signal.aborted) return;
 
-          // Build a human-readable summary of the generated SQL
-          const parts = [result.where];
-          if (result.having) parts.push(`HAVING ${result.having}`);
-          if (result.orderBy) parts.push(`ORDER BY ${result.orderBy}`);
-          setAiFilter(result);
-          setLastClause(parts.join(" | "));
+        const previousErrors: PreviousFilterError[] = [];
+
+        try {
+          // Retry loop: generate filter, probe, retry with error context if it fails
+          for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+            if (controller.signal.aborted) return;
+
+            const aiT0 = performance.now();
+            const result = await generateAiFilter({
+              projectId: opts.projectId,
+              searchText: text,
+              view: opts.view,
+              previousErrors: previousErrors.length > 0 ? previousErrors : undefined,
+            });
+            const aiMs = Math.round(performance.now() - aiT0);
+            store.setState({ lastAiMs: aiMs });
+            if (controller.signal.aborted) return;
+
+            const summary = summarizeFilter(result);
+
+            // If no probe, accept the filter as-is
+            if (!opts.probe) {
+              setAiFilter(result);
+              setLastClause(summary);
+              store.setState({ lastAiSql: summary });
+              return;
+            }
+
+            // Probe: run a lightweight query to validate the SQL
+            try {
+              await opts.probe(result);
+              if (controller.signal.aborted) return;
+
+              // Probe succeeded: accept the filter
+              setAiFilter(result);
+              setLastClause(summary);
+              store.setState({ lastAiSql: summary });
+              return;
+            } catch (probeErr) {
+              if ((probeErr as Error).name === "AbortError") return;
+
+              const errorMsg = String((probeErr as Error).message || probeErr).slice(0, 500);
+              previousErrors.push({ sql: summary, error: errorMsg });
+
+              if (attempt < MAX_RETRIES) {
+                store.setState({ lastAiSql: `retrying (${attempt + 2}/${MAX_RETRIES + 1})…` });
+              } else {
+                // All retries exhausted
+                store.setState({ lastAiSql: "AI search failed" });
+                setAiFilter(null);
+                setLastClause("");
+              }
+            }
+          }
         } catch (err) {
           if ((err as Error).name === "AbortError") return;
           console.error("AI search failed:", err);
+          store.setState({ lastAiSql: "AI search failed" });
           setAiFilter(null);
           setLastClause("");
         } finally {
@@ -143,9 +209,9 @@ export function useAiSearch(opts: {
             setIsSearching(false);
           }
         }
-      }, opts.debounceMs ?? 500);
+      }, opts.debounceMs ?? 300);
     },
-    [opts.projectId, opts.view, opts.debounceMs],
+    [opts.projectId, opts.view, opts.debounceMs, opts.probe],
   );
 
   return { aiFilter, isSearching, lastClause, onSearchTextChange };

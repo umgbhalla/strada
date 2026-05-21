@@ -27,15 +27,24 @@ export interface AiFilterResult {
   orderBy: string;
 }
 
+export interface PreviousFilterError {
+  sql: string;
+  error: string;
+}
+
 /**
  * Call the website's AI endpoint to turn natural language into structured
  * SQL fragments (where, having, orderBy). The AI always includes a date
  * filter in `where` to prevent full-table scans.
+ *
+ * Pass `previousErrors` when retrying after a failed query execution so the
+ * AI model can see what went wrong and self-correct.
  */
 export async function generateAiFilter(opts: {
   projectId: string;
   searchText: string;
   view: "issues" | "logs" | "traces";
+  previousErrors?: PreviousFilterError[];
 }): Promise<AiFilterResult> {
   const { safeFetch } = getApiClient();
   const res = await safeFetch("/api/v0/projects/:projectId/generate-filter", {
@@ -44,6 +53,7 @@ export async function generateAiFilter(opts: {
     body: {
       searchText: opts.searchText,
       view: opts.view,
+      previousErrors: opts.previousErrors,
     },
   });
   if (res instanceof Error) throw res;
@@ -94,7 +104,7 @@ export function buildIssuesListSQL(opts: IssuesListOpts): string {
   if (opts.aiFilter?.where) {
     conditions.push(`(${opts.aiFilter.where})`);
   } else {
-    const since = parseDuration(opts.since || "7d");
+    const since = parseDuration(opts.since || "1d");
     conditions.push(`Timestamp >= now() - INTERVAL ${since}`);
   }
   if (opts.service) conditions.push(`ServiceName = '${opts.service}'`);
@@ -359,7 +369,7 @@ export function buildLogsListSQL(opts: LogsListOpts): string {
   if (opts.aiFilter?.where) {
     conditions.push(`(${opts.aiFilter.where})`);
   } else {
-    conditions.push(`Timestamp >= ${parseTimeBoundary(opts.since || "7d")}`);
+    conditions.push(`Timestamp >= ${parseTimeBoundary(opts.since || "1d")}`);
   }
   if (opts.service) conditions.push(`ServiceName = '${opts.service}'`);
   if (opts.traceId) conditions.push(`TraceId = '${opts.traceId}'`);
@@ -497,7 +507,9 @@ export function buildTracesListSQL(opts: TracesListOpts): string {
   if (opts.aiFilter?.where) {
     conditions.push(`(${opts.aiFilter.where})`);
   } else {
-    conditions.push(`Timestamp >= ${parseTimeBoundary(opts.since || "7d")}`);
+    // Default to 1d for traces (not 7d) because the GROUP BY TraceId query
+    // scans every span in the range. Traces are far heavier than logs/issues.
+    conditions.push(`Timestamp >= ${parseTimeBoundary(opts.since || "1d")}`);
   }
   if (opts.service) conditions.push(`ServiceName = '${opts.service}'`);
 
@@ -608,7 +620,7 @@ interface AnalyticsQueryOptions extends BaseQueryOptions {
 }
 
 function buildMvConditions(opts: AnalyticsQueryOptions): string[] {
-  const since = parseDuration(opts.since || "7d");
+  const since = parseDuration(opts.since || "1d");
   const conditions: string[] = [`Date >= today() - INTERVAL ${since}`];
   if (opts.service) conditions.push(`ServiceName = '${opts.service}'`);
   if (opts.domain) conditions.push(`Domain = '${opts.domain}'`);
@@ -785,7 +797,7 @@ export interface AnalyticsEventRow {
 }
 
 export async function queryAnalyticsEvents(opts: BaseQueryOptions): Promise<AnalyticsEventRow[]> {
-  const since = parseDuration(opts.since || "7d");
+  const since = parseDuration(opts.since || "1d");
   const limit = opts.limit || 20;
   const conditions = [
     `Timestamp >= now() - INTERVAL ${since}`,

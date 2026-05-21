@@ -46,10 +46,10 @@ describe("SQL builders", () => {
     expect(sql.match(/WHERE/g)?.length).toBe(1);
   });
 
-  test("buildIssuesListSQL without AI filter uses 7d default", () => {
+  test("buildIssuesListSQL without AI filter uses 1d default", () => {
     const sql = buildIssuesListSQL({ projectId: PROJECT_ID, limit: 10 });
 
-    expect(sql).toContain("Timestamp >= now() - INTERVAL 7 DAY");
+    expect(sql).toContain("Timestamp >= now() - INTERVAL 1 DAY");
     expect(sql).toContain("ORDER BY event_count DESC");
     expect(sql).not.toContain("HAVING");
   });
@@ -85,7 +85,7 @@ describe("SQL builders", () => {
     expect(sql).toContain("LIMIT 16");
   });
 
-  test("buildTracesListSQL without AI filter uses 7d default", () => {
+  test("buildTracesListSQL without AI filter uses 1d default", () => {
     const sql = buildTracesListSQL({ projectId: PROJECT_ID, limit: 10 });
 
     expect(sql).toContain("ORDER BY StartTime DESC, TraceId ASC");

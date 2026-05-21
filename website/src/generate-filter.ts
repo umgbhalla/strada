@@ -28,10 +28,7 @@ export const AI_SEARCH_VIEWS = {
 
 export type AiSearchView = keyof typeof AI_SEARCH_VIEWS
 
-const THINKING_DISABLED = {
-  reasoning_effort: null,
-  chat_template_kwargs: { enable_thinking: false },
-}
+
 
 export interface AiFilterResult {
   /** WHERE conditions (without WHERE keyword). Empty string = no filter. */
@@ -127,18 +124,36 @@ const VIEW_CONTEXT: Record<AiSearchView, string> = {
     Default ORDER BY: StartTime DESC, TraceId ASC
 
     Example: "traces with more than 10 spans" →
-      where: "Timestamp >= now() - INTERVAL 7 DAY"
+      where: "Timestamp >= now() - INTERVAL 1 DAY"
       having: "SpanCount > 10"
   `,
+}
+
+export interface PreviousFilterError {
+  sql: string
+  error: string
 }
 
 export async function generateSearchFilter(opts: {
   view: AiSearchView
   searchText: string
+  previousErrors?: PreviousFilterError[]
   signal?: AbortSignal
 }): Promise<AiFilterResult> {
   const workersai = createWorkersAI({ binding: env.AI })
   const tableName = AI_SEARCH_VIEWS[opts.view]
+
+  const previousErrorsSection =
+    opts.previousErrors && opts.previousErrors.length > 0
+      ? dedent`
+        ## Previous failed attempts
+
+        The following SQL was generated but failed when executed. Fix the errors
+        and generate corrected filter fragments. Do NOT repeat the same mistakes.
+
+        ${opts.previousErrors.map((e, i) => `### Attempt ${i + 1}\nSQL: \`${e.sql}\`\nError: ${e.error}`).join('\n\n')}
+      `
+      : ''
 
   const prompt = dedent`
     Generate ClickHouse SQL filter fragments for the \`${tableName}\` table
@@ -157,6 +172,8 @@ export async function generateSearchFilter(opts: {
 
     ${opts.searchText}
 
+    ${previousErrorsSection}
+
     ## Rules
 
     - \`where\`: boolean conditions WITHOUT the WHERE keyword
@@ -168,7 +185,7 @@ export async function generateSearchFilter(opts: {
     - NEVER reference ProjectId (it is filtered automatically by the system)
     - Use now() - INTERVAL for relative time filters, e.g. Timestamp >= now() - INTERVAL 1 HOUR
     - ALWAYS include a date/time filter in \`where\` to prevent slow full-table scans.
-      If the user doesn't mention a time range, default to: Timestamp >= now() - INTERVAL 7 DAY
+      If the user doesn't mention a time range, default to: Timestamp >= now() - INTERVAL 1 DAY
     - Prefer simple conditions. Use ILIKE for text search, e.g. Body ILIKE '%timeout%'
     - Use HAVING for conditions on aggregate aliases (event_count, SpanCount, DurationNs, etc.)
     - Use WHERE for conditions on raw table columns (Timestamp, ServiceName, Body, etc.)
@@ -182,14 +199,17 @@ export async function generateSearchFilter(opts: {
   const hasGroupBy = opts.view === 'traces' || opts.view === 'issues'
 
   const result = await generateText({
-    model: workersai('@cf/zai-org/glm-4.7-flash', THINKING_DISABLED),
+    model: workersai('@cf/zai-org/glm-4.7-flash',  {
+      reasoning_effort: null,
+      chat_template_kwargs: { enable_thinking: false },
+    }),
     prompt,
     tools: {
       sql_filter: tool({
         description: 'Return the generated SQL filter fragments',
         inputSchema: z.object({
           where: z.string().describe(
-            'Boolean conditions for WHERE (without WHERE keyword). MUST include a date filter like Timestamp >= now() - INTERVAL 7 DAY.',
+            'Boolean conditions for WHERE (without WHERE keyword). MUST include a date filter like Timestamp >= now() - INTERVAL 1 DAY.',
           ),
           ...(hasGroupBy
             ? {
@@ -206,7 +226,10 @@ export async function generateSearchFilter(opts: {
     },
     toolChoice: { type: 'tool', toolName: 'sql_filter' },
     providerOptions: {
-      'workers-ai': THINKING_DISABLED,
+      'workers-ai':  {
+        reasoning_effort: null,
+        chat_template_kwargs: { enable_thinking: false },
+      },
     },
     abortSignal: opts.signal,
   })
@@ -230,16 +253,40 @@ export async function generateSearchFilter(opts: {
     return s
   }
 
+  const where = clean(input.where, 'WHERE')
+
+  // If the AI generated a non-empty WHERE but forgot a Timestamp filter,
+  // throw so the caller can retry with error context. Without a time bound
+  // the query scans the entire table and takes forever. Empty where is fine
+  // because the caller adds its own default time filter when where is empty.
+  if (where && !/\bTimestamp\b/i.test(where)) {
+    throw new MissingTimestampError(where)
+  }
+
   return {
-    where: clean(input.where, 'WHERE'),
+    where,
     having: clean(input.having, 'HAVING'),
     orderBy: clean(input.orderBy, 'ORDER BY'),
+  }
+}
+
+export class MissingTimestampError extends Error {
+  constructor(public readonly where: string) {
+    super(
+      `Generated WHERE clause is missing a Timestamp filter. ` +
+        `Add a time bound like "Timestamp >= now() - INTERVAL 1 DAY" to prevent full-table scans. ` +
+        `Generated WHERE: ${where}`,
+    )
+    this.name = 'MissingTimestampError'
   }
 }
 
 export const generateFilterRequestSchema = z.object({
   searchText: z.string().min(1).max(500),
   view: z.enum(['issues', 'logs', 'traces']),
+  previousErrors: z
+    .array(z.object({ sql: z.string(), error: z.string() }))
+    .optional(),
 })
 
 export const generateFilterResponseSchema = z.object({

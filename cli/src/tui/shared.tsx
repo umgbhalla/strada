@@ -24,6 +24,23 @@ export interface ViewProps {
   isLoading?: boolean;
 }
 
+// ── Navigation title with timing ──────────────────────────────────
+
+/** Formatted title for the List showing view name + timing info. */
+export function useNavigationTitle(): string {
+  const view = useStore((s) => s.view);
+  const queryMs = useStore((s) => s.lastQueryMs);
+  const aiMs = useStore((s) => s.lastAiMs);
+  const aiSql = useStore((s) => s.lastAiSql);
+
+  const label = VIEW_OPTIONS.find((v) => v.id === view)?.label ?? "Issues";
+  const parts = [label];
+  if (queryMs != null) parts.push(`query ${queryMs}ms`);
+  if (aiMs != null) parts.push(`ai ${aiMs}ms`);
+  if (aiSql) parts.push(aiSql);
+  return parts.join(" · ");
+}
+
 // ── Dropdown ──────────────────────────────────────────────────────
 
 export function NavigationDropdown({ projects }: { projects: CachedProject[] }): ReactNode {

@@ -14,6 +14,7 @@ import {
 } from "termcast";
 import { useCachedPromise } from "@termcast/utils";
 import type { ReactNode } from "react";
+import { useCallback } from "react";
 
 import { getApiClient } from "../api-client.ts";
 import {
@@ -22,10 +23,11 @@ import {
   queryIssueMetadata,
   type IssueRow,
   type IssueMetadata,
+  type AiFilterResult,
 } from "../tui-queries.ts";
-import { useStore, ICON } from "./store.ts";
+import { store, useStore, ICON } from "./store.ts";
 import { timeAgo, truncate, formatCount, useAiSearch } from "./helpers.ts";
-import { NavigationDropdown, CommonActions, type ViewProps } from "./shared.tsx";
+import { NavigationDropdown, CommonActions, useNavigationTitle, type ViewProps } from "./shared.tsx";
 
 // ── Stacktrace rendering ─────────────────────────────────────────
 
@@ -80,27 +82,36 @@ const ISSUES_PAGE_SIZE = Math.max(10, (process.stdout.rows || 30) - 5);
 export function IssuesView({ projectId, projects, services, servicesLoading, isLoading: parentLoading }: ViewProps): ReactNode {
   const service = useStore((s) => s.service);
   const { push } = useNavigation();
+  const navigationTitle = useNavigationTitle();
 
-  const aiSearch = useAiSearch({ projectId, view: "issues" });
+  const probe = useCallback(
+    async (filter: AiFilterResult) => { await queryIssuesList({ projectId, aiFilter: filter, limit: 1 }); },
+    [projectId],
+  );
+  const aiSearch = useAiSearch({ projectId, view: "issues", probe });
 
-  // Serialize aiFilter to a stable string for useCachedPromise dependency tracking
+  // Serialize aiFilter to a stable string for useCachedPromise dependency tracking.
+  // The callback parses it back from the arg so it never captures a stale closure.
   const aiFilterKey = aiSearch.aiFilter ? JSON.stringify(aiSearch.aiFilter) : "";
 
   const { data, isLoading, revalidate, pagination } = useCachedPromise(
-    (pid: string, svc: string | null, _filterKey: string) =>
+    (pid: string, svc: string | null, filterKey: string) =>
       async ({ page }: { page: number }) => {
+        const aiFilter: AiFilterResult | undefined = filterKey ? JSON.parse(filterKey) : undefined;
+        const t0 = performance.now();
         const result = await queryIssuesList({
           projectId: pid,
           service: svc ?? undefined,
           limit: ISSUES_PAGE_SIZE,
           offset: page * ISSUES_PAGE_SIZE,
-          aiFilter: aiSearch.aiFilter ?? undefined,
+          aiFilter,
         });
         // Fetch metadata for the current page's fingerprints.
         // Flatten metadata into each item so it survives JSON serialization
         // (useCachedPromise caches via JSON, and Map serializes to {}).
         const fps = result.data.map((i) => i.fingerprintHash);
         const metadataMap = fps.length > 0 ? await queryIssueMetadata(pid, fps) : new Map<string, IssueMetadata>();
+        store.setState({ lastQueryMs: Math.round(performance.now() - t0) });
         return {
           data: result.data.map((issue) => ({
             issue,
@@ -124,6 +135,7 @@ export function IssuesView({ projectId, projects, services, servicesLoading, isL
       isLoading={isLoading || parentLoading || aiSearch.isSearching}
       isShowingDetail={true}
       filtering={false}
+      navigationTitle={navigationTitle}
       onSearchTextChange={aiSearch.onSearchTextChange}
       searchBarPlaceholder="AI search errors…"
       pagination={pagination ? { pageSize: ISSUES_PAGE_SIZE, hasMore: pagination.hasMore, onLoadMore: pagination.onLoadMore } : undefined}

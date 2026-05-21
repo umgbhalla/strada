@@ -749,6 +749,7 @@ export const api = new Spiceflow({ tracer })
         const result = await generateSearchFilter({
           view: body.view as AiSearchView,
           searchText: body.searchText,
+          previousErrors: body.previousErrors,
           signal: request.signal,
         })
         return result

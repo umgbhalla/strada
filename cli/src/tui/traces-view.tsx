@@ -11,13 +11,14 @@ import {
 } from "termcast";
 import { useCachedPromise } from "@termcast/utils";
 import type { ReactNode } from "react";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 
 import {
   queryTracesList,
   queryTraceSpans,
   type TraceSummaryRow,
   type TracesCursor,
+  type AiFilterResult,
 } from "../tui-queries.ts";
 import {
   buildSpanTree,
@@ -25,9 +26,9 @@ import {
   formatDurationMs,
   type SpanNode,
 } from "../traces.ts";
-import { useStore, ICON } from "./store.ts";
+import { store, useStore, ICON } from "./store.ts";
 import { timeAgo, formatTimestamp, truncate, computeDurationStats, durationColor, useAiSearch } from "./helpers.ts";
-import { NavigationDropdown, CommonActions, type ViewProps } from "./shared.tsx";
+import { NavigationDropdown, CommonActions, useNavigationTitle, type ViewProps } from "./shared.tsx";
 
 // ── Span tree flattening ──────────────────────────────────────────
 
@@ -63,22 +64,31 @@ const TRACES_PAGE_SIZE = Math.max(10, (process.stdout.rows || 30) - 5);
 export function TracesView({ projectId, projects, services, servicesLoading, isLoading: parentLoading }: ViewProps): ReactNode {
   const service = useStore((s) => s.service);
   const { push } = useNavigation();
+  const navigationTitle = useNavigationTitle();
 
-  const aiSearch = useAiSearch({ projectId, view: "traces" });
+  const probe = useCallback(
+    async (filter: AiFilterResult) => { await queryTracesList({ projectId, aiFilter: filter, limit: 1 }); },
+    [projectId],
+  );
+  const aiSearch = useAiSearch({ projectId, view: "traces", probe });
 
-  // Serialize aiFilter to a stable string for useCachedPromise dependency tracking
+  // Serialize aiFilter to a stable string for useCachedPromise dependency tracking.
+  // The callback parses it back from the arg so it never captures a stale closure.
   const aiFilterKey = aiSearch.aiFilter ? JSON.stringify(aiSearch.aiFilter) : "";
 
   const { data, isLoading, revalidate, pagination } = useCachedPromise(
-    (pid: string, svc: string | null, _filterKey: string) =>
+    (pid: string, svc: string | null, filterKey: string) =>
       async ({ cursor }: { page: number; cursor?: TracesCursor }) => {
+        const aiFilter: AiFilterResult | undefined = filterKey ? JSON.parse(filterKey) : undefined;
+        const t0 = performance.now();
         const result = await queryTracesList({
           projectId: pid,
           service: svc ?? undefined,
           limit: TRACES_PAGE_SIZE,
           cursor,
-          aiFilter: aiSearch.aiFilter ?? undefined,
+          aiFilter,
         });
+        store.setState({ lastQueryMs: Math.round(performance.now() - t0) });
         return { data: result.data, hasMore: result.hasMore, cursor: result.cursor };
       },
     [projectId, service, aiFilterKey],
@@ -96,7 +106,11 @@ export function TracesView({ projectId, projects, services, servicesLoading, isL
       isLoading={isLoading || parentLoading || aiSearch.isSearching}
       isShowingDetail={true}
       filtering={false}
+      navigationTitle={navigationTitle}
       onSearchTextChange={aiSearch.onSearchTextChange}
+      accessoryTagsLayout={
+        [8,8]
+      }
       searchBarPlaceholder="AI search traces…"
       pagination={pagination ? { pageSize: TRACES_PAGE_SIZE, hasMore: pagination.hasMore, onLoadMore: pagination.onLoadMore } : undefined}
       searchBarAccessory={<NavigationDropdown projects={projects} />}
@@ -223,7 +237,7 @@ function SpanTreeView({ projectId, traceId }: { projectId: string; traceId: stri
             subtitle={span.serviceName}
             icon={{ source: ICON.circleFilled, tintColor: iconColor }}
             accessories={accessories}
-            keywords={[span.spanName, span.serviceName, span.spanId, span.spanKind || "", span.statusCode || "", span.statusMessage || ""]}
+            keywords={[span.spanName, span.serviceName, span.spanId, span.spanKind || "", span.statusCode || "", span.statusMessage || "", ...Object.entries(span.spanAttributes).filter(([, v]) => v !== "").flatMap(([k, v]) => [k, String(v)]), ...Object.entries(span.resourceAttributes).filter(([, v]) => v !== "").flatMap(([k, v]) => [k, String(v)])]}
             detail={
               <List.Item.Detail
                 metadata={
