@@ -42,9 +42,11 @@ export interface AiFilterResult {
 // Per-view query structure context so the AI knows what's available.
 const VIEW_CONTEXT: Record<AiSearchView, string> = {
   issues: dedent`
-    <query-structure view="issues">
+    ## Query structure (issues)
+
     The query groups error rows by FingerprintHash. The fixed SELECT is:
 
+    \`\`\`sql
     SELECT
         FingerprintHash,
         anyLast(ExceptionType) AS last_type,
@@ -59,30 +61,42 @@ const VIEW_CONTEXT: Record<AiSearchView, string> = {
     GROUP BY FingerprintHash
     HAVING {your having conditions}  -- optional
     ORDER BY {your order by}
+    \`\`\`
 
-    <where-columns>ExceptionType, ExceptionMessage, ExceptionStacktrace, ServiceName, Timestamp, MechanismType, MechanismHandled, Level, Release, Environment, Tags (Map), ResourceAttributes (Map)</where-columns>
-    <having-columns>event_count, first_seen, last_seen, unhandled_count, last_type, last_message, last_level</having-columns>
-    <default-order>event_count DESC, FingerprintHash ASC</default-order>
-    </query-structure>
+    WHERE can reference any column from otel_errors: ExceptionType, ExceptionMessage,
+    ExceptionStacktrace, ServiceName, Timestamp, MechanismType, MechanismHandled,
+    Level, Release, Environment, Tags (Map), ResourceAttributes (Map), etc.
+
+    HAVING can reference aggregate aliases: event_count, first_seen, last_seen,
+    unhandled_count, last_type, last_message, last_level.
+
+    Default ORDER BY: event_count DESC, FingerprintHash ASC
   `,
   logs: dedent`
-    <query-structure view="logs">
+    ## Query structure (logs)
+
     No GROUP BY. The fixed SELECT is:
 
+    \`\`\`sql
     SELECT Timestamp, SeverityText, SeverityNumber, ServiceName, Body,
            LogAttributes, ResourceAttributes, TraceId, SpanId
     FROM otel_logs
     WHERE {your where conditions}
     ORDER BY {your order by}
+    \`\`\`
 
-    <where-columns>Body, SeverityText, SeverityNumber, ServiceName, Timestamp, TraceId, SpanId, EventName, LogAttributes (Map), ResourceAttributes (Map), ScopeAttributes (Map)</where-columns>
-    <default-order>Timestamp DESC</default-order>
-    </query-structure>
+    WHERE can reference any column from otel_logs: Body, SeverityText, SeverityNumber,
+    ServiceName, Timestamp, TraceId, SpanId, EventName, LogAttributes (Map),
+    ResourceAttributes (Map), ScopeAttributes (Map), etc.
+
+    Default ORDER BY: Timestamp DESC
   `,
   traces: dedent`
-    <query-structure view="traces">
+    ## Query structure (traces)
+
     The query groups spans by TraceId. The fixed SELECT is:
 
+    \`\`\`sql
     SELECT
         TraceId,
         min(Timestamp) AS StartTime,
@@ -98,22 +112,39 @@ const VIEW_CONTEXT: Record<AiSearchView, string> = {
     GROUP BY TraceId
     HAVING {your having conditions}  -- optional
     ORDER BY {your order by}
+    \`\`\`
 
-    <where-columns>TraceId, SpanId, ParentSpanId, SpanName, SpanKind, ServiceName, Duration (per-span, nanoseconds), StatusCode, Timestamp, SpanAttributes (Map), ResourceAttributes (Map), EventsName (Array)</where-columns>
-    <having-columns>StartTime, DurationNs (per-trace total duration, nanoseconds), SpanCount, ErrorSpanCount, RootSpanName, RootServiceName, RootStatusCode, Services</having-columns>
-    <default-order>StartTime DESC, TraceId ASC</default-order>
+    WHERE can reference any raw span column from otel_traces: TraceId, SpanId,
+    ParentSpanId, SpanName, SpanKind, ServiceName, Duration (per-span, nanoseconds),
+    StatusCode, Timestamp, SpanAttributes (Map), ResourceAttributes (Map),
+    EventsName (Array), etc.
 
-    <duration-units>
-    Both Duration (per-span, WHERE) and DurationNs (per-trace, HAVING) are in NANOSECONDS.
-    100ms = 100000000, 500ms = 500000000, 1s = 1000000000, 5s = 5000000000, 10s = 10000000000
-    </duration-units>
+    HAVING can reference aggregate aliases: StartTime, DurationNs (per-trace total
+    duration, nanoseconds), SpanCount, ErrorSpanCount, RootSpanName,
+    RootServiceName, RootStatusCode, Services.
 
-    <examples>
-    "traces longer than 1 second" → where: "Timestamp >= now() - INTERVAL 1 DAY", having: "DurationNs > 1000000000"
-    "traces with more than 10 spans" → where: "Timestamp >= now() - INTERVAL 1 DAY", having: "SpanCount > 10"
-    "slow traces with errors sorted by duration" → where: "Timestamp >= now() - INTERVAL 1 DAY", having: "DurationNs > 1000000000 AND ErrorSpanCount > 0", orderBy: "DurationNs DESC"
-    </examples>
-    </query-structure>
+    Duration units: both Duration (per-span, WHERE) and DurationNs (per-trace,
+    HAVING) are in NANOSECONDS. Common conversions:
+      100ms = 100000000
+      500ms = 500000000
+      1s    = 1000000000
+      5s    = 5000000000
+      10s   = 10000000000
+
+    Default ORDER BY: StartTime DESC, TraceId ASC
+
+    Example: "traces longer than 1 second" →
+      where: "Timestamp >= now() - INTERVAL 1 DAY"
+      having: "DurationNs > 1000000000"
+
+    Example: "traces with more than 10 spans" →
+      where: "Timestamp >= now() - INTERVAL 1 DAY"
+      having: "SpanCount > 10"
+
+    Example: "slow traces with errors sorted by duration" →
+      where: "Timestamp >= now() - INTERVAL 1 DAY"
+      having: "DurationNs > 1000000000 AND ErrorSpanCount > 0"
+      orderBy: "DurationNs DESC"
   `,
 }
 
@@ -151,30 +182,37 @@ export async function generateSearchFilter(opts: {
   // prompt so the model can learn from its previous mistakes.
   const previousErrorsSection =
     opts.previousErrors && opts.previousErrors.length > 0
-      ? opts.previousErrors.map((e, i) => dedent`
-        <previous-error attempt="${i + 1}">
-        <sql>${e.sql}</sql>
-        <error>${e.error}</error>
-        </previous-error>
-      `).join('\n')
+      ? dedent`
+        ## Previous failed attempts
+
+        The following SQL was generated but failed when executed against ClickHouse.
+        Fix the errors and generate corrected filter fragments. Do NOT repeat the same mistakes.
+
+        ${opts.previousErrors.map((e, i) => `### Attempt ${i + 1}\nSQL: <sql>${e.sql}</sql>\nError: <error>${e.error}</error>`).join('\n\n')}
+      `
       : ''
 
   const prompt = dedent`
-    Generate ClickHouse SQL filter fragments for the <table>${tableName}</table> table
+    Generate ClickHouse SQL filter fragments for the \`${tableName}\` table
     based on the user's natural language description.
     You MUST call the sql_filter tool with the generated fragments.
 
-    <schema>
+    ## ClickHouse schema
+
+    \`\`\`sql
     ${clickhouseSchema}
-    </schema>
+    \`\`\`
 
     ${VIEW_CONTEXT[opts.view]}
 
+    ## User's filter request
+
     <query>${opts.searchText}</query>
 
-    ${previousErrorsSection ? `<previous-errors>\n${previousErrorsSection}\nThe above SQL was generated but failed when executed against ClickHouse. Fix the errors and generate corrected filter fragments. Do NOT repeat the same mistakes.\n</previous-errors>` : ''}
+    ${previousErrorsSection}
 
-    <rules>
+    ## Rules
+
     - \`where\`: boolean conditions WITHOUT the WHERE keyword
     - \`having\`: boolean conditions WITHOUT the HAVING keyword (only for grouped queries)
     - \`orderBy\`: columns and direction WITHOUT the ORDER BY keyword
@@ -193,7 +231,6 @@ export async function generateSearchFilter(opts: {
       event_count not count(). For logs (no GROUP BY), any column works in orderBy.
     - The user query may be written quickly with low effort; infer intent
     - Do NOT include semicolons or SQL comments
-    </rules>
   `
 
   const result = await generateText({
