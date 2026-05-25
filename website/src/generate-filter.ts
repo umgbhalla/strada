@@ -16,7 +16,7 @@
 import { z } from 'zod'
 import { env } from 'cloudflare:workers'
 import dedent from 'string-dedent'
-import { generateText, tool } from 'ai'
+import { generateText, tool, stepCountIs } from 'ai'
 import { createWorkersAI } from 'workers-ai-provider'
 import clickhouseSchema from '../../clickhouse.sql?raw'
 
@@ -161,14 +161,32 @@ export async function generateSearchFilter(opts: {
 }): Promise<AiFilterResult> {
   const workersai = createWorkersAI({ binding: env.AI })
   const tableName = AI_SEARCH_VIEWS[opts.view]
+  const hasGroupBy = opts.view === 'traces' || opts.view === 'issues'
 
+  // Strip accidental keyword prefixes, trailing semicolons, and dangerous patterns.
+  // Used inside the tool execute to clean and validate the AI's output.
+  const clean = (raw: string | undefined, keyword: string): string => {
+    if (!raw) return ''
+    let s = raw.trim().replace(/;+$/g, '')
+    const prefix = new RegExp(`^${keyword}\\s+`, 'i')
+    s = s.replace(prefix, '').trim()
+    if (/\bProjectId\b/i.test(s)) return ''
+    if (/(^|\s)(SELECT|FROM|JOIN|UNION|FORMAT|LIMIT|OFFSET|SETTINGS|INSERT|ALTER|DROP|CREATE|TRUNCATE)\b/i.test(s)) return ''
+    if (/--|\/\*/.test(s)) return ''
+    return s
+  }
+
+  // previousErrors contains ClickHouse execution errors from the client-side
+  // probe. These are real query failures (wrong column names, type mismatches)
+  // that the server-side Timestamp validation can't catch. Include them in the
+  // prompt so the model can learn from its previous mistakes.
   const previousErrorsSection =
     opts.previousErrors && opts.previousErrors.length > 0
       ? dedent`
         ## Previous failed attempts
 
-        The following SQL was generated but failed when executed. Fix the errors
-        and generate corrected filter fragments. Do NOT repeat the same mistakes.
+        The following SQL was generated but failed when executed against ClickHouse.
+        Fix the errors and generate corrected filter fragments. Do NOT repeat the same mistakes.
 
         ${opts.previousErrors.map((e, i) => `### Attempt ${i + 1}\nSQL: \`${e.sql}\`\nError: ${e.error}`).join('\n\n')}
       `
@@ -215,10 +233,8 @@ export async function generateSearchFilter(opts: {
     - Do NOT include semicolons or SQL comments
   `
 
-  const hasGroupBy = opts.view === 'traces' || opts.view === 'issues'
-
   const result = await generateText({
-    model: workersai('@cf/zai-org/glm-4.7-flash',  {
+    model: workersai('@cf/zai-org/glm-4.7-flash', {
       reasoning_effort: null,
       chat_template_kwargs: { enable_thinking: false },
     }),
@@ -241,11 +257,40 @@ export async function generateSearchFilter(opts: {
             'ORDER BY clause (without ORDER BY keyword). e.g. "event_count DESC" or "Timestamp ASC". Leave empty to use default.',
           ),
         }),
+        // All validation and cleaning happens inside execute. If the AI forgot
+        // a Timestamp filter, execute throws and the AI SDK sends the error back
+        // to the model as a tool-error part, giving it a chance to self-correct
+        // on the next step (up to stepCountIs(3) total steps).
+        execute: async (input) => {
+          const where = clean(input.where, 'WHERE')
+
+          if (where && !/\bTimestamp\b/i.test(where)) {
+            throw new Error(
+              `Generated WHERE clause is missing a Timestamp filter. ` +
+                `Add a time bound like "Timestamp >= now() - INTERVAL 1 DAY" to prevent full-table scans. ` +
+                `Generated WHERE: ${where}`,
+            )
+          }
+
+          return {
+            where,
+            having: clean((input as Record<string, string>).having, 'HAVING'),
+            orderBy: clean(input.orderBy, 'ORDER BY'),
+          } satisfies AiFilterResult
+        },
       }),
     },
-    toolChoice: { type: 'tool', toolName: 'sql_filter' },
+    // Step 0: force the model to call sql_filter. Subsequent steps use auto
+    // so the model can either retry (after a tool error) or stop (after success).
+    prepareStep: ({ stepNumber }) => {
+      if (stepNumber === 0) {
+        return { toolChoice: { type: 'tool' as const, toolName: 'sql_filter' as const } }
+      }
+      return {}
+    },
+    stopWhen: stepCountIs(3),
     providerOptions: {
-      'workers-ai':  {
+      'workers-ai': {
         reasoning_effort: null,
         chat_template_kwargs: { enable_thinking: false },
       },
@@ -253,51 +298,19 @@ export async function generateSearchFilter(opts: {
     abortSignal: opts.signal,
   })
 
-  const toolCall = result.toolCalls.find((c) => c.toolName === 'sql_filter')
-  if (!toolCall || toolCall.dynamic) {
-    return { where: '', having: '', orderBy: '' }
-  }
-  const input = toolCall.input as { where?: string; having?: string; orderBy?: string }
-
-  // Strip accidental keyword prefixes and trailing semicolons
-  const clean = (raw: string | undefined, keyword: string): string => {
-    if (!raw) return ''
-    let s = raw.trim().replace(/;+$/g, '')
-    const prefix = new RegExp(`^${keyword}\\s+`, 'i')
-    s = s.replace(prefix, '').trim()
-    // Reject if it contains clause keywords or dangerous patterns
-    if (/\bProjectId\b/i.test(s)) return ''
-    if (/(^|\s)(SELECT|FROM|JOIN|UNION|FORMAT|LIMIT|OFFSET|SETTINGS|INSERT|ALTER|DROP|CREATE|TRUNCATE)\b/i.test(s)) return ''
-    if (/--|\/\*/.test(s)) return ''
-    return s
+  // Extract the last successful tool result across all steps.
+  // tool-error parts are separate; toolResults only contains successful executions.
+  for (let i = result.steps.length - 1; i >= 0; i--) {
+    const step = result.steps[i]!
+    for (const tr of step.toolResults) {
+      if (tr.toolName === 'sql_filter') {
+        return tr.output as AiFilterResult
+      }
+    }
   }
 
-  const where = clean(input.where, 'WHERE')
-
-  // If the AI generated a non-empty WHERE but forgot a Timestamp filter,
-  // throw so the caller can retry with error context. Without a time bound
-  // the query scans the entire table and takes forever. Empty where is fine
-  // because the caller adds its own default time filter when where is empty.
-  if (where && !/\bTimestamp\b/i.test(where)) {
-    throw new MissingTimestampError(where)
-  }
-
-  return {
-    where,
-    having: clean(input.having, 'HAVING'),
-    orderBy: clean(input.orderBy, 'ORDER BY'),
-  }
-}
-
-export class MissingTimestampError extends Error {
-  constructor(public readonly where: string) {
-    super(
-      `Generated WHERE clause is missing a Timestamp filter. ` +
-        `Add a time bound like "Timestamp >= now() - INTERVAL 1 DAY" to prevent full-table scans. ` +
-        `Generated WHERE: ${where}`,
-    )
-    this.name = 'MissingTimestampError'
-  }
+  // No successful tool call after all steps — return empty filter
+  return { where: '', having: '', orderBy: '' }
 }
 
 export const generateFilterRequestSchema = z.object({

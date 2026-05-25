@@ -747,13 +747,12 @@ export const api = new Spiceflow({ tracer })
         }
 
         const body = await request.json()
-        const result = await generateSearchFilter({
+        return generateSearchFilter({
           view: body.view as AiSearchView,
           searchText: body.searchText,
           previousErrors: body.previousErrors,
           signal: request.signal,
         })
-        return result
       },
     })
     // ── Issue management (status + assignee) ───────────────────────────

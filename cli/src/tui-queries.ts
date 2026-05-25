@@ -34,11 +34,11 @@ export interface PreviousFilterError {
 
 /**
  * Call the website's AI endpoint to turn natural language into structured
- * SQL fragments (where, having, orderBy). The AI always includes a date
- * filter in `where` to prevent full-table scans.
+ * SQL fragments (where, having, orderBy). The server uses tool execute +
+ * stopWhen(3) to self-correct if the AI forgets a Timestamp filter.
  *
- * Pass `previousErrors` when retrying after a failed query execution so the
- * AI model can see what went wrong and self-correct.
+ * Pass `previousErrors` when retrying after a failed ClickHouse query so the
+ * AI model can see the real execution error and generate corrected SQL.
  */
 export async function generateAiFilter(opts: {
   projectId: string;

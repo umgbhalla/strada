@@ -79,9 +79,10 @@ export function durationColor(durationMs: number, stats: DurationStats): string 
 //
 // Retry loop (inspired by crisp search-database-raycast):
 // After generating a filter, the hook calls the `probe` callback to validate
-// the SQL against the real database. If the query fails (bad column, syntax
-// error), the error is fed back to the AI model and generation is retried.
-// Up to MAX_RETRIES attempts. Retry progress is shown in the navigation title.
+// the SQL against the real database. The server handles Timestamp filter
+// retries internally via tool execute + stepCountIs(3). The client probes
+// the generated SQL against ClickHouse and retries with previousErrors
+// context so the AI can see the real execution error and self-correct.
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useCachedPromise } from "@termcast/utils";
