@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.4.0
+
+1. **Better Auth integration plugin** -- new `@strada.sh/sdk/better-auth` export provides a type-only Better Auth plugin that tracks auth lifecycle events (signup, login, logout) and sets the `strada_uid` cookie for browser SDK user correlation:
+
+   ```ts
+   import { strataBetterAuth } from '@strada.sh/sdk/better-auth'
+
+   const auth = betterAuth({
+     plugins: [
+       strataBetterAuth({
+         includeUserDetails: true, // track email and name in events
+       }),
+     ],
+   })
+   ```
+
+   The plugin emits structured OTel log events for each auth action with user details, auth method, and provider. Cookie setting uses the `{ headers }` return mechanism from after hooks, not `ctx.setCookie()`.
+
+2. **`identifyUser()` for server-side user profiles** -- emit user profile telemetry from trusted server runtimes. Profile fields (email, name, image, organization) are sent as a reserved `strada.user.identify` OTLP log event and stored in the `otel_users` table:
+
+   ```ts
+   import { identifyUser } from '@strada.sh/sdk'
+
+   identifyUser({
+     id: 'user_123',
+     email: 'alice@example.com',
+     name: 'Alice',
+     organizationId: 'org_456',
+   })
+   ```
+
+   Available in Node, Cloudflare Workers, and browser runtimes. Browser calls only update the local cookie; profile writes require server-side calls.
+
+3. **Fixed cookie setting in Better Auth after hooks** -- the plugin was calling `ctx.setCookie()` which is undefined at runtime in Better Auth's `HookEndpointContext`. Now correctly returns `{ headers }` with serialized Set-Cookie headers.
+
 ## 0.3.0
 
 1. **`startSpan` convenience helper** -- Sentry-style ergonomic span creation without tracer ceremony. Auto-ends the span, auto-records exceptions with ERROR status, and auto-parents child spans via context propagation:

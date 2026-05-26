@@ -38,10 +38,10 @@ importers:
         version: 6.0.3
       vite:
         specifier: ^8.0.13
-        version: 8.0.13(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3)
+        version: 8.0.13(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3)
       vitest:
         specifier: ^4.1.2
-        version: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@25.9.1)(@vitest/browser-playwright@4.1.5)(vite@8.0.13(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3))
+        version: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@25.9.1)(@vitest/browser-playwright@4.1.5)(vite@8.0.13(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3))
 
   cli:
     dependencies:
@@ -65,7 +65,7 @@ importers:
         version: 19.2.6
       spiceflow:
         specifier: 1.26.0-rsc.0
-        version: 1.26.0-rsc.0(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react-server-dom-webpack@19.2.5(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(webpack@5.106.2(esbuild@0.28.0)))(react@19.2.6)(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3))(zod@4.4.3)
+        version: 1.26.0-rsc.0(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react-server-dom-webpack@19.2.5(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(webpack@5.106.2(esbuild@0.28.0)))(react@19.2.6)(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3))(zod@4.4.3)
       string-dedent:
         specifier: ^3.0.2
         version: 3.0.2
@@ -133,17 +133,17 @@ importers:
         version: link:../sdk
       spiceflow:
         specifier: 1.26.0-rsc.0
-        version: 1.26.0-rsc.0(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react-server-dom-webpack@19.2.5(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(webpack@5.106.2(esbuild@0.28.0)))(react@19.2.6)(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3))(zod@4.4.3)
+        version: 1.26.0-rsc.0(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react-server-dom-webpack@19.2.5(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(webpack@5.106.2(esbuild@0.28.0)))(react@19.2.6)(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3))(zod@4.4.3)
     devDependencies:
       '@types/node':
         specifier: ^25.6.0
         version: 25.9.0
       '@vitest/browser':
         specifier: ^4.1.5
-        version: 4.1.5(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3))(vitest@4.1.5)
+        version: 4.1.5(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3))(vitest@4.1.5)
       '@vitest/browser-playwright':
         specifier: ^4.1.5
-        version: 4.1.5(playwright@1.59.1)(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3))(vitest@4.1.5)
+        version: 4.1.5(playwright@1.59.1)(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3))(vitest@4.1.5)
       playwright:
         specifier: ^1.52.0
         version: 1.59.1
@@ -152,7 +152,7 @@ importers:
         version: 6.0.3
       vitest:
         specifier: ^4.1.5
-        version: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@25.9.0)(@vitest/browser-playwright@4.1.5)(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3))
+        version: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@25.9.0)(@vitest/browser-playwright@4.1.5)(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3))
 
   example-app-cloudflare:
     dependencies:
@@ -167,11 +167,11 @@ importers:
         version: 19.2.6(react@19.2.6)
       spiceflow:
         specifier: 1.26.0-rsc.0
-        version: 1.26.0-rsc.0(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react-server-dom-webpack@19.2.5(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(webpack@5.106.2(esbuild@0.28.0)))(react@19.2.6)(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3))(zod@4.4.3)
+        version: 1.26.0-rsc.0(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react-server-dom-webpack@19.2.5(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(webpack@5.106.2(esbuild@0.28.0)))(react@19.2.6)(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3))(zod@4.4.3)
     devDependencies:
       '@cloudflare/vite-plugin':
         specifier: ^1.31.2
-        version: 1.33.2(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3))(workerd@1.20260518.1)(wrangler@4.93.0)
+        version: 1.33.2(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3))(workerd@1.20260518.1)(wrangler@4.93.0)
       '@types/node':
         specifier: ^25.6.0
         version: 25.9.0
@@ -183,13 +183,13 @@ importers:
         version: 19.2.3(@types/react@19.2.14)
       '@vitejs/plugin-react':
         specifier: latest
-        version: 6.0.2(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3))
+        version: 6.0.2(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3))
       typescript:
         specifier: latest
         version: 6.0.3
       vite:
         specifier: latest
-        version: 8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3)
+        version: 8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3)
       wrangler:
         specifier: latest
         version: 4.93.0
@@ -201,7 +201,7 @@ importers:
         version: link:../sdk
       spiceflow:
         specifier: 1.26.0-rsc.0
-        version: 1.26.0-rsc.0(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react-server-dom-webpack@19.2.5(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(webpack@5.106.2(esbuild@0.28.0)))(react@19.2.6)(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3))(zod@4.4.3)
+        version: 1.26.0-rsc.0(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react-server-dom-webpack@19.2.5(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(webpack@5.106.2(esbuild@0.28.0)))(react@19.2.6)(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3))(zod@4.4.3)
     devDependencies:
       '@opentelemetry/api':
         specifier: ^1.9.1
@@ -244,7 +244,7 @@ importers:
         version: 6.0.3
       vitest:
         specifier: ^4.1.2
-        version: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@25.9.0)(@vitest/browser-playwright@4.1.5)(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3))
+        version: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@25.9.0)(@vitest/browser-playwright@4.1.5)(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3))
       wrangler:
         specifier: ^4.5.1
         version: 4.93.0
@@ -293,7 +293,7 @@ importers:
         version: 25.9.0
       better-auth:
         specifier: https://pkg.pr.new/better-auth@9489
-        version: https://pkg.pr.new/better-auth@9489(@cloudflare/workers-types@4.20260317.1)(@opentelemetry/api@1.9.1)(better-sqlite3@12.10.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(vitest@4.1.6(@opentelemetry/api@1.9.1)(@types/node@25.9.0)(@vitest/browser-playwright@4.1.5(playwright@1.59.1)(vite@8.0.13(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3))(vitest@4.1.5))(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3)))
+        version: https://pkg.pr.new/better-auth@9489(@cloudflare/workers-types@4.20260317.1)(@opentelemetry/api@1.9.1)(better-sqlite3@12.10.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(vitest@4.1.6(@opentelemetry/api@1.9.1)(@types/node@25.9.0)(@vitest/browser-playwright@4.1.5(playwright@1.59.1)(vite@8.0.13(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3))(vitest@4.1.5))(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3)))
       esbuild:
         specifier: ^0.28.0
         version: 0.28.0
@@ -302,7 +302,7 @@ importers:
         version: 6.1.3
       vite:
         specifier: ^8.0.13
-        version: 8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3)
+        version: 8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3)
 
   website:
     dependencies:
@@ -329,13 +329,13 @@ importers:
         version: link:../sdk
       '@tailwindcss/vite':
         specifier: ^4.2.2
-        version: 4.2.2(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3))
+        version: 4.2.2(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3))
       ai:
         specifier: ^6.0.168
         version: 6.0.168(zod@4.4.3)
       better-auth:
         specifier: https://pkg.pr.new/better-auth@9489
-        version: https://pkg.pr.new/better-auth@9489(@opentelemetry/api@1.9.1)(better-sqlite3@12.10.0)(drizzle-orm@1.0.0-beta.21(@opentelemetry/api@1.9.1)(@types/mssql@9.1.11(@azure/core-client@1.10.1))(better-sqlite3@12.10.0)(mssql@11.0.1(@azure/core-client@1.10.1))(zod@4.4.3))(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(vitest@4.1.6(@opentelemetry/api@1.9.1)(@types/node@25.9.0)(@vitest/browser-playwright@4.1.5(playwright@1.59.1)(vite@8.0.13(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3))(vitest@4.1.5))(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3)))
+        version: https://pkg.pr.new/better-auth@9489(@opentelemetry/api@1.9.1)(better-sqlite3@12.10.0)(drizzle-orm@1.0.0-beta.21(@opentelemetry/api@1.9.1)(@types/mssql@9.1.11(@azure/core-client@1.10.1))(better-sqlite3@12.10.0)(mssql@11.0.1(@azure/core-client@1.10.1))(zod@4.4.3))(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(vitest@4.1.6(@opentelemetry/api@1.9.1)(@types/node@25.9.0)(@vitest/browser-playwright@4.1.5(playwright@1.59.1)(vite@8.0.13(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3))(vitest@4.1.5))(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3)))
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -380,7 +380,7 @@ importers:
         version: 1.11.0(react@19.2.6)
       spiceflow:
         specifier: 1.26.0-rsc.0
-        version: 1.26.0-rsc.0(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react-server-dom-webpack@19.2.5(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(webpack@5.106.2(esbuild@0.28.0)))(react@19.2.6)(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3))(zod@4.4.3)
+        version: 1.26.0-rsc.0(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react-server-dom-webpack@19.2.5(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(webpack@5.106.2(esbuild@0.28.0)))(react@19.2.6)(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3))(zod@4.4.3)
       strada:
         specifier: workspace:^
         version: link:../cli
@@ -411,10 +411,10 @@ importers:
     devDependencies:
       '@cloudflare/vite-plugin':
         specifier: ^1.33.2
-        version: 1.33.2(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3))(workerd@1.20260518.1)(wrangler@4.93.0)
+        version: 1.33.2(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3))(workerd@1.20260518.1)(wrangler@4.93.0)
       '@cloudflare/vitest-pool-workers':
         specifier: ^0.16.7
-        version: 0.16.7(@vitest/runner@4.1.6)(@vitest/snapshot@4.1.6)(vitest@4.1.6(@opentelemetry/api@1.9.1)(@types/node@25.9.0)(@vitest/browser-playwright@4.1.5(playwright@1.59.1)(vite@8.0.13(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3))(vitest@4.1.5))(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3)))
+        version: 0.16.7(@vitest/runner@4.1.6)(@vitest/snapshot@4.1.6)(vitest@4.1.6(@opentelemetry/api@1.9.1)(@types/node@25.9.0)(@vitest/browser-playwright@4.1.5(playwright@1.59.1)(vite@8.0.13(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3))(vitest@4.1.5))(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3)))
       '@types/node':
         specifier: ^25.6.0
         version: 25.9.0
@@ -426,7 +426,7 @@ importers:
         version: 19.2.3(@types/react@19.2.14)
       '@vitejs/plugin-react':
         specifier: latest
-        version: 6.0.2(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3))
+        version: 6.0.2(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3))
       tsx:
         specifier: ^4.21.0
         version: 4.21.0
@@ -435,10 +435,10 @@ importers:
         version: 6.0.3
       vite:
         specifier: latest
-        version: 8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3)
+        version: 8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3)
       vitest:
         specifier: ^4.1.6
-        version: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@25.9.0)(@vitest/browser-playwright@4.1.5(playwright@1.59.1)(vite@8.0.13(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3))(vitest@4.1.5))(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3))
+        version: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@25.9.0)(@vitest/browser-playwright@4.1.5(playwright@1.59.1)(vite@8.0.13(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3))(vitest@4.1.5))(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3))
       wrangler:
         specifier: latest
         version: 4.93.0
@@ -5738,11 +5738,6 @@ packages:
       uglify-js:
         optional: true
 
-  terser@5.47.1:
-    resolution: {integrity: sha512-tPbLXTI6ohPASb/1YViL428oEHu6/qv1OxqYnfaonVCFHqx4+wCd95pHrQWsL5X4pl90CTyW9piSAsS2L0VoMw==}
-    engines: {node: '>=10'}
-    hasBin: true
-
   terser@5.48.0:
     resolution: {integrity: sha512-J/9An6vs9Us6wKRriSFXBWdRZapREHqFzdNUKk0pmu804EMR6dr6winwo7e5JDxN4xahxQsuysyYFwlwj4XN/Q==}
     engines: {node: '>=10'}
@@ -6664,12 +6659,12 @@ snapshots:
     optionalDependencies:
       workerd: 1.20260518.1
 
-  '@cloudflare/vite-plugin@1.33.2(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3))(workerd@1.20260518.1)(wrangler@4.93.0)':
+  '@cloudflare/vite-plugin@1.33.2(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3))(workerd@1.20260518.1)(wrangler@4.93.0)':
     dependencies:
       '@cloudflare/unenv-preset': 2.16.1(unenv@2.0.0-rc.24)(workerd@1.20260518.1)
       miniflare: 4.20260424.0
       unenv: 2.0.0-rc.24
-      vite: 8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3)
+      vite: 8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3)
       wrangler: 4.93.0
       ws: 8.18.0
     transitivePeerDependencies:
@@ -6677,14 +6672,14 @@ snapshots:
       - utf-8-validate
       - workerd
 
-  '@cloudflare/vitest-pool-workers@0.16.7(@vitest/runner@4.1.6)(@vitest/snapshot@4.1.6)(vitest@4.1.6(@opentelemetry/api@1.9.1)(@types/node@25.9.0)(@vitest/browser-playwright@4.1.5(playwright@1.59.1)(vite@8.0.13(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3))(vitest@4.1.5))(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3)))':
+  '@cloudflare/vitest-pool-workers@0.16.7(@vitest/runner@4.1.6)(@vitest/snapshot@4.1.6)(vitest@4.1.6(@opentelemetry/api@1.9.1)(@types/node@25.9.0)(@vitest/browser-playwright@4.1.5(playwright@1.59.1)(vite@8.0.13(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3))(vitest@4.1.5))(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3)))':
     dependencies:
       '@vitest/runner': 4.1.6
       '@vitest/snapshot': 4.1.6
       cjs-module-lexer: 1.4.3
       esbuild: 0.27.3
       miniflare: 4.20260518.0
-      vitest: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@25.9.0)(@vitest/browser-playwright@4.1.5(playwright@1.59.1)(vite@8.0.13(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3))(vitest@4.1.5))(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3))
+      vitest: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@25.9.0)(@vitest/browser-playwright@4.1.5(playwright@1.59.1)(vite@8.0.13(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3))(vitest@4.1.5))(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3))
       wrangler: 4.93.0
       zod: 3.25.76
     transitivePeerDependencies:
@@ -8628,12 +8623,12 @@ snapshots:
       '@tailwindcss/oxide-win32-arm64-msvc': 4.2.2
       '@tailwindcss/oxide-win32-x64-msvc': 4.2.2
 
-  '@tailwindcss/vite@4.2.2(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3))':
+  '@tailwindcss/vite@4.2.2(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3))':
     dependencies:
       '@tailwindcss/node': 4.2.2
       '@tailwindcss/oxide': 4.2.2
       tailwindcss: 4.2.2
-      vite: 8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3)
+      vite: 8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3)
 
   '@tanstack/query-core@5.100.11': {}
 
@@ -8793,12 +8788,12 @@ snapshots:
 
   '@vercel/oidc@3.2.0': {}
 
-  '@vitejs/plugin-react@6.0.2(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3))':
+  '@vitejs/plugin-react@6.0.2(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3))':
     dependencies:
       '@rolldown/pluginutils': 1.0.1
-      vite: 8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3)
+      vite: 8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3)
 
-  '@vitejs/plugin-rsc@0.5.21(react-dom@19.2.6(react@19.2.6))(react-server-dom-webpack@19.2.5(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(webpack@5.106.2(esbuild@0.28.0)))(react@19.2.6)(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3))':
+  '@vitejs/plugin-rsc@0.5.21(react-dom@19.2.6(react@19.2.6))(react-server-dom-webpack@19.2.5(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(webpack@5.106.2(esbuild@0.28.0)))(react@19.2.6)(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3))':
     dependencies:
       '@rolldown/pluginutils': 1.0.0-rc.5
       es-module-lexer: 2.1.0
@@ -8810,31 +8805,31 @@ snapshots:
       srvx: 0.11.16
       strip-literal: 3.1.0
       turbo-stream: 3.2.0
-      vite: 8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3)
-      vitefu: 1.1.3(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3))
+      vite: 8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3)
+      vitefu: 1.1.3(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3))
     optionalDependencies:
       react-server-dom-webpack: 19.2.5(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(webpack@5.106.2(esbuild@0.28.0))
 
-  '@vitest/browser-playwright@4.1.5(playwright@1.59.1)(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3))(vitest@4.1.5)':
+  '@vitest/browser-playwright@4.1.5(playwright@1.59.1)(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3))(vitest@4.1.5)':
     dependencies:
-      '@vitest/browser': 4.1.5(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3))(vitest@4.1.5)
-      '@vitest/mocker': 4.1.5(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3))
+      '@vitest/browser': 4.1.5(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3))(vitest@4.1.5)
+      '@vitest/mocker': 4.1.5(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3))
       playwright: 1.59.1
       tinyrainbow: 3.1.0
-      vitest: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@25.9.0)(@vitest/browser-playwright@4.1.5)(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3))
+      vitest: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@25.9.0)(@vitest/browser-playwright@4.1.5)(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3))
     transitivePeerDependencies:
       - bufferutil
       - msw
       - utf-8-validate
       - vite
 
-  '@vitest/browser-playwright@4.1.5(playwright@1.59.1)(vite@8.0.13(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3))(vitest@4.1.5)':
+  '@vitest/browser-playwright@4.1.5(playwright@1.59.1)(vite@8.0.13(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3))(vitest@4.1.5)':
     dependencies:
-      '@vitest/browser': 4.1.5(vite@8.0.13(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3))(vitest@4.1.5)
-      '@vitest/mocker': 4.1.5(vite@8.0.13(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3))
+      '@vitest/browser': 4.1.5(vite@8.0.13(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3))(vitest@4.1.5)
+      '@vitest/mocker': 4.1.5(vite@8.0.13(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3))
       playwright: 1.59.1
       tinyrainbow: 3.1.0
-      vitest: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@25.9.1)(@vitest/browser-playwright@4.1.5)(vite@8.0.13(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3))
+      vitest: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@25.9.1)(@vitest/browser-playwright@4.1.5)(vite@8.0.13(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3))
     transitivePeerDependencies:
       - bufferutil
       - msw
@@ -8842,16 +8837,16 @@ snapshots:
       - vite
     optional: true
 
-  '@vitest/browser@4.1.5(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3))(vitest@4.1.5)':
+  '@vitest/browser@4.1.5(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3))(vitest@4.1.5)':
     dependencies:
       '@blazediff/core': 1.9.1
-      '@vitest/mocker': 4.1.5(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3))
+      '@vitest/mocker': 4.1.5(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3))
       '@vitest/utils': 4.1.5
       magic-string: 0.30.21
       pngjs: 7.0.0
       sirv: 3.0.2
       tinyrainbow: 3.1.0
-      vitest: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@25.9.0)(@vitest/browser-playwright@4.1.5)(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3))
+      vitest: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@25.9.0)(@vitest/browser-playwright@4.1.5)(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3))
       ws: 8.20.0
     transitivePeerDependencies:
       - bufferutil
@@ -8859,16 +8854,16 @@ snapshots:
       - utf-8-validate
       - vite
 
-  '@vitest/browser@4.1.5(vite@8.0.13(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3))(vitest@4.1.5)':
+  '@vitest/browser@4.1.5(vite@8.0.13(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3))(vitest@4.1.5)':
     dependencies:
       '@blazediff/core': 1.9.1
-      '@vitest/mocker': 4.1.5(vite@8.0.13(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3))
+      '@vitest/mocker': 4.1.5(vite@8.0.13(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3))
       '@vitest/utils': 4.1.5
       magic-string: 0.30.21
       pngjs: 7.0.0
       sirv: 3.0.2
       tinyrainbow: 3.1.0
-      vitest: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@25.9.1)(@vitest/browser-playwright@4.1.5)(vite@8.0.13(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3))
+      vitest: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@25.9.1)(@vitest/browser-playwright@4.1.5)(vite@8.0.13(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3))
       ws: 8.20.0
     transitivePeerDependencies:
       - bufferutil
@@ -8895,29 +8890,29 @@ snapshots:
       chai: 6.2.2
       tinyrainbow: 3.1.0
 
-  '@vitest/mocker@4.1.5(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3))':
+  '@vitest/mocker@4.1.5(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3))':
     dependencies:
       '@vitest/spy': 4.1.5
       estree-walker: 3.0.3
       magic-string: 0.30.21
     optionalDependencies:
-      vite: 8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3)
+      vite: 8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3)
 
-  '@vitest/mocker@4.1.5(vite@8.0.13(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3))':
+  '@vitest/mocker@4.1.5(vite@8.0.13(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3))':
     dependencies:
       '@vitest/spy': 4.1.5
       estree-walker: 3.0.3
       magic-string: 0.30.21
     optionalDependencies:
-      vite: 8.0.13(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3)
+      vite: 8.0.13(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3)
 
-  '@vitest/mocker@4.1.6(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3))':
+  '@vitest/mocker@4.1.6(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3))':
     dependencies:
       '@vitest/spy': 4.1.6
       estree-walker: 3.0.3
       magic-string: 0.30.21
     optionalDependencies:
-      vite: 8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3)
+      vite: 8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3)
 
   '@vitest/pretty-format@4.1.5':
     dependencies:
@@ -9144,7 +9139,7 @@ snapshots:
   baseline-browser-mapping@2.10.32:
     optional: true
 
-  better-auth@https://pkg.pr.new/better-auth@9489(@cloudflare/workers-types@4.20260317.1)(@opentelemetry/api@1.9.1)(better-sqlite3@12.10.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(vitest@4.1.6(@opentelemetry/api@1.9.1)(@types/node@25.9.0)(@vitest/browser-playwright@4.1.5(playwright@1.59.1)(vite@8.0.13(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3))(vitest@4.1.5))(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3))):
+  better-auth@https://pkg.pr.new/better-auth@9489(@cloudflare/workers-types@4.20260317.1)(@opentelemetry/api@1.9.1)(better-sqlite3@12.10.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(vitest@4.1.6(@opentelemetry/api@1.9.1)(@types/node@25.9.0)(@vitest/browser-playwright@4.1.5(playwright@1.59.1)(vite@8.0.13(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3))(vitest@4.1.5))(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3))):
     dependencies:
       '@better-auth/core': https://pkg.pr.new/better-auth/better-auth/@better-auth/core@4829b2a(@better-auth/utils@0.4.0)(@better-fetch/fetch@1.1.21)(@cloudflare/workers-types@4.20260317.1)(@opentelemetry/api@1.9.1)(better-call@1.3.5(zod@4.4.3))(jose@6.2.2)(kysely@0.28.16)(nanostores@1.3.0)
       '@better-auth/drizzle-adapter': https://pkg.pr.new/better-auth/better-auth/@better-auth/drizzle-adapter@4829b2a(@better-auth/core@https://pkg.pr.new/better-auth/better-auth/@better-auth/core@4829b2a(@better-auth/utils@0.4.0)(@better-fetch/fetch@1.1.21)(@cloudflare/workers-types@4.20260317.1)(@opentelemetry/api@1.9.1)(better-call@1.3.5(zod@4.4.3))(jose@6.2.2)(kysely@0.28.16)(nanostores@1.3.0))(@better-auth/utils@0.4.0)
@@ -9167,12 +9162,12 @@ snapshots:
       better-sqlite3: 12.10.0
       react: 19.2.6
       react-dom: 19.2.6(react@19.2.6)
-      vitest: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@25.9.0)(@vitest/browser-playwright@4.1.5(playwright@1.59.1)(vite@8.0.13(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3))(vitest@4.1.5))(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3))
+      vitest: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@25.9.0)(@vitest/browser-playwright@4.1.5(playwright@1.59.1)(vite@8.0.13(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3))(vitest@4.1.5))(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3))
     transitivePeerDependencies:
       - '@cloudflare/workers-types'
       - '@opentelemetry/api'
 
-  better-auth@https://pkg.pr.new/better-auth@9489(@opentelemetry/api@1.9.1)(better-sqlite3@12.10.0)(drizzle-orm@1.0.0-beta.21(@opentelemetry/api@1.9.1)(@types/mssql@9.1.11(@azure/core-client@1.10.1))(better-sqlite3@12.10.0)(mssql@11.0.1(@azure/core-client@1.10.1))(zod@4.4.3))(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(vitest@4.1.6(@opentelemetry/api@1.9.1)(@types/node@25.9.0)(@vitest/browser-playwright@4.1.5(playwright@1.59.1)(vite@8.0.13(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3))(vitest@4.1.5))(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3))):
+  better-auth@https://pkg.pr.new/better-auth@9489(@opentelemetry/api@1.9.1)(better-sqlite3@12.10.0)(drizzle-orm@1.0.0-beta.21(@opentelemetry/api@1.9.1)(@types/mssql@9.1.11(@azure/core-client@1.10.1))(better-sqlite3@12.10.0)(mssql@11.0.1(@azure/core-client@1.10.1))(zod@4.4.3))(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(vitest@4.1.6(@opentelemetry/api@1.9.1)(@types/node@25.9.0)(@vitest/browser-playwright@4.1.5(playwright@1.59.1)(vite@8.0.13(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3))(vitest@4.1.5))(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3))):
     dependencies:
       '@better-auth/core': https://pkg.pr.new/better-auth/better-auth/@better-auth/core@4829b2a(@better-auth/utils@0.4.0)(@better-fetch/fetch@1.1.21)(@cloudflare/workers-types@4.20260317.1)(@opentelemetry/api@1.9.1)(better-call@1.3.5(zod@4.4.3))(jose@6.2.2)(kysely@0.28.16)(nanostores@1.3.0)
       '@better-auth/drizzle-adapter': https://pkg.pr.new/better-auth/better-auth/@better-auth/drizzle-adapter@4829b2a(@better-auth/core@1.7.0-beta.2(@better-auth/utils@0.4.0)(@better-fetch/fetch@1.1.21)(@opentelemetry/api@1.9.1)(better-call@1.3.5(zod@4.4.3))(jose@6.2.2)(kysely@0.28.16)(nanostores@1.3.0))(@better-auth/utils@0.4.0)(drizzle-orm@1.0.0-beta.21(@opentelemetry/api@1.9.1)(@types/mssql@9.1.11(@azure/core-client@1.10.1))(better-sqlite3@12.10.0)(mssql@11.0.1(@azure/core-client@1.10.1))(zod@4.4.3))
@@ -9196,7 +9191,7 @@ snapshots:
       drizzle-orm: 1.0.0-beta.21(@cloudflare/workers-types@4.20260317.1)(@opentelemetry/api@1.9.1)(@types/mssql@9.1.11(@azure/core-client@1.10.1))(better-sqlite3@12.10.0)(mssql@11.0.1(@azure/core-client@1.10.1))(zod@4.4.3)
       react: 19.2.6
       react-dom: 19.2.6(react@19.2.6)
-      vitest: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@25.9.0)(@vitest/browser-playwright@4.1.5(playwright@1.59.1)(vite@8.0.13(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3))(vitest@4.1.5))(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3))
+      vitest: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@25.9.0)(@vitest/browser-playwright@4.1.5(playwright@1.59.1)(vite@8.0.13(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3))(vitest@4.1.5))(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3))
     transitivePeerDependencies:
       - '@cloudflare/workers-types'
       - '@opentelemetry/api'
@@ -11351,9 +11346,9 @@ snapshots:
       cross-spawn: 7.0.6
       signal-exit: 4.1.0
 
-  spiceflow@1.26.0-rsc.0(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react-server-dom-webpack@19.2.5(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(webpack@5.106.2(esbuild@0.28.0)))(react@19.2.6)(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3))(zod@4.4.3):
+  spiceflow@1.26.0-rsc.0(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react-server-dom-webpack@19.2.5(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(webpack@5.106.2(esbuild@0.28.0)))(react@19.2.6)(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3))(zod@4.4.3):
     dependencies:
-      '@vitejs/plugin-rsc': 0.5.21(react-dom@19.2.6(react@19.2.6))(react-server-dom-webpack@19.2.5(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(webpack@5.106.2(esbuild@0.28.0)))(react@19.2.6)(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3))
+      '@vitejs/plugin-rsc': 0.5.21(react-dom@19.2.6(react@19.2.6))(react-server-dom-webpack@19.2.5(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(webpack@5.106.2(esbuild@0.28.0)))(react@19.2.6)(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3))
       eventsource-parser: 3.0.8
       its-fine: 2.0.0(@types/react@19.2.14)(react@19.2.6)
       nf3: 0.3.16
@@ -11533,14 +11528,6 @@ snapshots:
       esbuild: 0.28.0
     optional: true
 
-  terser@5.47.1:
-    dependencies:
-      '@jridgewell/source-map': 0.3.11
-      acorn: 8.16.0
-      commander: 2.20.3
-      source-map-support: 0.5.21
-    optional: true
-
   terser@5.48.0:
     dependencies:
       '@jridgewell/source-map': 0.3.11
@@ -11703,7 +11690,7 @@ snapshots:
       d3-time: 3.1.0
       d3-timer: 3.0.1
 
-  vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3):
+  vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3):
     dependencies:
       lightningcss: 1.32.0
       picomatch: 4.0.4
@@ -11715,11 +11702,11 @@ snapshots:
       esbuild: 0.28.0
       fsevents: 2.3.3
       jiti: 2.6.1
-      terser: 5.47.1
+      terser: 5.48.0
       tsx: 4.21.0
       yaml: 2.8.3
 
-  vite@8.0.13(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3):
+  vite@8.0.13(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3):
     dependencies:
       lightningcss: 1.32.0
       picomatch: 4.0.4
@@ -11731,18 +11718,18 @@ snapshots:
       esbuild: 0.28.0
       fsevents: 2.3.3
       jiti: 2.6.1
-      terser: 5.47.1
+      terser: 5.48.0
       tsx: 4.21.0
       yaml: 2.8.3
 
-  vitefu@1.1.3(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3)):
+  vitefu@1.1.3(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3)):
     optionalDependencies:
-      vite: 8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3)
+      vite: 8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3)
 
-  vitest@4.1.5(@opentelemetry/api@1.9.1)(@types/node@25.9.0)(@vitest/browser-playwright@4.1.5)(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3)):
+  vitest@4.1.5(@opentelemetry/api@1.9.1)(@types/node@25.9.0)(@vitest/browser-playwright@4.1.5)(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3)):
     dependencies:
       '@vitest/expect': 4.1.5
-      '@vitest/mocker': 4.1.5(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3))
+      '@vitest/mocker': 4.1.5(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3))
       '@vitest/pretty-format': 4.1.5
       '@vitest/runner': 4.1.5
       '@vitest/snapshot': 4.1.5
@@ -11759,19 +11746,19 @@ snapshots:
       tinyexec: 1.0.4
       tinyglobby: 0.2.16
       tinyrainbow: 3.1.0
-      vite: 8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3)
+      vite: 8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3)
       why-is-node-running: 2.3.0
     optionalDependencies:
       '@opentelemetry/api': 1.9.1
       '@types/node': 25.9.0
-      '@vitest/browser-playwright': 4.1.5(playwright@1.59.1)(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3))(vitest@4.1.5)
+      '@vitest/browser-playwright': 4.1.5(playwright@1.59.1)(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3))(vitest@4.1.5)
     transitivePeerDependencies:
       - msw
 
-  vitest@4.1.5(@opentelemetry/api@1.9.1)(@types/node@25.9.1)(@vitest/browser-playwright@4.1.5)(vite@8.0.13(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3)):
+  vitest@4.1.5(@opentelemetry/api@1.9.1)(@types/node@25.9.1)(@vitest/browser-playwright@4.1.5)(vite@8.0.13(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3)):
     dependencies:
       '@vitest/expect': 4.1.5
-      '@vitest/mocker': 4.1.5(vite@8.0.13(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3))
+      '@vitest/mocker': 4.1.5(vite@8.0.13(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3))
       '@vitest/pretty-format': 4.1.5
       '@vitest/runner': 4.1.5
       '@vitest/snapshot': 4.1.5
@@ -11788,19 +11775,19 @@ snapshots:
       tinyexec: 1.0.4
       tinyglobby: 0.2.16
       tinyrainbow: 3.1.0
-      vite: 8.0.13(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3)
+      vite: 8.0.13(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3)
       why-is-node-running: 2.3.0
     optionalDependencies:
       '@opentelemetry/api': 1.9.1
       '@types/node': 25.9.1
-      '@vitest/browser-playwright': 4.1.5(playwright@1.59.1)(vite@8.0.13(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3))(vitest@4.1.5)
+      '@vitest/browser-playwright': 4.1.5(playwright@1.59.1)(vite@8.0.13(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3))(vitest@4.1.5)
     transitivePeerDependencies:
       - msw
 
-  vitest@4.1.6(@opentelemetry/api@1.9.1)(@types/node@25.9.0)(@vitest/browser-playwright@4.1.5(playwright@1.59.1)(vite@8.0.13(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3))(vitest@4.1.5))(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3)):
+  vitest@4.1.6(@opentelemetry/api@1.9.1)(@types/node@25.9.0)(@vitest/browser-playwright@4.1.5(playwright@1.59.1)(vite@8.0.13(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3))(vitest@4.1.5))(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3)):
     dependencies:
       '@vitest/expect': 4.1.6
-      '@vitest/mocker': 4.1.6(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3))
+      '@vitest/mocker': 4.1.6(vite@8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3))
       '@vitest/pretty-format': 4.1.6
       '@vitest/runner': 4.1.6
       '@vitest/snapshot': 4.1.6
@@ -11817,12 +11804,12 @@ snapshots:
       tinyexec: 1.0.4
       tinyglobby: 0.2.16
       tinyrainbow: 3.1.0
-      vite: 8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3)
+      vite: 8.0.13(@types/node@25.9.0)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3)
       why-is-node-running: 2.3.0
     optionalDependencies:
       '@opentelemetry/api': 1.9.1
       '@types/node': 25.9.0
-      '@vitest/browser-playwright': 4.1.5(playwright@1.59.1)(vite@8.0.13(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.47.1)(tsx@4.21.0)(yaml@2.8.3))(vitest@4.1.5)
+      '@vitest/browser-playwright': 4.1.5(playwright@1.59.1)(vite@8.0.13(@types/node@25.9.1)(esbuild@0.28.0)(jiti@2.6.1)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3))(vitest@4.1.5)
     transitivePeerDependencies:
       - msw
 

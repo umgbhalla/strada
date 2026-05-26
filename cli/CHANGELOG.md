@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.4.0
+
+1. **Interactive TUI** -- run `strada` with no arguments to launch a Raycast-like terminal UI for browsing issues, logs, traces, and analytics. Built with termcast and zustand for state persistence across restarts:
+
+   ```bash
+   strada
+   ```
+
+   Four views switchable via navigation dropdown (Ctrl+P): issues (error groups with stacktrace detail), logs (severity-colored records), traces (span tree drill-down), and analytics (KPIs, top pages, browsers, countries, referrers, custom events). Service and time range filters apply globally across all views.
+
+2. **AI-powered natural language search** -- type free-form queries in the TUI search bar and they are translated into ClickHouse SQL filters server-side via Workers AI:
+
+   ```
+   errors with "timeout" in the last hour
+   traces slower than 500ms from the api service
+   unhandled exceptions in production
+   ```
+
+   The AI filter generates structured SQL fragments (WHERE, HAVING, ORDER BY) with self-correcting retry on invalid output. Works across issues, logs, and traces views.
+
+3. **Cursor-based pagination** -- all TUI views and CLI list commands use cursor-based pagination instead of OFFSET, so scrolling through large datasets stays fast regardless of depth.
+
+4. **Trace duration coloring by standard deviation** -- span durations in the TUI traces view are colored relative to the trace's mean and standard deviation, making slow spans visually obvious without needing to read numbers.
+
+5. **Alert rules scoped to projects** -- `strada alerts add` now accepts `--project` to scope alert rules to a specific project instead of org-wide:
+
+   ```bash
+   strada alerts add --channel email --to ops@example.com --project api
+   ```
+
+6. **Improved `projects create` output** -- shows the ingest endpoint, token, and SDK setup instructions immediately after project creation.
+
+7. **Fixed stale closure in AI search** -- resolved a bug where AI search results could apply to the wrong query when typing fast.
+
+8. **Fixed pagination with custom ORDER BY** -- queries with AI-generated custom sort orders now paginate correctly.
+
 ## 0.3.0
 
 1. **New `traces` commands** -- inspect distributed traces from the terminal:
