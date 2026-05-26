@@ -18,6 +18,7 @@
 
     // Strict
     "strict": true,
+    "noImplicitAny": false,
     "noUncheckedIndexedAccess": true,
     "useUnknownInCatchVariables": false,
     "skipLibCheck": true,

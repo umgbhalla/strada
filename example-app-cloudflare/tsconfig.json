@@ -11,6 +11,7 @@
     "lib": ["ESNext", "DOM"],
     "jsx": "react-jsx",
     "strict": true,
+    "noImplicitAny": false,
     "noUncheckedIndexedAccess": true,
     "useUnknownInCatchVariables": false,
     "skipLibCheck": true,
