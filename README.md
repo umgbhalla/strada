@@ -1,4 +1,4 @@
-<div align='center'>
+<div hidden align='center'>
     <br/>
     <br/>
     <h3>strada</h3>
