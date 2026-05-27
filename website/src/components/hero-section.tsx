@@ -1,12 +1,11 @@
-// Full-bleed hero with background video, non-linear gradient overlays, and centered CTA.
-// Breaks out of the Above column constraint via w-screen + negative margin.
-// Video is color-corrected so its black matches --background; inverted in light mode.
-// Adapted from holocron website hero-section.tsx.
+// Hero section with background video. Video is in normal flow and defines the
+// hero height. CTA is overlaid on top. Gradient overlays fade the video edges
+// into the page background. Video is inverted in light mode so its black
+// matches --background.
 'use client'
 
 import { Link } from 'spiceflow/react'
 import { Button } from './ui/button.tsx'
-
 
 function GitHubIcon({ className }: { className?: string }) {
   return (
@@ -42,52 +41,49 @@ const BOTTOM_GRADIENT = [
 export function HeroSection() {
   return (
     <div className='w-screen ml-[calc(-50vw+50%)] flex justify-center mt-4 lg:mt-8 mb-6 lg:mb-10'>
-    <div className='relative flex flex-col items-center justify-center overflow-hidden bg-background w-full max-w-(--grid-max-width)'>
-      {/* Background video */}
-      <video
-        autoPlay
-        muted
-        loop
-        playsInline
-        poster='/hero-bg-poster.jpg'
-        className='absolute inset-0 z-0 invert hue-rotate-290 dark:invert-0 dark:hue-rotate-0 w-full h-full object-cover object-top'
-      >
-        <source src='/hero-bg.mp4' type='video/mp4' />
-      </video>
-
-      {/* Top gradient */}
-      <div
-        className='absolute top-0 inset-x-0 h-[70%] z-1 pointer-events-none'
-        style={{ background: TOP_GRADIENT }}
-      />
-
-      {/* Bottom gradient */}
-      <div
-        className='absolute bottom-0 inset-x-0 h-[40%] z-1 pointer-events-none'
-        style={{ background: BOTTOM_GRADIENT }}
-      />
-
-      {/* Foreground content */}
-      <div className='relative z-2 flex flex-col items-center text-center max-w-[820px] w-full px-5 pt-6 pb-60 lg:pt-[30px] lg:pb-[400px] gap-6'>
-        <h1
-          className='flex flex-col items-center leading-tight text-[28px] sm:text-[36px] md:text-[44px] text-foreground text-balance font-bold'
+      <div className='relative overflow-hidden bg-background w-full max-w-(--grid-max-width)'>
+        {/* Video in normal flow — its aspect ratio defines the hero height */}
+        <video
+          autoPlay
+          muted
+          loop
+          playsInline
+          poster='/hero-bg-poster.jpg'
+          className='w-full invert hue-rotate-290 dark:invert-0 dark:hue-rotate-0'
         >
-          <span>delightful open-source</span>
-          <span>observability you own</span>
-        </h1>
+          <source src='/hero-bg.mp4' type='video/mp4' />
+        </video>
 
-        {/* CTAs */}
-        <div className='flex gap-3 flex-wrap justify-center'>
-          <Button size='lg' className='no-underline gap-2.5' render={<Link href='/dash' />}>
-            Sign Up
-          </Button>
-          <Button variant='ghost' size='lg' className='no-underline gap-2' render={<Link href='https://github.com/remorses/strada' target='_blank' rel='noopener noreferrer' />}>
-            <GitHubIcon className='size-[18px]' />
-            GitHub
-          </Button>
+        {/* Top gradient */}
+        <div
+          className='absolute top-0 inset-x-0 h-[70%] z-1 pointer-events-none'
+          style={{ background: TOP_GRADIENT }}
+        />
+
+        {/* Bottom gradient */}
+        <div
+          className='absolute bottom-0 inset-x-0 h-[40%] z-1 pointer-events-none'
+          style={{ background: BOTTOM_GRADIENT }}
+        />
+
+        {/* CTA overlay — centered over the video */}
+        <div className='absolute inset-0 z-2 flex flex-col items-center justify-start pt-6 lg:pt-[30px] px-5 gap-6'>
+          <h1 className='flex flex-col items-center leading-tight text-[28px] sm:text-[36px] md:text-[44px] text-foreground text-balance font-bold text-center'>
+            <span>delightful open-source</span>
+            <span>observability you own</span>
+          </h1>
+
+          <div className='flex gap-3 flex-wrap justify-center'>
+            <Button size='lg' className='no-underline gap-2.5' render={<Link href='/dash' />}>
+              Sign Up
+            </Button>
+            <Button variant='ghost' size='lg' className='no-underline gap-2' render={<Link href='https://github.com/remorses/strada' target='_blank' rel='noopener noreferrer' />}>
+              <GitHubIcon className='size-[18px]' />
+              GitHub
+            </Button>
+          </div>
         </div>
       </div>
-    </div>
     </div>
   )
 }
