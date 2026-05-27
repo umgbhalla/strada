@@ -19,5 +19,5 @@
       "strada-website/src/*": ["./src/*"]
     }
   },
-  "include": ["src", "worker-configuration.d.ts"]
+  "include": ["src", "worker-configuration.d.ts", "docs.jsonc"]
 }

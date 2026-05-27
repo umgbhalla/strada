@@ -1,0 +1,66 @@
+{
+  "$schema": "https://holocron.so/docs.json",
+  "name": "Strada",
+  "description": "Open-source observability you own. Errors, logs, traces, analytics. One database, one CLI.",
+  "colors": {
+    "primary": "#2563eb"
+  },
+  "appearance": {
+    "default": "system"
+  },
+  "icons": {
+    "library": "lucide"
+  },
+  "navbar": {
+    "links": [
+      { "type": "github", "href": "https://github.com/remorses/strada" }
+    ],
+    "primary": {
+      "type": "button",
+      "label": "Dashboard",
+      "href": "/dash"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/remorses/strada",
+      "x": "https://x.com/__morse"
+    }
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Docs",
+        "icon": "lucide:book-open",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "icon": "lucide:rocket",
+            "pages": ["index", "pages/sdk"]
+          },
+          {
+            "group": "Guides",
+            "icon": "lucide:map",
+            "pages": [
+              "pages/browser-analytics",
+              "pages/cloudflare-workers-otel",
+              "pages/tinybird-pricing"
+            ]
+          }
+        ]
+      }
+    ],
+    "global": {
+      "anchors": [
+        { "anchor": "GitHub", "href": "https://github.com/remorses/strada", "icon": "lucide:github", "placement": "tabs" },
+        { "anchor": "Changelog", "href": "https://github.com/remorses/strada/releases", "icon": "lucide:newspaper", "placement": "tabs" }
+      ]
+    }
+  },
+  "knownPaths": [
+    "/login",
+    "/device",
+    "/dash/*",
+    "/api/*"
+  ]
+}

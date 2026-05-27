@@ -3,11 +3,14 @@
 // Strada website entry point. Renders auth pages, dashboard shell, and mounts API routes.
 // Handles Google social login, device flow approval, and the Cloudflare Worker fetch entry.
 //
-// Two nested layouts:
-// 1. /* — HTML shell (head, body)
-// 2. /dash/* — Authenticated app shell with sidebar
+// No global layout('/*') because holocron provides its own HTML shell for docs pages (/).
+// Each route group registers its own layout separately.
 //
-// Standalone pages (no sidebar): /, /login, /device
+// Layouts:
+// 1. /dash/* — Authenticated app shell with sidebar
+// 2. /login, /device — Standalone pages with AppShell wrapper
+//
+// Holocron is mounted last so explicit routes take priority.
 
 import './globals.css'
 import type { ReactNode } from 'react'
@@ -22,6 +25,7 @@ import { api } from './api.ts'
 import { getAuth, getDb, getSession, requireSession } from './db.ts'
 import { checkAlerts } from './alert-check.ts'
 import { cn } from './lib/utils.ts'
+import { app as holocronApp } from '@holocron.so/vite/app'
 
 const loginQuerySchema = z.object({ callbackURL: z.string().optional() })
 
@@ -168,7 +172,30 @@ function TabBar({ projectId, pathname }: { projectId: string; pathname: string }
   )
 }
 
-// ── Footer ───────────────────────────────────────────���───────
+// ── AppShell: HTML wrapper for non-holocron pages ───────────
+// Holocron provides its own HTML shell for docs pages. This shell wraps
+// dashboard, login, and device pages with the same base HTML structure.
+function AppShell({ children }: { children: ReactNode }) {
+  return (
+    <html lang="en">
+      <Head>
+        <Head.Meta charSet="UTF-8" />
+        <Head.Meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <Head.Title>Strada</Head.Title>
+        <Head.Meta
+          name="description"
+          content="OpenTelemetry-native observability with traces, logs, metrics, and error tracking."
+        />
+      </Head>
+      <body className="relative flex flex-col min-h-screen bg-background font-sans antialiased">
+        <ProgressBar color="var(--primary)" />
+        {children}
+      </body>
+    </html>
+  )
+}
+
+// ── Footer ──────────────────────────────────────────────────
 function DashFooter() {
   return (
     <GridSection>
@@ -234,36 +261,20 @@ export const app = new Spiceflow({ tracer })
     return next()
   })
 
-  // ── Layout 1: HTML shell ──────────────────────────────────────
-  .layout('/*', async ({ children }) => {
+  // ── AppShell: HTML wrapper for non-holocron pages ──────────────
+  .layout('/dash/*', async ({ children }) => {
     return (
-      <html lang="en">
-        <Head>
-          <Head.Meta charSet="UTF-8" />
-          <Head.Meta name="viewport" content="width=device-width, initial-scale=1.0" />
-          <Head.Title>Strada</Head.Title>
-          <Head.Meta
-            name="description"
-            content="OpenTelemetry-native observability with traces, logs, metrics, and error tracking."
-          />
-        </Head>
-        <body className="relative flex flex-col min-h-screen bg-background font-sans antialiased">
-          <ProgressBar color="var(--primary)" />
-          {children ?? (
-            <AuthPage
-              description="The page you requested does not exist."
-              title="Page not found"
-            >
-              <div className="flex flex-col gap-2 text-center">
-                <h1 className="text-2xl font-semibold tracking-tight">Page not found</h1>
-                <p className="text-sm text-muted-foreground">
-                  Check the URL or go back to the app.
-                </p>
-              </div>
-            </AuthPage>
-          )}
-        </body>
-      </html>
+      <AppShell>{children}</AppShell>
+    )
+  })
+  .layout('/login', async ({ children }) => {
+    return (
+      <AppShell>{children}</AppShell>
+    )
+  })
+  .layout('/device', async ({ children }) => {
+    return (
+      <AppShell>{children}</AppShell>
     )
   })
 
@@ -374,27 +385,6 @@ export const app = new Spiceflow({ tracer })
         </div>
       </div>
     )
-  })
-
-  // ── Root redirect ─────────────────────────────────────────────
-  .get('/', async ({ request }) => {
-    const session = await getSession(request)
-    if (!session) return Response.redirect(new URL('/login', request.url).toString(), 302)
-    const db = getDb()
-    const base = new URL(request.url)
-    try {
-      const members = await db.query.orgMember.findMany({
-        where: { userId: session.userId },
-        with: { org: true },
-      })
-      const firstOrg = members.find((m) => m.org != null)
-      if (firstOrg) {
-        return Response.redirect(new URL(`/dash/orgs/${encodeURIComponent(firstOrg.org!.id)}`, base).toString(), 302)
-      }
-    } catch (err) {
-      logger.error({ message: 'root redirect failed', error: String(err) })
-    }
-    return Response.redirect(new URL('/dash/new-org', base).toString(), 302)
   })
 
   // ── Org page (redirect to first project, or empty state) ────────
@@ -604,6 +594,9 @@ export const app = new Spiceflow({ tracer })
     },
   })
   .use(api)
+
+  // ── Holocron docs (mounted last, explicit routes take priority) ──
+  .use(holocronApp)
 
 export type App = typeof app & typeof api
 

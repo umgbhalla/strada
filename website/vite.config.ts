@@ -1,6 +1,7 @@
 import path from 'node:path'
 import { cloudflare } from '@cloudflare/vite-plugin'
 import { cloudflareTest, readD1Migrations } from '@cloudflare/vitest-pool-workers'
+import { holocron } from '@holocron.so/vite'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
@@ -18,9 +19,13 @@ export default defineConfig(async () => {
       alias: {
         '@ui': path.resolve(__dirname, 'src/ui'),
       },
+      dedupe: ['spiceflow', 'spiceflow/react', 'react', 'react-dom', 'react/jsx-runtime', 'react/jsx-dev-runtime'],
     },
 
     plugins: [
+      // cloudflareTest() runs tests inside workerd via @cloudflare/vitest-pool-workers.
+      // cloudflare() handles dev/build/deploy but conflicts with the vitest pool
+      // (both manage workerd), so only one is active at a time.
       process.env.VITEST
         ? cloudflareTest({
             wrangler: { configPath: './wrangler.jsonc' },
@@ -29,15 +34,25 @@ export default defineConfig(async () => {
               bindings: { TEST_MIGRATIONS: migrations },
             },
           })
-        : cloudflare({
+        : null,
+      // In test mode: use raw plugins (holocron auto-adds react+tailwind+spiceflow
+      // which conflicts with cloudflareTest). In dev/build: use holocron.
+      ...(process.env.VITEST
+        ? [react(), spiceflowPlugin({ entry: './src/app.tsx' }), tailwindcss()]
+        : [holocron({ entry: './src/app.tsx', pagesDir: './src' })]),
+      // cloudflare() must come AFTER spiceflow/holocron — spiceflow sets ssr outDir to
+      // dist/rsc/ssr (nested inside the worker root) so workerd can resolve the
+      // cross-environment import. cloudflare's config hook unconditionally sets
+      // outDir to dist/ssr (sibling), and Vite's config merge gives the first
+      // setter priority.
+      !process.env.VITEST
+        ? cloudflare({
             viteEnvironment: {
               name: 'rsc',
               childEnvironments: ['ssr'],
             },
-          }),
-      react(),
-      spiceflowPlugin({ entry: './src/app.tsx' }),
-      tailwindcss(),
+          })
+        : null,
     ],
     test: {
       setupFiles: ['./src/apply-migrations.ts'],
