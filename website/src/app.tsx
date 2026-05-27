@@ -63,7 +63,7 @@ function AuthPage({
         <Head.Title>{`${title} | Strada`}</Head.Title>
         <Head.Meta name="description" content={description} />
       </Head>
-      <section className="flex w-full max-w-md flex-col gap-6 rounded-xl border bg-card p-8 text-card-foreground shadow-sm">
+      <section className="flex w-full max-w-sm flex-col gap-6">
         {children}
       </section>
     </main>
@@ -466,8 +466,8 @@ export const app = new Spiceflow({ tracer })
           description="Sign in to manage observability projects and approve CLI logins."
           title="Sign in"
         >
-          <div className="flex flex-col gap-2 text-center">
-            <h1 className="text-3xl font-semibold tracking-tight">Strada</h1>
+          <div className="flex flex-col gap-4 items-center text-center">
+            <img src="/holocron-api/ai-logo/strada.jpeg" alt="Strada" className="h-10 w-auto" />
             <p className="text-sm text-muted-foreground">
               Sign in to manage your observability projects.
             </p>
@@ -492,8 +492,8 @@ export const app = new Spiceflow({ tracer })
             description="Open this page from the CLI login flow with a valid device code."
             title="CLI login"
           >
-            <div className="flex flex-col gap-2 text-center">
-              <h1 className="text-2xl font-semibold tracking-tight">Strada CLI Login</h1>
+            <div className="flex flex-col gap-4 items-center text-center">
+              <img src="/holocron-api/ai-logo/strada.jpeg" alt="Strada" className="h-10 w-auto" />
               <p className="text-sm text-muted-foreground">
                 Open this page from the CLI login flow with a valid device code.
               </p>
@@ -510,8 +510,8 @@ export const app = new Spiceflow({ tracer })
             description="That CLI device code is invalid or expired."
             title="Invalid device code"
           >
-            <div className="flex flex-col gap-2 text-center">
-              <h1 className="text-2xl font-semibold tracking-tight">Invalid device code</h1>
+            <div className="flex flex-col gap-4 items-center text-center">
+              <img src="/holocron-api/ai-logo/strada.jpeg" alt="Strada" className="h-10 w-auto" />
               <p className="text-sm text-muted-foreground">
                 That device code is invalid or expired.
               </p>
@@ -554,8 +554,8 @@ export const app = new Spiceflow({ tracer })
           description="Approve or deny the current Strada CLI login request."
           title="CLI login"
         >
-          <div className="flex flex-col gap-2 text-center">
-            <h1 className="text-2xl font-semibold tracking-tight">Strada CLI Login</h1>
+          <div className="flex flex-col gap-4 items-center text-center">
+            <img src="/holocron-api/ai-logo/strada.jpeg" alt="Strada" className="h-10 w-auto" />
             {status === 'approved'
               ? (
                   <>
@@ -579,7 +579,7 @@ export const app = new Spiceflow({ tracer })
                       <p className="text-sm text-foreground">
                         A CLI is requesting access to your account.
                       </p>
-                      <p className="rounded-lg border bg-muted px-3 py-2 font-mono text-lg tracking-[0.24em] uppercase">
+                      <p className="font-mono text-lg tracking-[0.24em] uppercase text-foreground">
                         {userCode}
                       </p>
                       <p className="text-sm text-muted-foreground">
