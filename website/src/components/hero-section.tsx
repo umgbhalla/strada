@@ -1,7 +1,13 @@
 // Hero section with background video. Video is in normal flow and defines the
 // hero height. CTA is overlaid on top. Gradient overlays fade the video edges
-// into the page background. Video is inverted in light mode so its black
-// matches --background.
+// into the page background.
+//
+// The source video is a colorful holographic radar (cyan + red-orange UI) on a
+// dark blue-black background, authored for dark mode. In light mode we flip the
+// dark background to light with `invert`, but invert also flips every hue
+// (cyan -> red, producing a pink cast). `hue-rotate-180` rotates the hues back
+// so the UI keeps its original cyan/red palette while the background turns light.
+// Dark mode shows the video untouched (`dark:invert-0 dark:hue-rotate-0`).
 'use client'
 
 import { Link } from 'spiceflow/react'
@@ -49,7 +55,7 @@ export function HeroSection() {
           loop
           playsInline
           poster='/hero-bg-poster.jpg'
-          className='w-full invert hue-rotate-290 dark:invert-0 dark:hue-rotate-0'
+          className='w-full invert hue-rotate-180 dark:invert-0 dark:hue-rotate-0'
         >
           <source src='/hero-bg.mp4' type='video/mp4' />
         </video>
