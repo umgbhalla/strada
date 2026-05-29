@@ -57,8 +57,9 @@ export class TinybirdBackend implements Backend {
     });
 
     if (!response.ok) {
+      const body = await response.text().catch(() => "");
       logBackendError({ backend: "Tinybird", table, response });
-      return;
+      throw new Error(`Tinybird ingest failed for table "${table}": status=${response.status} body=${body}`);
     }
 
     const responseBody = await response.json().catch(() => null) as null | {
@@ -106,8 +107,12 @@ export class ClickHouseBackend implements Backend {
       body: remapped,
     });
 
+    // Always consume the response body to avoid connection leaks in Workers.
+    const body = await response.text().catch(() => "");
+
     if (!response.ok) {
       logBackendError({ backend: "ClickHouse", table, response });
+      throw new Error(`ClickHouse ingest failed for table "${table}": status=${response.status} body=${body}`);
     }
   }
 }

@@ -172,7 +172,7 @@ export function createCollectorApp({ db, anonymousRateLimiter }: { db: D1Databas
         maxAge: 86400,
       }),
     )
-    .post("/v1/traces", async ({ request, waitUntil }) => {
+    .post("/v1/traces", async ({ request }) => {
       const projectId = getProjectId(request);
       const config = await resolveOrFail({ db, projectId });
       await requireIngestAccess({ db, request, projectId, orgId: config.orgId, anonymousRateLimiter });
@@ -183,18 +183,21 @@ export function createCollectorApp({ db, anonymousRateLimiter }: { db: D1Databas
       const userAgent = request.headers.get("user-agent") ?? undefined;
 
       const ndjson = transformTraces(body, projectId, { country, userAgent });
-      if (ndjson) {
-        waitUntil(backend.send(datasources.traces, "traces", ndjson));
-      }
-
       const errorsNdjson = extractErrorsFromTraces(body, projectId);
-      if (errorsNdjson) {
-        waitUntil(backend.send(datasources.errors, "errors", errorsNdjson));
-      }
+
+      // Await all writes so data is queryable when the SDK reports "export
+      // succeeded." Using waitUntil() here would return 200 before data reaches
+      // Tinybird/ClickHouse, causing noticeable lag (especially for traces which
+      // trigger 2 materialized views on INSERT). Parallel sends keep total
+      // latency = max(individual writes), not sum.
+      const sends: Promise<void>[] = [];
+      if (ndjson) sends.push(backend.send(datasources.traces, "traces", ndjson));
+      if (errorsNdjson) sends.push(backend.send(datasources.errors, "errors", errorsNdjson));
+      await Promise.all(sends);
 
       return {};
     })
-    .post("/v1/logs", async ({ request, waitUntil }) => {
+    .post("/v1/logs", async ({ request }) => {
       const projectId = getProjectId(request);
       const config = await resolveOrFail({ db, projectId });
       const authenticated = await requireIngestAccess({ db, request, projectId, orgId: config.orgId, anonymousRateLimiter });
@@ -203,23 +206,20 @@ export function createCollectorApp({ db, anonymousRateLimiter }: { db: D1Databas
       const backend = createBackend(config);
 
       const ndjson = transformLogs(body, projectId);
-      if (ndjson) {
-        waitUntil(backend.send(datasources.logs, "logs", ndjson));
-      }
-
       const errorsNdjson = extractErrorsFromLogs(body, projectId);
-      if (errorsNdjson) {
-        waitUntil(backend.send(datasources.errors, "errors", errorsNdjson));
-      }
-
       const usersNdjson = authenticated ? extractUsersFromLogs(body, projectId) : "";
-      if (usersNdjson) {
-        waitUntil(backend.send(datasources.users, "users", usersNdjson));
-      }
+
+      // Await all writes so data is queryable when the SDK reports success.
+      // See /v1/traces handler for the full rationale.
+      const sends: Promise<void>[] = [];
+      if (ndjson) sends.push(backend.send(datasources.logs, "logs", ndjson));
+      if (errorsNdjson) sends.push(backend.send(datasources.errors, "errors", errorsNdjson));
+      if (usersNdjson) sends.push(backend.send(datasources.users, "users", usersNdjson));
+      await Promise.all(sends);
 
       return {};
     })
-    .post("/v1/metrics", async ({ request, waitUntil }) => {
+    .post("/v1/metrics", async ({ request }) => {
       const projectId = getProjectId(request);
       const config = await resolveOrFail({ db, projectId });
       await requireIngestAccess({ db, request, projectId, orgId: config.orgId, anonymousRateLimiter });
@@ -235,7 +235,7 @@ export function createCollectorApp({ db, anonymousRateLimiter }: { db: D1Databas
 
       const toSend = payloads.filter((p) => p.ndjson.length > 0);
       if (toSend.length > 0) {
-        waitUntil(Promise.all(toSend.map((p) => backend.send(p.datasource, p.signal, p.ndjson))));
+        await Promise.all(toSend.map((p) => backend.send(p.datasource, p.signal, p.ndjson)));
       }
 
       return {};
