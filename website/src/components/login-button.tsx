@@ -9,7 +9,7 @@ import { useState } from "react"
 import { Button } from "./ui/button.tsx"
 import { authClient } from "../auth-client.ts"
 
-export function LoginButton({ callbackURL = "/" }: { callbackURL?: string }) {
+export function LoginButton({ callbackURL = "/wip" }: { callbackURL?: string }) {
   const [loading, setLoading] = useState(false)
 
   async function handleSignIn() {

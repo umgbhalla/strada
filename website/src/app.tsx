@@ -1,14 +1,15 @@
 /// <reference path="./globals.d.ts" />
 
-// Strada website entry point. Renders auth pages, dashboard shell, and mounts API routes.
+// Strada website entry point. Renders auth pages, the dashboard WIP page, and mounts API routes.
 // Handles Google social login, device flow approval, and the Cloudflare Worker fetch entry.
 //
 // No global layout('/*') because holocron provides its own HTML shell for docs pages (/).
 // Each route group registers its own layout separately.
 //
 // Layouts:
-// 1. /dash/* — Authenticated app shell with sidebar
-// 2. /login, /device — Standalone pages with AppShell wrapper
+// 1. /wip — Authenticated dashboard placeholder while the web UI is in progress
+// 2. /dash/* — Authenticated app shell with sidebar for the paused dashboard pages
+// 3. /login, /device — Standalone pages with AppShell wrapper
 //
 // Holocron is mounted last so explicit routes take priority.
 
@@ -16,6 +17,7 @@ import './globals.css'
 import type { ReactNode } from 'react'
 import { getActionRequest, json, parseFormData, Spiceflow, redirect } from 'spiceflow'
 import { Head, Link, ProgressBar, router } from 'spiceflow/react'
+import dedent from 'string-dedent'
 import { z } from 'zod'
 import { env } from 'cloudflare:workers'
 import { initStrada, captureException, trace, getLogger } from '@strada.sh/sdk'
@@ -26,8 +28,28 @@ import { getAuth, getDb, getSession, requireSession } from './db.ts'
 import { checkAlerts } from './alert-check.ts'
 import { cn } from './lib/utils.ts'
 import { app as holocronApp } from '@holocron.so/vite/app'
+import { CodeBlock } from '@holocron.so/vite/mdx'
 
 const loginQuerySchema = z.object({ callbackURL: z.string().optional() })
+
+const CLI_EXAMPLES = dedent`
+  # authenticate the CLI in your browser
+  strada login
+
+  # create a database and project
+  strada database create
+  strada projects create my-app
+  strada setup --project my-app
+
+  # inspect telemetry from your terminal
+  strada issues list --since 24h
+  strada logs --min-level error --since 1h
+  strada traces list --since 1h
+  strada analytics pages --since 7d
+
+  # launch the interactive terminal dashboard
+  strada
+`
 
 const devicePageQuerySchema = z.object({
   user_code: z.string().optional(),
@@ -37,15 +59,15 @@ const devicePageQuerySchema = z.object({
 const deviceUserCodeSchema = z.object({ userCode: z.string().min(1) })
 
 function safeRedirectPath(value: string | undefined | null) {
-  if (!value || !value.startsWith('/') || value.startsWith('//')) return '/'
+  if (!value || !value.startsWith('/') || value.startsWith('//')) return '/wip'
   // Parse with URL to safely extract pathname + search (preserves query params)
   const url = new URL(value, 'https://strada.local')
   // Block /login as callbackURL to prevent redirect loops
-  if (url.pathname === '/login') return '/'
-  if (url.pathname === '/' || url.pathname === '/device' || url.pathname.startsWith('/dash/')) {
+  if (url.pathname === '/login') return '/wip'
+  if (url.pathname === '/device' || url.pathname === '/wip') {
     return `${url.pathname}${url.search}`
   }
-  return '/'
+  return '/wip'
 }
 
 function AuthPage({
@@ -261,6 +283,16 @@ export const app = new Spiceflow({ tracer })
     return next()
   })
 
+  // ── Dashboard pause redirect ────────────────────────────────────
+  .use(async ({ request }, next) => {
+    if (request.parsedUrl.pathname.startsWith('/dash')) {
+      const session = await getSession(request)
+      if (!session) throw redirect(router.href('/login', { callbackURL: '/wip' }))
+      throw redirect('/wip')
+    }
+    return next()
+  })
+
   // ── AppShell: HTML wrapper for non-holocron pages ──────────────
   .layout('/dash/*', async ({ children }) => {
     return (
@@ -268,6 +300,11 @@ export const app = new Spiceflow({ tracer })
     )
   })
   .layout('/login', async ({ children }) => {
+    return (
+      <AppShell>{children}</AppShell>
+    )
+  })
+  .layout('/wip', async ({ children }) => {
     return (
       <AppShell>{children}</AppShell>
     )
@@ -449,6 +486,42 @@ export const app = new Spiceflow({ tracer })
           </p>
         </div>
       </div>
+    )
+  })
+
+  // ── Dashboard WIP page ──────────────────────────────────────────
+  .page('/wip', async ({ request }) => {
+    await requirePageSession(request)
+
+    return (
+      <main className="flex min-h-screen items-center justify-center px-6 py-16">
+        <Head>
+          <Head.Title>Dashboard in progress | Strada</Head.Title>
+          <Head.Meta
+            name="description"
+            content="The Strada web dashboard is in progress. Use the CLI and terminal UI for now."
+          />
+        </Head>
+        <section className="flex w-full max-w-2xl flex-col gap-8">
+          <div className="flex flex-col gap-4">
+            <img src="/holocron-api/ai-logo/strada.jpeg" alt="Strada" className="h-8 w-auto self-start" />
+            <p className="text-base leading-7 text-muted-foreground">
+              The web dashboard is in progress. For now, use the Strada CLI to inspect
+              issues, logs, traces, and analytics from your terminal.
+            </p>
+          </div>
+
+          <CodeBlock lang="bash" showLineNumbers={false}>{CLI_EXAMPLES}</CodeBlock>
+
+          <p className="text-sm text-muted-foreground">
+            Read the{' '}
+            <Link href="/" className="font-medium text-foreground underline underline-offset-4">
+              docs
+            </Link>
+            {' '}or run <code className="rounded bg-muted px-1.5 py-0.5 text-foreground">strada --help</code> for setup.
+          </p>
+        </section>
+      </main>
     )
   })
 

@@ -5,6 +5,9 @@
 
 @custom-variant dark (&:is(.dark, .dark *));
 
+/* Prism syntax highlighting theme (shared with holocron docs CodeBlock). */
+@import '@holocron.so/vite/src/styles/editorial-prism.css';
+
 @theme inline {
   --font-sans: var(--font-sans);
   --font-heading: var(--font-heading);
