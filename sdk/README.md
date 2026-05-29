@@ -170,7 +170,7 @@ The SDK does **not** install the OTel auto-instrumentation packages by default. 
 
 Everything else is **explicit**. Use `startSpan()` for spans, `logs.getLogger().emit()` for logs, `track()` for custom event logs, and `captureException()` for handled error logs.
 
-```text
+```diagram
 initStrada()
   ├─ browser only: span "pageview" ─────────► /v1/traces
   ├─ browser/node error handlers ───────────► /v1/logs
@@ -239,13 +239,13 @@ The difference matters because the **active span** determines what future spans 
 
 In a trace viewer:
 
-```
+```diagram
 startSpan produces a nested tree          startInactiveSpan produces flat siblings
 
 process-order ████████████████████        process-order ████████████████████
-  ├─ validate  ████████                     ├─ send-email    ██████████████
-  └─ charge     ████████████                ├─ send-webhook  █████████████
-                                            └─ log-audit     █████
+  ├─ validate  ████████                      ├─ send-email    ██████████████
+  └─ charge    ████████████                  ├─ send-webhook  █████████████
+                                             └─ log-audit     █████
 ```
 
 #### When to use `startSpan`
@@ -672,19 +672,19 @@ The log record is automatically correlated to the active pageview span via `Trac
 
 ## What it sends
 
-```text
+```diagram
 browser / server code
         │
         ├─ traces  ───────────────► /v1/traces
         ├─ logs    ───────────────► /v1/logs
         └─ metrics ───────────────► /v1/metrics
-                                   │
-                                   ▼
-                              Strada collector
-                                   │
-                 ┌─────────────────┴─────────────────┐
-                 ▼                                   ▼
-            otel_traces                         otel_logs
+                                          │
+                                          ▼
+                                   Strada collector
+                                          │
+                        ┌─────────────────┴─────────────────┐
+                        ▼                                   ▼
+                   otel_traces                         otel_logs
 ```
 
 ### Browser spans
@@ -726,7 +726,7 @@ It also starts a `pageview` span and usually parents later browser work to that 
 
 ### Browser pageview hierarchy
 
-```text
+```diagram
 trace: pageview /pricing
 ├─ span: pageview
 ├─ span: load-pricing-plans
@@ -926,7 +926,7 @@ So in normal operation, ended spans and emitted logs are usually exported within
 
 Node metrics use `PeriodicExportingMetricReader` with an explicit export interval of **10 seconds** in this SDK.
 
-```text
+```diagram
 spans/logs: batched, usually every ~5s
 metrics: periodic export every 10s
 ```
@@ -1014,16 +1014,18 @@ If this matters for a particular flow, call `flush()` yourself at a controlled b
 
 The SDK automatically propagates `session.id` and `user.id` from the browser to the backend using **W3C Baggage**. Every outgoing `fetch`/`XHR` request from the browser includes both `traceparent` and `baggage` HTTP headers.
 
-```text
-Browser                                    Server
-session.id = abc                           BaggageSpanProcessor reads baggage:
-user.id = user_123                           session.id -> span attribute
-          |                                  user.id -> span attribute
-          | fetch POST /api/checkout
-          | headers:                       BaggageLogProcessor reads baggage:
-          |   traceparent: 00-abc123...      session.id -> log attribute
-          |   baggage: strada.session.id=abc,user.id=user_123
-          v
+```diagram
+   Browser                                      Server
+   session.id = abc                             BaggageSpanProcessor reads baggage:
+   user.id    = user_123                          session.id ──► span attribute
+        │                                          user.id    ──► span attribute
+        │  fetch POST /api/checkout
+        │  headers:                              BaggageLogProcessor reads baggage:
+        │    traceparent: 00-abc123...             session.id ──► log attribute
+        │    baggage: strada.session.id=abc,        user.id    ──► log attribute
+        │             user.id=user_123
+        ▼
+   ────────────────────────────────────────►  request arrives with baggage
 ```
 
 This means backend spans and log records created within a browser-initiated request automatically carry the browser's `session.id` and `user.id`. No app code needed.

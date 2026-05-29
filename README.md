@@ -24,25 +24,25 @@ initStrada({ projectId: "01JTHG...", token: process.env.STRADA_TOKEN, service: "
 
 ## What Strada replaces
 
-```
-    Sentry                                                  ─┐
-    errors, alerts, issue grouping                           │
-                                                             │
-    Datadog                                                  │
-    traces, logs, metrics                                    ├────►  Strada
-                                                             │
-    Google Analytics                                         │       one CLI
-    pageviews, sessions, custom events                       │       one database
-                                                             │       one SQL dialect
-    Grafana                                                  │
-    dashboards, visualizations, query & alerts              ─┘
+```diagram
+   Sentry                                                       ─┐
+   errors, alerts, issue grouping                                │
+                                                                 │
+   Datadog                                                       │
+   traces, logs, metrics                                         ├────►  Strada
+                                                                 │
+   Google Analytics                                              │       one CLI
+   pageviews, sessions, custom events                            │       one database
+                                                                 │       one SQL dialect
+   Grafana                                                       │
+   dashboards, visualizations, query & alerts                   ─┘
 ```
 
 All data lands in the **same ClickHouse database**, queryable with the **same SQL**. No context switching between tools.
 
 The Strada Node SDK bundle is **4.8× smaller than Sentry's Node SDK** when bundled with esbuild. Smaller bundles mean **faster cold starts** in Vercel, AWS Lambda, Cloudflare Workers, and other serverless runtimes. Strada stays small because it is a thin layer on top of **standard OpenTelemetry**, not a proprietary vendor SDK you have to rip out later.
 
-```
+```diagram
 Bundle size, esbuild ESM, node18 target
 
 Strada SDK   400.5 kB  ██████████
@@ -64,23 +64,23 @@ Sentry is 4.8× larger.
 
 ## How it works
 
-```
-  Browser SDK                          Node SDK                         Workers SDK
-  (pageviews, track, errors)           (traces, logs, metrics)          (captureException)
-          │                                  │                                │
-          │            OTLP HTTP/JSON        │          OTLP HTTP/JSON        │
-          ▼                                  ▼                                ▼
-  ┌─────────────────────────────────────────────────────────────────────────────────────────┐
-  │                               Strada OTLP Collector                                     │
-  │                           (Cloudflare Worker, open source)                              │
-  └────────┬─────────────────────┬─────────────────────┬─────────────────────┬──────────────┘
-           │                     │                     │                     │
-           ▼                     ▼                     ▼                     ▼
-     otel_traces             otel_logs           otel_metrics          otel_errors
-           │                     │                                          ▲
-           │                     ├───────► extract exceptions ──────────────┘
-           ▼                     ▼
-     otel_analytics_pages ◄──────────── materialized views
+```diagram
+   Browser SDK                       Node SDK                       Workers SDK
+   pageviews, track, errors          traces, logs, metrics          captureException
+        │                                │                                │
+        │          OTLP HTTP/JSON        │         OTLP HTTP/JSON         │
+        ▼                                ▼                                ▼
+   ┌───────────────────────────────────────────────────────────────────────────────────┐
+   │                            Strada OTLP Collector                                    │
+   │                        (Cloudflare Worker, open source)                             │
+   └──────┬──────────────────────┬──────────────────────┬──────────────────────┬────────┘
+          │                      │                      │                      │
+          ▼                      ▼                      ▼                      ▼
+     otel_traces             otel_logs            otel_metrics            otel_errors
+          │                      │                                            ▲
+          │                      └──────────► extract exceptions ──────────────┘
+          ▼
+     otel_analytics_pages    ◄──────────── materialized views
      otel_analytics_sessions
 ```
 
@@ -241,26 +241,26 @@ The dropdown also lets you switch **projects** and **time ranges** (5 min to 30 
 
 Strada is **100% OpenTelemetry**. The SDK is a thin wrapper around the official OTel SDKs that configures providers, exporters, and a few convenience helpers. You can use your existing OTel setup to send data to Strada. It will just work.
 
-```
-  your code ──► initStrada() + captureException() + track()
-                       │
-                       │  configures standard OTel providers
-                       ▼
-          TracerProvider          LoggerProvider         MeterProvider
-                │                       │                      │
-                └───────────────────────┼──────────────────────┘
-                                        │
-                                        │  OTLP HTTP/JSON
-                                        ▼
-                                 Strada Collector
-                                (Cloudflare Worker)
-                                        │
-          ┌─────────────┬───────────────┼───────────────┬─────────────┐
-          ▼             ▼               ▼               ▼             ▼
-     otel_traces    otel_logs      otel_errors    otel_metrics  otel_analytics
-  ┌────────────────────────────────────────────────────────────────────────────────────────────┐
-  │                              ClickHouse (your database)                                    │
-  └────────────────────────────────────────────────────────────────────────────────────────────┘
+```diagram
+   your code ──► initStrada() + captureException() + track()
+                        │
+                        │  configures standard OTel providers
+                        ▼
+           TracerProvider           LoggerProvider          MeterProvider
+                 │                        │                       │
+                 └────────────────────────┼───────────────────────┘
+                                          │
+                                          │  OTLP HTTP/JSON
+                                          ▼
+                                  Strada Collector
+                                 (Cloudflare Worker)
+                                          │
+          ┌─────────────┬─────────────────┼─────────────────┬──────────────┐
+          ▼             ▼                 ▼                 ▼              ▼
+     otel_traces    otel_logs        otel_errors      otel_metrics    otel_analytics
+   ┌──────────────────────────────────────────────────────────────────────────────────┐
+   │                          ClickHouse (your database)                                │
+   └──────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 **If you already have OTel instrumentation**, point your OTLP exporter at your Strada ingest endpoint. No SDK swap needed.
@@ -499,16 +499,16 @@ Strada does **not** host a database for you. Instead, it uses [Tinybird](https:/
 - **Self-host everything**: the entire infrastructure runs on Cloudflare Workers. Fork the repo and deploy with `wrangler deploy`
 - **Or use strada.sh**: the managed service handles multi-tenancy, auth, team collaboration, and ingestion. You still own the database
 
-```
-                                                ┌─────────────────────────────────────────────┐
-  strada.sh (managed) ─────────────────────────►│  Your Tinybird workspace                    │
-  auth, teams, ingestion, CLI                   │                                             │
-                                                │  otel_traces ─── otel_logs ─── otel_errors  │
-                OR                              │  otel_metrics ─── otel_analytics_*          │
-                                                │                                             │
-  self-hosted (fork + wrangler deploy) ────────►│  same schema, same tables                   │
-  Cloudflare Workers, zero lock-in              │  you own everything                         │
-                                                └─────────────────────────────────────────────┘
+```diagram
+                                            ┌──────────────────────────────────────────────┐
+   strada.sh (managed) ─────────────────►  │  Your Tinybird workspace                      │
+   auth, teams, ingestion, CLI              │                                               │
+                                            │  otel_traces ─── otel_logs ─── otel_errors   │
+                   OR                       │  otel_metrics ─── otel_analytics_*            │
+                                            │                                               │
+   self-hosted (fork + wrangler deploy) ──► │  same schema, same tables                     │
+   Cloudflare Workers, zero lock-in         │  you own everything                           │
+                                            └──────────────────────────────────────────────┘
 ```
 
 ### Why Tinybird
