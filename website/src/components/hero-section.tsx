@@ -25,13 +25,13 @@ function GitHubIcon({ className }: { className?: string }) {
 
 const TOP_GRADIENT = [
   'linear-gradient(to bottom,',
-  'color-mix(in srgb, var(--background) 55%, transparent) 0%,',
-  'color-mix(in srgb, var(--background) 48%, transparent) 12%,',
-  'color-mix(in srgb, var(--background) 40%, transparent) 26%,',
-  'color-mix(in srgb, var(--background) 30%, transparent) 42%,',
-  'color-mix(in srgb, var(--background) 20%, transparent) 58%,',
-  'color-mix(in srgb, var(--background) 10%, transparent) 74%,',
-  'color-mix(in srgb, var(--background) 4%, transparent) 88%,',
+  'var(--background) 0%,',
+  'color-mix(in srgb, var(--background) 90%, transparent) 12%,',
+  'color-mix(in srgb, var(--background) 75%, transparent) 26%,',
+  'color-mix(in srgb, var(--background) 55%, transparent) 42%,',
+  'color-mix(in srgb, var(--background) 38%, transparent) 58%,',
+  'color-mix(in srgb, var(--background) 22%, transparent) 74%,',
+  'color-mix(in srgb, var(--background) 8%, transparent) 88%,',
   'transparent 100%)',
 ].join(' ')
 
