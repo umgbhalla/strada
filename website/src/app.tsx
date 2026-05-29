@@ -23,6 +23,7 @@ import { env } from 'cloudflare:workers'
 import { initStrada, captureException, trace, getLogger } from '@strada.sh/sdk'
 import { Button } from './components/ui/button.tsx'
 import { DeviceActionButtons } from './components/device-action-buttons.tsx'
+import { StradaLogo } from './components/strada-logo.tsx'
 import { api } from './api.ts'
 import { getAuth, getDb, getSession, requireSession } from './db.ts'
 import { checkAlerts } from './alert-check.ts'
@@ -504,7 +505,7 @@ export const app = new Spiceflow({ tracer })
         </Head>
         <section className="flex w-full max-w-2xl flex-col gap-8">
           <div className="flex flex-col gap-4">
-            <img src="/holocron-api/ai-logo/strada.jpeg" alt="Strada" className="h-8 w-auto self-start" />
+              <StradaLogo className="h-8 w-auto self-start" />
             <p className="text-base leading-7 text-muted-foreground">
               The web dashboard is in progress. For now, use the Strada CLI to inspect
               issues, logs, traces, and analytics from your terminal.
@@ -540,7 +541,7 @@ export const app = new Spiceflow({ tracer })
           title="Sign in"
         >
           <div className="flex flex-col gap-4 items-center text-center">
-            <img src="/holocron-api/ai-logo/strada.jpeg" alt="Strada" className="h-10 w-auto" />
+            <StradaLogo className="h-10 w-auto" />
             <p className="text-sm text-muted-foreground">
               Sign in to manage your observability projects.
             </p>
@@ -566,7 +567,7 @@ export const app = new Spiceflow({ tracer })
             title="CLI login"
           >
             <div className="flex flex-col gap-4 items-center text-center">
-              <img src="/holocron-api/ai-logo/strada.jpeg" alt="Strada" className="h-10 w-auto" />
+              <StradaLogo className="h-10 w-auto" />
               <p className="text-sm text-muted-foreground">
                 Open this page from the CLI login flow with a valid device code.
               </p>
@@ -584,7 +585,7 @@ export const app = new Spiceflow({ tracer })
             title="Invalid device code"
           >
             <div className="flex flex-col gap-4 items-center text-center">
-              <img src="/holocron-api/ai-logo/strada.jpeg" alt="Strada" className="h-10 w-auto" />
+              <StradaLogo className="h-10 w-auto" />
               <p className="text-sm text-muted-foreground">
                 That device code is invalid or expired.
               </p>
@@ -628,7 +629,7 @@ export const app = new Spiceflow({ tracer })
           title="CLI login"
         >
           <div className="flex flex-col gap-4 items-center text-center">
-            <img src="/holocron-api/ai-logo/strada.jpeg" alt="Strada" className="h-10 w-auto" />
+            <StradaLogo className="h-10 w-auto" />
             {status === 'approved'
               ? (
                   <>
