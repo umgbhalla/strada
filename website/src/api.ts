@@ -249,6 +249,7 @@ const tracer = trace.getTracer('strada-website-api')
 const logger = getLogger('strada-website-api')
 
 export const api = new Spiceflow({ tracer })
+  .get('/api/v0/health', () => ({ ok: true }))
   .route({
       method: 'POST',
       path: '/api/v0/orgs',

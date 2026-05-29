@@ -83,7 +83,7 @@ Do not pass `--latest`; `pnpm update` without it respects the existing version r
 pnpm --dir website deploy
 pnpm --dir otel-collector deploy
 
-# 2. Verify preview works (load the page, check /api/health, test ingest)
+# 2. Verify preview works (load the page, check /api/v0/health, test ingest)
 
 # 3. Deploy production (runs migration + build + deploy)
 pnpm --dir website deploy:prod
