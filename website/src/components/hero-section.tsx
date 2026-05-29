@@ -25,14 +25,14 @@ function GitHubIcon({ className }: { className?: string }) {
 
 const TOP_GRADIENT = [
   'linear-gradient(to bottom,',
-  'var(--background) 0%,',
-  'color-mix(in srgb, var(--background) 92%, transparent) 8%,',
-  'color-mix(in srgb, var(--background) 78%, transparent) 16%,',
-  'color-mix(in srgb, var(--background) 60%, transparent) 26%,',
-  'color-mix(in srgb, var(--background) 40%, transparent) 38%,',
-  'color-mix(in srgb, var(--background) 20%, transparent) 52%,',
-  'color-mix(in srgb, var(--background) 8%, transparent) 68%,',
-  'transparent 85%)',
+  'color-mix(in srgb, var(--background) 55%, transparent) 0%,',
+  'color-mix(in srgb, var(--background) 48%, transparent) 12%,',
+  'color-mix(in srgb, var(--background) 40%, transparent) 26%,',
+  'color-mix(in srgb, var(--background) 30%, transparent) 42%,',
+  'color-mix(in srgb, var(--background) 20%, transparent) 58%,',
+  'color-mix(in srgb, var(--background) 10%, transparent) 74%,',
+  'color-mix(in srgb, var(--background) 4%, transparent) 88%,',
+  'transparent 100%)',
 ].join(' ')
 
 const BOTTOM_GRADIENT = [
@@ -63,9 +63,9 @@ export function HeroSection() {
           <source src='/hero-bg.mp4' type='video/mp4' />
         </video>
 
-        {/* Top gradient */}
+        {/* Top gradient — lower starting alpha (covers less) but taller fade */}
         <div
-          className='absolute top-0 inset-x-0 h-[70%] z-1 pointer-events-none'
+          className='absolute top-0 inset-x-0 h-[85%] z-1 pointer-events-none'
           style={{ background: TOP_GRADIENT }}
         />
 
