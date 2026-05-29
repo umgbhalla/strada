@@ -38,12 +38,13 @@ const TOP_GRADIENT = [
 const BOTTOM_GRADIENT = [
   'linear-gradient(to top,',
   'var(--background) 0%,',
-  'color-mix(in srgb, var(--background) 90%, transparent) 10%,',
-  'color-mix(in srgb, var(--background) 70%, transparent) 20%,',
-  'color-mix(in srgb, var(--background) 45%, transparent) 35%,',
-  'color-mix(in srgb, var(--background) 20%, transparent) 50%,',
-  'color-mix(in srgb, var(--background) 8%, transparent) 65%,',
-  'transparent 80%)',
+  'color-mix(in srgb, var(--background) 88%, transparent) 14%,',
+  'color-mix(in srgb, var(--background) 70%, transparent) 28%,',
+  'color-mix(in srgb, var(--background) 50%, transparent) 42%,',
+  'color-mix(in srgb, var(--background) 32%, transparent) 56%,',
+  'color-mix(in srgb, var(--background) 16%, transparent) 70%,',
+  'color-mix(in srgb, var(--background) 6%, transparent) 86%,',
+  'transparent 100%)',
 ].join(' ')
 
 export function HeroSection() {
@@ -68,9 +69,9 @@ export function HeroSection() {
           style={{ background: TOP_GRADIENT }}
         />
 
-        {/* Bottom gradient */}
+        {/* Bottom gradient — taller and softer fade into the page background */}
         <div
-          className='absolute bottom-0 inset-x-0 h-[40%] z-1 pointer-events-none'
+          className='absolute bottom-0 inset-x-0 h-[60%] z-1 pointer-events-none'
           style={{ background: BOTTOM_GRADIENT }}
         />
 
