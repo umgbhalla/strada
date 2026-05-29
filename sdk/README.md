@@ -938,12 +938,37 @@ The SDK exposes:
 - `flush()` → flush buffered telemetry without tearing down the SDK
 - `shutdown()` → flush and shut down the SDK/providers
 
-On **Node.js**:
+On **Node.js**, the SDK registers process handlers so buffered telemetry is not lost on exit:
 
 - `uncaughtException` captures the error, flushes logs + traces + metrics, then exits
 - `SIGTERM` / `SIGINT` call `shutdown()`
+- `beforeExit` calls `flush()` for **natural** exits (event loop drains, a CLI calls `process.exit()` from a later tick, or a short-lived script finishes). This is the case that signals miss
 
 - `telemetry.metrics` is currently only meaningful on Node.js. Workers do not configure a metric exporter; `metrics.getMeter()` returns a noop on Workers
+
+#### Process lifetime and span export
+
+Spans only export once they **end** and the batch processor flushes (the ~5s timer, a full batch, a registered process handler, or an explicit `flush()`). This matters for short-lived or externally-killed processes:
+
+| Exit path | Buffered telemetry flushed? |
+| --- | --- |
+| Event loop drains naturally | Yes, via `beforeExit` |
+| `SIGTERM` / `SIGINT` | Yes, via `shutdown()` |
+| `uncaughtException` | Yes, then exits |
+| `process.exit()` in the same synchronous tick | Only what already flushed; `beforeExit` does not fire on an immediate `process.exit()` |
+| `SIGKILL` (`kill -9`) | No. The OS terminates immediately; nothing can run |
+
+If a parent process kills the SDK process with `SIGKILL`, or you call `process.exit()` right after emitting telemetry, the last buffered spans/logs are lost. For those cases, call `flush()` explicitly at a controlled boundary (for example right after an important span ends), or lower `telemetry.traces.scheduledDelayMillis` so the batch timer fires sooner.
+
+```ts
+import { startSpan, flush } from "@strada.sh/sdk"
+
+await startSpan({ name: "critical.op" }, async (span) => {
+  // ... important work ...
+})
+// guarantee export even if this process is killed seconds later
+await flush()
+```
 
 On **Cloudflare Workers**:
 

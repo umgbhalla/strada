@@ -430,6 +430,25 @@ export function initStrada(options: StradaOptions): void {
   };
   process.on("SIGTERM", shutdownHandler);
   process.on("SIGINT", shutdownHandler);
+
+  // Flush on natural process exit. SIGTERM/SIGINT are handled above, but a
+  // process can also end without a signal: the event loop drains, a CLI calls
+  // process.exit(), or a short-lived script finishes. In those cases buffered
+  // spans/logs/metrics in the batch processors would be lost. `beforeExit`
+  // fires on natural exit and (unlike `exit`) can run async work, so we flush
+  // here. It does not fire on process.exit() or signals, and it cannot fire on
+  // SIGKILL — that case is unflushable by design.
+  //
+  // `beforeExit` can fire repeatedly if a handler keeps the loop alive, so we
+  // guard with a one-shot flag and remove the listener to avoid a flush loop.
+  let beforeExitFlushed = false;
+  const beforeExitHandler = () => {
+    if (beforeExitFlushed) return;
+    beforeExitFlushed = true;
+    process.removeListener("beforeExit", beforeExitHandler);
+    flush().catch(() => {});
+  };
+  process.on("beforeExit", beforeExitHandler);
 }
 
 // ---------------------------------------------------------------------------
