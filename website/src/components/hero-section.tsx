@@ -5,9 +5,11 @@
 // The source video is a colorful holographic radar (cyan + red-orange UI) on a
 // dark blue-black background, authored for dark mode. In light mode we flip the
 // dark background to light with `invert`, but invert also flips every hue
-// (cyan -> red, producing a pink cast). `hue-rotate-180` rotates the hues back
-// so the UI keeps its original cyan/red palette while the background turns light.
-// Dark mode shows the video untouched (`dark:invert-0 dark:hue-rotate-0`).
+// (cyan -> red, producing a pink cast). A hue rotation corrects this: 180deg
+// restores the exact original palette, and a bit more pushes the contour lines
+// toward a soft light-blue that matches the brand. `hue-rotate-200` lands on
+// light-blue lines on a light background. Dark mode shows the video untouched
+// (`dark:invert-0 dark:hue-rotate-0`).
 'use client'
 
 import { Link } from 'spiceflow/react'
@@ -55,7 +57,7 @@ export function HeroSection() {
           loop
           playsInline
           poster='/hero-bg-poster.jpg'
-          className='w-full invert hue-rotate-180 dark:invert-0 dark:hue-rotate-0'
+          className='w-full invert hue-rotate-[200deg] dark:invert-0 dark:hue-rotate-0'
         >
           <source src='/hero-bg.mp4' type='video/mp4' />
         </video>
