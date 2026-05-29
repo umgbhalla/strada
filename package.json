@@ -26,6 +26,11 @@
       "injected": true
     }
   },
+  "pnpm": {
+    "overrides": {
+      "spiceflow": "1.26.0-rsc.2"
+    }
+  },
   "devDependencies": {
     "@changesets/cli": "^2.30.0",
     "oxfmt": "^0.42.0",

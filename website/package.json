@@ -54,7 +54,7 @@
     "react-dom": "^19.2.6",
     "recharts": "^3.8.1",
     "safe-mdx": "^1.11.0",
-    "spiceflow": "1.26.0-rsc.0",
+    "spiceflow": "1.26.0-rsc.2",
     "strada": "workspace:^",
     "string-dedent": "^3.0.2",
     "tailwind-merge": "^3.5.0",

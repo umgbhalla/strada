@@ -64,7 +64,7 @@
     "errore": "^0.14.1",
     "goke": "^6.10.0",
     "react": "19.2.6",
-    "spiceflow": "1.26.0-rsc.0",
+    "spiceflow": "1.26.0-rsc.2",
     "string-dedent": "^3.0.2",
     "termcast": "*",
     "zod": "^4.4.3",
