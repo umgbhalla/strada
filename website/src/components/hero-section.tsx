@@ -71,7 +71,7 @@ export function HeroSection() {
 
         {/* Bottom gradient — taller and softer fade into the page background */}
         <div
-          className='absolute bottom-0 inset-x-0 h-[60%] z-1 pointer-events-none'
+          className='absolute bottom-0 inset-x-0 h-[80%] z-1 pointer-events-none'
           style={{ background: BOTTOM_GRADIENT }}
         />
 
