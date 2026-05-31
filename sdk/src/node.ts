@@ -14,9 +14,12 @@
  * Vercel exposes waitUntil via globalThis[Symbol.for('@vercel/request-context')].
  */
 
-import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
+// Trace + log exporters come from @strada.sh/otlp-json (JSON-only, no
+// protobufjs) so the whole SDK shares one exporter implementation. The metrics
+// exporter is still the official one — node.ts never runs under workerd, so its
+// protobuf transitive dep is harmless here.
+import { OTLPTraceExporter, OTLPLogExporter } from "@strada.sh/otlp-json";
 import { OTLPMetricExporter } from "@opentelemetry/exporter-metrics-otlp-http";
-import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-http";
 import { MeterProvider, PeriodicExportingMetricReader } from "@opentelemetry/sdk-metrics";
 import {
   type BatchLogRecordProcessorBrowserConfig,

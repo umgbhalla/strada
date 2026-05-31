@@ -23,8 +23,14 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { waitUntil } from "cloudflare:workers";
 
-import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
-import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-http";
+// OTLP/HTTP JSON exporters come from @strada.sh/otlp-json, NOT from
+// @opentelemetry/exporter-{trace,logs}-otlp-http. The official exporters pull
+// in @opentelemetry/otlp-transformer -> protobufjs (via a barrel re-export of
+// the protobuf serializers), and protobufjs's @protobufjs/inquire does a bare
+// require() that crashes under workerd (`ReferenceError: moduleName is not
+// defined`). The vendored package only contains the JSON serialization path
+// plus a tiny fetch-based exporter, so protobuf never enters the bundle.
+import { OTLPTraceExporter, OTLPLogExporter } from "@strada.sh/otlp-json";
 import {
   LoggerProvider,
   BatchLogRecordProcessor,

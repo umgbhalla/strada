@@ -27,8 +27,8 @@ import {
   LoggerProvider,
 } from "@opentelemetry/sdk-logs";
 import type { LogRecordProcessor } from "@opentelemetry/sdk-logs";
-import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
-import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-http";
+// JSON-only OTLP exporters (no protobufjs) — see @strada.sh/otlp-json.
+import { OTLPTraceExporter, OTLPLogExporter } from "@strada.sh/otlp-json";
 import { resourceFromAttributes } from "@opentelemetry/resources";
 import { logs } from "@opentelemetry/api-logs";
 import type { Logger } from "@opentelemetry/api-logs";

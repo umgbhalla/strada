@@ -1,0 +1,169 @@
+/*
+ * Vendored from @opentelemetry/otlp-transformer (JSON path only).
+ * Source: https://github.com/open-telemetry/opentelemetry-js/blob/v0.214.0/experimental/packages/otlp-transformer/src/trace/internal.ts
+ * Copyright The OpenTelemetry Authors — SPDX-License-Identifier: Apache-2.0
+ */
+
+import type { Link } from '@opentelemetry/api'
+import type { Resource } from '@opentelemetry/resources'
+import type { ReadableSpan, TimedEvent } from '@opentelemetry/sdk-trace-base'
+import type { Encoder } from '../common/utils.ts'
+import {
+  createInstrumentationScope,
+  createResource,
+  toAttributes,
+} from '../common/internal.ts'
+import type {
+  EStatusCode,
+  IEvent,
+  IExportTraceServiceRequest,
+  ILink,
+  IResourceSpans,
+  IScopeSpans,
+  ISpan,
+} from './internal-types.ts'
+
+// Span flags constants matching the OTLP specification
+const SPAN_FLAGS_CONTEXT_HAS_IS_REMOTE_MASK = 0x100
+const SPAN_FLAGS_CONTEXT_IS_REMOTE_MASK = 0x200
+
+function buildSpanFlagsFrom(traceFlags: number, isRemote?: boolean): number {
+  // low 8 bits are W3C TraceFlags (e.g., sampled)
+  let flags = (traceFlags & 0xff) | SPAN_FLAGS_CONTEXT_HAS_IS_REMOTE_MASK
+  if (isRemote) {
+    flags |= SPAN_FLAGS_CONTEXT_IS_REMOTE_MASK
+  }
+  return flags
+}
+
+export function sdkSpanToOtlpSpan(span: ReadableSpan, encoder: Encoder): ISpan {
+  const ctx = span.spanContext()
+  const status = span.status
+  const parentSpanId = span.parentSpanContext?.spanId
+    ? encoder.encodeSpanContext(span.parentSpanContext?.spanId)
+    : undefined
+  return {
+    traceId: encoder.encodeSpanContext(ctx.traceId),
+    spanId: encoder.encodeSpanContext(ctx.spanId),
+    parentSpanId: parentSpanId,
+    traceState: ctx.traceState?.serialize(),
+    name: span.name,
+    // Span kind is offset by 1 because the API does not define a value for unset
+    kind: span.kind == null ? 0 : span.kind + 1,
+    startTimeUnixNano: encoder.encodeHrTime(span.startTime),
+    endTimeUnixNano: encoder.encodeHrTime(span.endTime),
+    attributes: toAttributes(span.attributes, encoder),
+    droppedAttributesCount: span.droppedAttributesCount,
+    events: span.events.map((event) => toOtlpSpanEvent(event, encoder)),
+    droppedEventsCount: span.droppedEventsCount,
+    status: {
+      // API and proto enums share the same values
+      code: status.code as unknown as EStatusCode,
+      message: status.message,
+    },
+    links: span.links.map((link) => toOtlpLink(link, encoder)),
+    droppedLinksCount: span.droppedLinksCount,
+    flags: buildSpanFlagsFrom(ctx.traceFlags, span.parentSpanContext?.isRemote),
+  }
+}
+
+export function toOtlpLink(link: Link, encoder: Encoder): ILink {
+  return {
+    attributes: link.attributes ? toAttributes(link.attributes, encoder) : [],
+    spanId: encoder.encodeSpanContext(link.context.spanId),
+    traceId: encoder.encodeSpanContext(link.context.traceId),
+    traceState: link.context.traceState?.serialize(),
+    droppedAttributesCount: link.droppedAttributesCount || 0,
+    flags: buildSpanFlagsFrom(link.context.traceFlags, link.context.isRemote),
+  }
+}
+
+export function toOtlpSpanEvent(timedEvent: TimedEvent, encoder: Encoder): IEvent {
+  return {
+    attributes: timedEvent.attributes
+      ? toAttributes(timedEvent.attributes, encoder)
+      : [],
+    name: timedEvent.name,
+    timeUnixNano: encoder.encodeHrTime(timedEvent.time),
+    droppedAttributesCount: timedEvent.droppedAttributesCount || 0,
+  }
+}
+
+export function createExportTraceServiceRequest(
+  spans: ReadableSpan[],
+  encoder: Encoder,
+): IExportTraceServiceRequest {
+  return {
+    resourceSpans: spanRecordsToResourceSpans(spans, encoder),
+  }
+}
+
+function createResourceMap(readableSpans: ReadableSpan[]) {
+  const resourceMap: Map<Resource, Map<string, ReadableSpan[]>> = new Map()
+  for (const record of readableSpans) {
+    let ilsMap = resourceMap.get(record.resource)
+
+    if (!ilsMap) {
+      ilsMap = new Map()
+      resourceMap.set(record.resource, ilsMap)
+    }
+
+    const instrumentationScopeKey = `${record.instrumentationScope.name}@${
+      record.instrumentationScope.version || ''
+    }:${record.instrumentationScope.schemaUrl || ''}`
+    let records = ilsMap.get(instrumentationScopeKey)
+
+    if (!records) {
+      records = []
+      ilsMap.set(instrumentationScopeKey, records)
+    }
+
+    records.push(record)
+  }
+
+  return resourceMap
+}
+
+function spanRecordsToResourceSpans(
+  readableSpans: ReadableSpan[],
+  encoder: Encoder,
+): IResourceSpans[] {
+  const resourceMap = createResourceMap(readableSpans)
+  const out: IResourceSpans[] = []
+
+  const entryIterator = resourceMap.entries()
+  let entry = entryIterator.next()
+  while (!entry.done) {
+    const [resource, ilmMap] = entry.value
+    const scopeResourceSpans: IScopeSpans[] = []
+    const ilmIterator = ilmMap.values()
+    let ilmEntry = ilmIterator.next()
+    while (!ilmEntry.done) {
+      const scopeSpans = ilmEntry.value
+      const first = scopeSpans[0]
+      if (first) {
+        const spans = scopeSpans.map((readableSpan) =>
+          sdkSpanToOtlpSpan(readableSpan, encoder),
+        )
+
+        scopeResourceSpans.push({
+          scope: createInstrumentationScope(first.instrumentationScope),
+          spans: spans,
+          schemaUrl: first.instrumentationScope.schemaUrl,
+        })
+      }
+      ilmEntry = ilmIterator.next()
+    }
+    const processedResource = createResource(resource, encoder)
+    const transformedSpans: IResourceSpans = {
+      resource: processedResource,
+      scopeSpans: scopeResourceSpans,
+      schemaUrl: processedResource.schemaUrl,
+    }
+
+    out.push(transformedSpans)
+    entry = entryIterator.next()
+  }
+
+  return out
+}
