@@ -65,6 +65,32 @@ async function postOtlpJson(
   }
 }
 
+/**
+ * Serialize a batch and POST it, routing every outcome (including a synchronous
+ * serialization throw, e.g. a BigInt attribute that JSON.stringify rejects) to
+ * resultCallback. resultCallback is always invoked exactly once.
+ */
+function exportBatch<T>(
+  config: OtlpJsonExporterConfig,
+  serialize: (items: T[]) => Uint8Array | undefined,
+  items: T[],
+  signalLabel: string,
+  resultCallback: (result: ExportResult) => void,
+): void {
+  let body: Uint8Array | undefined
+  try {
+    body = serialize(items)
+  } catch (err) {
+    const error = err instanceof Error ? err : new Error(String(err))
+    diag.warn(`OTLP ${signalLabel} serialize error: ${error.message}`)
+    resultCallback({ code: ExportResultCode.FAILED, error })
+    return
+  }
+  // postOtlpJson never rejects — it converts all errors into a resolved
+  // ExportResult — so .then(resultCallback) invokes the callback exactly once.
+  void postOtlpJson(config, body, signalLabel).then(resultCallback)
+}
+
 /** OTLP/HTTP JSON exporter for spans. */
 export class OTLPTraceExporter implements SpanExporter {
   constructor(private readonly config: OtlpJsonExporterConfig) {}
@@ -73,8 +99,13 @@ export class OTLPTraceExporter implements SpanExporter {
     spans: ReadableSpan[],
     resultCallback: (result: ExportResult) => void,
   ): void {
-    const body = JsonTraceSerializer.serializeRequest(spans)
-    void postOtlpJson(this.config, body, 'traces').then(resultCallback)
+    exportBatch(
+      this.config,
+      JsonTraceSerializer.serializeRequest,
+      spans,
+      'traces',
+      resultCallback,
+    )
   }
 
   async shutdown(): Promise<void> {}
@@ -92,9 +123,21 @@ export class OTLPLogExporter implements LogRecordExporter {
     logs: ReadableLogRecord[],
     resultCallback: (result: ExportResult) => void,
   ): void {
-    const body = JsonLogsSerializer.serializeRequest(logs)
-    void postOtlpJson(this.config, body, 'logs').then(resultCallback)
+    exportBatch(
+      this.config,
+      JsonLogsSerializer.serializeRequest,
+      logs,
+      'logs',
+      resultCallback,
+    )
   }
 
   async shutdown(): Promise<void> {}
+
+  // Strada's flush model (Workers waitUntil, Node fatal-exit, public flush())
+  // calls LoggerProvider.forceFlush(), which delegates to this. captureException
+  // ships as logs, so this method must exist or buffered errors get dropped.
+  forceFlush(): Promise<void> {
+    return Promise.resolve()
+  }
 }
