@@ -40,8 +40,10 @@ async function postOtlpJson(
     const response = await fetch(config.url, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
+        // config.headers first, then Content-Type last so callers can't
+        // override the required OTLP JSON content type (matches OTel).
         ...config.headers,
+        'Content-Type': 'application/json',
       },
       // Uint8Array is a valid BodyInit at runtime in Node 18+, browsers, and
       // workerd; the DOM lib's BodyInit type omits it, so cast through.

@@ -31,10 +31,15 @@ export function createInstrumentationScope(scope?: {
 }
 
 export function createResource(resource: Resource, encoder: Encoder): OtlpResource {
-  return {
+  const result: OtlpResource = {
     attributes: toAttributes(resource.attributes, encoder),
     droppedAttributesCount: 0,
   }
+
+  const schemaUrl = resource.schemaUrl
+  if (schemaUrl && schemaUrl !== '') result.schemaUrl = schemaUrl
+
+  return result
 }
 
 export function toAttributes(attributes: Attributes, encoder: Encoder): IKeyValue[] {

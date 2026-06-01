@@ -1,0 +1,18 @@
+@strada.sh/otlp-json
+
+This package contains code vendored from the OpenTelemetry JavaScript project
+(@opentelemetry/otlp-transformer), which is licensed under the Apache License,
+Version 2.0. Each vendored source file carries a header comment with a link to
+its exact upstream source at:
+
+    https://github.com/open-telemetry/opentelemetry-js (tag v0.214.0)
+    experimental/packages/otlp-transformer/src/
+
+Copyright The OpenTelemetry Authors.
+Licensed under the Apache License, Version 2.0:
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+The original-authored portions of this package (the fetch-based exporter in
+src/exporter.ts, the package wiring, and modifications to the vendored files)
+are licensed under the MIT License.

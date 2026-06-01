@@ -2,7 +2,7 @@
   "name": "@strada.sh/otlp-json",
   "version": "0.0.1",
   "description": "Minimal JSON-only OTLP/HTTP exporters for traces and logs. Vendored from @opentelemetry/otlp-transformer (JSON path only) plus a tiny fetch-based exporter. No protobuf, no metrics — safe for Cloudflare Workers / workerd.",
-  "license": "MIT",
+  "license": "(MIT AND Apache-2.0)",
   "author": "remorses <beats.by.morse@gmail.com>",
   "repository": {
     "type": "git",
@@ -26,7 +26,8 @@
   },
   "files": [
     "src",
-    "dist"
+    "dist",
+    "NOTICE"
   ],
   "scripts": {
     "build": "tsc",
