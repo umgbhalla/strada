@@ -7,6 +7,9 @@
     <br/>
 </div>
 
+> [!WARNING]
+> Strada is still a work in progress. Breaking changes may happen at any time. If you run into any issues, please [open a GitHub issue](https://github.com/remorses/strada/issues/new).
+
 Strada replaces Sentry, Datadog, and Google Analytics with a single open-source stack built on [OpenTelemetry](https://opentelemetry.io). Your data lives in **your own ClickHouse database**. You query it with **SQL from the CLI**. Agents can monitor, debug, and fix issues end-to-end without touching a browser.
 
 ```
