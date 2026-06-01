@@ -36,15 +36,15 @@
           {
             "group": "Getting Started",
             "icon": "lucide:rocket",
-            "pages": ["index", "pages/sdk"]
+            "pages": ["index", "sdk/README"]
           },
           {
             "group": "Guides",
             "icon": "lucide:map",
             "pages": [
-              "pages/browser-analytics",
-              "pages/cloudflare-workers-otel",
-              "pages/tinybird-pricing"
+              "docs/browser-analytics",
+              "docs/cloudflare-workers-otel-export",
+              "docs/tinybird-pricing"
             ]
           }
         ]
