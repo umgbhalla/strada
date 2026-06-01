@@ -68,23 +68,23 @@ Sentry is 4.8× larger.
 ## How it works
 
 ```diagram
-   Browser SDK                       Node SDK                       Workers SDK
-   pageviews, track, errors          traces, logs, metrics          captureException
-        │                                │                                │
-        │          OTLP HTTP/JSON        │         OTLP HTTP/JSON         │
-        ▼                                ▼                                ▼
-   ┌───────────────────────────────────────────────────────────────────────────────────┐
-   │                            Strada OTLP Collector                                    │
-   │                        (Cloudflare Worker, open source)                             │
-   └──────┬──────────────────────┬──────────────────────┬──────────────────────┬────────┘
-          │                      │                      │                      │
-          ▼                      ▼                      ▼                      ▼
-     otel_traces             otel_logs            otel_metrics            otel_errors
-          │                      │                                            ▲
-          │                      └──────────► extract exceptions ──────────────┘
-          ▼
-     otel_analytics_pages    ◄──────────── materialized views
-     otel_analytics_sessions
+   Browser SDK                  Node SDK                   Workers SDK
+   pageviews, track, errors     traces, logs, metrics      captureException
+        │                            │                            │
+        │      OTLP HTTP/JSON        │      OTLP HTTP/JSON         │
+        ▼                            ▼                            ▼
+   ┌───────────────────────────────────────────────────────────────────────┐
+   │                      Strada OTLP Collector                            │
+   │                 (Cloudflare Worker, open source)                      │
+   └────────┬─────────────────┬──────────────────┬──────────────────┬──────┘
+            │                 │                  │                  │
+            ▼                 ▼                  ▼                  ▼
+       otel_traces        otel_logs        otel_metrics       otel_errors
+            │                 │                                      ▲
+            │                 └─────────────▶ extract exceptions ────┘
+            ▼
+       otel_analytics_pages       ◀────────── materialized views
+       otel_analytics_sessions
 ```
 
 Every feature maps to a standard **OpenTelemetry signal**:
