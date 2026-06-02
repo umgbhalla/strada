@@ -71,7 +71,13 @@ export interface StradaOptions {
   projectId: string;
   /** service.name resource attribute */
   service: string;
-  /** Set to false to install local OTel providers without sending data to ingest. */
+  /**
+   * Whether to export telemetry to the ingest endpoint.
+   *
+   * Defaults to `false` in dev mode (`import.meta.hot` is truthy, e.g. Vite,
+   * Webpack HMR, RSC dev servers) and `true` otherwise. Set explicitly to
+   * override the default in either direction.
+   */
   enabled?: boolean;
   /** Override the ingest endpoint. Defaults to https://{projectId}-ingest.strada.sh */
   endpoint?: string;
@@ -426,9 +432,13 @@ export function applyBeforeSend(
 // Dev mode detection and fast-flush defaults
 // ---------------------------------------------------------------------------
 // When import.meta.hot is truthy (Vite, Webpack HMR, RSC dev servers),
-// batch processors use aggressive flush intervals so logs, traces, and
-// errors appear almost instantly during development. User-provided
-// telemetry options always take highest priority over dev defaults.
+// telemetry export is disabled by default so development doesn't send
+// data to the ingest endpoint. Users can override with `enabled: true`.
+//
+// When export IS enabled in dev mode (explicit opt-in), batch processors
+// use aggressive flush intervals so logs, traces, and errors appear
+// almost instantly. User-provided telemetry options always take highest
+// priority over dev defaults.
 //
 // Priority chain:  user telemetry options > dev defaults > OTel defaults
 
@@ -770,7 +780,11 @@ export function resolveIngestHeaders(options: StradaOptions): Record<string, str
 }
 
 export function shouldExportTelemetry(options: StradaOptions): boolean {
-  return options.enabled !== false;
+  if (options.enabled !== undefined) return options.enabled;
+  // Disable export by default in dev mode (import.meta.hot present).
+  // Users can override with `enabled: true` to force export during development.
+  if (isDevMode()) return false;
+  return true;
 }
 
 export const BAGGAGE_SESSION_ID = "strada.session.id";
