@@ -5,6 +5,131 @@ description: How Tinybird pricing works for OTel observability workloads, cost e
 icon: lucide:credit-card
 ---
 
-import TinybirdPricing from '../../../docs/tinybird-pricing.md'
+# Tinybird Pricing Breakdown
 
-<TinybirdPricing />
+Tinybird bills on a **fixed plan fee + vCPU overage** model. You pick a plan that includes a baseline vCPU allocation, then pay overage only when usage exceeds that baseline per second. Both reads (queries) and writes (ingestion, MV processing) consume vCPU time. There is no per-query pricing, no per-GB-ingested pricing, and no per-row pricing.
+
+Sources: https://www.tinybird.co/pricing, https://www.tinybird.co/docs/forward/pricing, https://www.tinybird.co/docs/forward/pricing/shared-infrastructure, https://www.tinybird.co/docs/forward/pricing/developer
+
+## Plans overview
+
+| Plan | Base price | vCPUs | Storage included | Threads/request |
+|------|-----------|-------|-----------------|-----------------|
+| Free | $0 | 0.25 (burst 3x) | 10 GB | 1 |
+| Developer | $49+/mo | 0.5-8 | 25 GB | 1-8 |
+| SaaS | Custom | 4-32 | 500 GB+ | 4-16 |
+| Enterprise | Custom | Unlimited | Bottomless | Configurable |
+
+## What you pay for
+
+### 1. Fixed monthly base fee
+
+The **Free plan costs $0** and includes 0.25 vCPU, 10 GB storage, and 1k requests/day. No credit card required, no time limit.
+
+Paid Developer plans start at **$49/mo** (0.5 vCPU, 25 GB storage). The base fee reserves your vCPU baseline. You pay it even if you do nothing. Plans scale up to 8 vCPUs in self-service; beyond that requires SaaS or Enterprise.
+
+### 2. vCPU overages (usage-based)
+
+Each plan includes a baseline vCPU allocation (e.g. 0.5 vCPU on the smallest Developer plan). You can consume up to that many vCPU-seconds per second without overage. Usage above the baseline is billed at **$0.0002/vCPU-second**.
+
+**Both reads and writes count.** Queries, ingestion, and materialized view processing all consume vCPU time.
+
+Burst mode allows temporarily using **2x your plan's vCPU** without overage. For batch operations (populates, copies), the entire job is allowed to finish even if it exceeds the per-second limit.
+
+If nobody is querying and nothing is being ingested, **zero vCPU-seconds are consumed** beyond the baseline. No compute overage.
+
+### 3. Storage (usage-based)
+
+**$0.058/GB/month** for compressed data beyond the included amount. This is the average of daily maximum usage across all data sources.
+
+### 4. Data transfer (usage-based)
+
+- Intra-cloud (same provider + region): **$0.01/GB**
+- Inter-cloud (different provider or region): **$0.10/GB**
+- Private networking: **$0.016/GB**
+
+### 5. On-demand CPUs
+
+Temporary compute for jobs that run outside the baseline cluster (e.g. populate jobs). Billed by CPU cores and duration. Rates may vary by region.
+
+## What happens when nobody is querying
+
+You pay **only the fixed base fee (or $0 on Free) + storage**. Zero vCPU overage.
+
+For an OTel use case like Strada, you're almost never truly idle because data is continuously ingested. Every ingestion batch uses vCPU time. Materialized views firing on insert use more. But if traffic goes quiet (e.g. overnight for a dev tool), vCPU usage drops to near zero and stays well within your baseline allocation.
+
+## Cost estimates for OTel log storage
+
+Assumptions for a **typical mid-size SaaS backend** (10 microservices, ~5000 RPM):
+- ~50M log records/day
+- Average compressed size per log record: ~200 bytes (ClickHouse ZSTD compression; raw OTel JSON is ~1-2 KB per record with `ResourceAttributes`, `LogAttributes` maps, `Body`, `TraceId`, etc.)
+- ~10 GB/day compressed storage growth for logs alone
+
+### Logs only
+
+| Retention | Storage | Monthly cost (storage only) |
+|-----------|---------|---------------------------|
+| 1 month | ~300 GB | **$17/mo** |
+| 3 months | ~900 GB | **$52/mo** |
+| 6 months | ~1.8 TB | **$104/mo** |
+
+### Full OTel stack (logs + traces + metrics + errors)
+
+Traces and metrics typically add 2-3x the log volume.
+
+| Retention | Total storage | Monthly cost (storage only) |
+|-----------|--------------|---------------------------|
+| 1 month | ~700 GB | **$41/mo** |
+| 3 months | ~2.1 TB | **$122/mo** |
+| 6 months | ~4.2 TB | **$244/mo** |
+
+These are **storage costs only**. Add the base plan fee and vCPU overage from continuous ingestion + MV processing + user queries on top.
+
+### Comparison to Datadog
+
+Datadog charges **$0.10/GB ingested** for logs plus **$1.70/million events** for indexing. For 50M logs/day at ~1 KB each = ~50 GB/day ingested = ~$150/day = **~$4,500/mo** just for log ingestion. Tinybird storage is dramatically cheaper. But Tinybird doesn't include the Datadog UI, alerting, or APM features.
+
+## Auto-deleting old data (TTL)
+
+Tinybird supports ClickHouse's native **TTL** (Time To Live) per data source. You set `ENGINE_TTL` in each `.datasource` file independently. ClickHouse enforces the TTL during background merges automatically. No cron jobs needed.
+
+### Per-table TTL example
+
+```
+# otel_logs.datasource — delete logs after 30 days
+ENGINE_TTL "Timestamp + toIntervalDay(30)"
+
+# otel_traces.datasource — keep traces for 90 days  
+ENGINE_TTL "Timestamp + toIntervalDay(90)"
+
+# otel_errors.datasource — keep errors for 180 days
+ENGINE_TTL "Timestamp + toIntervalDay(180)"
+
+# otel_metrics_gauge.datasource — keep metrics for 90 days
+ENGINE_TTL "TimeUnix + toIntervalDay(90)"
+```
+
+Each table has its own TTL. This lets you delete bulky logs sooner (30 days) while keeping lightweight error summaries and traces longer (90-180 days).
+
+You can modify TTL on an existing datasource by updating the `.datasource` file and running `tb deploy`. Tinybird treats TTL changes as automatic `ALTER` operations (no full data rewrite needed).
+
+### Recommended retention strategy for Strada
+
+| Table | Data size | Suggested TTL | Rationale |
+|-------|-----------|--------------|-----------|
+| `otel_logs` | Large (big Body strings, attribute maps) | 30 days | Logs are the bulk of storage; rarely needed after a month |
+| `otel_traces` | Medium | 90 days | Traces are useful for debugging recent issues |
+| `otel_errors` | Small (denormalized summaries) | 180 days | Error trends matter over longer periods |
+| `otel_metrics_*` | Small per row, high volume | 90 days | Metrics are compact; 90 days covers most trend analysis |
+
+With 30-day log retention and 90-day everything else, a mid-size SaaS backend would use roughly **400-500 GB total**, costing about **$23-29/mo in storage** plus the base plan fee.
+
+## Key takeaways
+
+- **Storage is cheap** ($0.058/GB/mo). Even at TB scale, it's a fraction of Datadog/Sentry.
+- **Compute is per-second, not per-minute.** vCPU overage is $0.0002/vCPU-second above your plan's baseline. Both reads and writes count.
+- **No idle compute cost.** If nothing is running, only the base plan fee and storage are charged. No "always-on" vCPU billing.
+- **Ingestion is included.** No per-event or per-GB ingestion fee. The Events API, Kafka, S3, and all connectors are included in every plan.
+- **MV processing is negligible.** Materialized view incremental updates have near-zero compute cost for typical workloads.
+- **Per-table TTL is fully supported.** Use shorter retention for logs, longer for errors. This is the main lever for controlling storage costs.
+- **Self-hosted ClickHouse** ($150-300/mo for a small VM) is the cheapest option if you don't need Tinybird's managed infra, JWT row-level filtering, or Events API.

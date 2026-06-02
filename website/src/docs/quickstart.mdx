@@ -5,6 +5,205 @@ description: Set up Strada in a fullstack app. Server and browser tracking in on
 icon: lucide:rocket
 ---
 
-import Quickstart from '../../../docs/quickstart.md'
+# Quickstart
 
-<Quickstart />
+Wire **one Strada project** into a fullstack app so that **browser** and **server** telemetry land in the same place. The browser sends pageview spans and frontend errors; the server sends request spans, logs, and handled exceptions. Both flow to the same ClickHouse tables, correlated by `session.id` and `user.id`.
+
+```diagram
+browser code                                    server code
+  initStrada({ projectId })                        initStrada({ projectId, token })
+  (no token, anonymous)                            (token = trusted, not rate limited)
+        │                                                   │
+        ├─ pageview spans ──► /v1/traces                    ├─ request spans  ──► /v1/traces
+        ├─ frontend errors ─► /v1/logs                      ├─ app logs       ──► /v1/logs
+        └─ track() events ──► /v1/logs                      └─ captureException► /v1/logs
+                │                          baggage          │
+                └──────── session.id + user.id ────────────►┘
+                                    │
+                                    ▼
+                            Strada collector ──► otel_traces / otel_logs / otel_errors
+```
+
+The whole setup is **the same import path** (`@strada.sh/sdk`) in both runtimes. Export conditions resolve the browser build in bundlers and the Node build on the server. You never pick a runtime-specific package.
+
+## 1. Create the project
+
+```bash
+strada projects create my-app
+```
+
+This prints a **project ID** and a **server ingest token**. Keep both.
+
+- The **project ID** is public. It identifies which project telemetry belongs to.
+- The **token** is a secret. It marks ingest as trusted so it is not rate limited. **Server-side only.** Never ship it to the browser.
+
+You can create more server tokens later:
+
+```bash
+strada tokens create --scope ingest production-server
+```
+
+## 2. Install the SDK
+
+```bash
+npm install @strada.sh/sdk
+```
+
+One package, every runtime. The import path is always `@strada.sh/sdk`.
+
+## 3. Server setup
+
+Initialize Strada **before the rest of your app loads** so the global OpenTelemetry providers are wired before any request. Pass the **token** here.
+
+```ts
+import { initStrada, captureException, getLogger } from "@strada.sh/sdk"
+
+initStrada({
+  projectId: process.env.STRADA_PROJECT_ID!,
+  token: process.env.STRADA_TOKEN, // server only
+  service: "my-app",
+  environment: process.env.NODE_ENV ?? "development",
+})
+
+const logger = getLogger("api")
+
+try {
+  await chargeCard()
+} catch (error) {
+  logger.error({ message: "payment failed", error: String(error) })
+  captureException(error, { tags: { route: "/checkout" } })
+}
+```
+
+On Node, the SDK registers process handlers so buffered telemetry flushes on `beforeExit`, `SIGTERM`, `SIGINT`, and `uncaughtException`. You usually do not call `flush()` yourself. See the [SDK reference](/sdk/README) for the exit-path details.
+
+## 4. Browser setup
+
+Initialize Strada in the browser with the **same project ID** but **no token**. Browser ingest is anonymous and rate limited by design, because any token shipped to the browser would be public.
+
+```ts
+import { initStrada } from "@strada.sh/sdk"
+
+initStrada({
+  projectId: process.env.PUBLIC_STRADA_PROJECT_ID!, // public, see step 5
+  service: "my-app-browser",
+  environment: process.env.NODE_ENV ?? "development",
+  enabled: !import.meta.hot, // keep OTel local during dev/HMR
+})
+```
+
+That single call gives you, with no extra code:
+
+- a **pageview span** that restarts on SPA navigation and ends on tab close
+- **uncaught `window.error` and `unhandledrejection`** captured as exception logs
+- `session.id` and `user.id` injected into every span/log and propagated to the server
+
+Add the **Vite plugin** so every browser trace, log, and error is tagged with the exact build (git commit, branch, version):
+
+```ts
+// vite.config.ts
+import { defineConfig } from "vite"
+import { stradaVitePlugin } from "@strada.sh/sdk/vite"
+
+export default defineConfig({
+  plugins: [stradaVitePlugin()],
+})
+```
+
+## 5. Env vars: public vs secret
+
+This is the step that trips people up. The **token is a server secret**. The **project ID must be public on the browser side**, which means it needs a build-tool public prefix so the bundler inlines it into client code.
+
+| Variable | Where | Public? | Notes |
+| --- | --- | --- | --- |
+| `STRADA_TOKEN` | server only | **secret** | Never expose to the browser. Marks ingest as trusted. |
+| `STRADA_PROJECT_ID` | server | safe | Read directly from `process.env` on the server. |
+| `PUBLIC_STRADA_PROJECT_ID` | browser | safe | Same value, but **public-prefixed** so the bundler inlines it. |
+
+The prefix depends on your bundler:
+
+| Bundler / framework | Public prefix |
+| --- | --- |
+| Vite | `VITE_` (or your `envPrefix`) |
+| Next.js | `NEXT_PUBLIC_` |
+| Custom define plugin | whatever you configure, e.g. `PUBLIC_` |
+
+Pick **one** public-prefixed name for the project ID and use it in the browser `initStrada()` call. Use the plain `STRADA_PROJECT_ID` on the server.
+
+## 6. Fullstack frameworks (RSC / server-rendered)
+
+In a React Server Components app there is often **no explicit client entry file** to drop browser `initStrada()` into. The clean pattern is a **side-effect-only client module**: a `"use client"` module whose top level runs the browser setup, exposed through a component that renders nothing.
+
+```tsx
+// strada-browser.tsx
+"use client"
+
+import { initStrada, captureException } from "@strada.sh/sdk"
+import { setReactErrorHandlers } from "spiceflow/react" // or your framework's hook
+
+const projectId = process.env.PUBLIC_STRADA_PROJECT_ID
+
+if (projectId) {
+  initStrada({
+    projectId,
+    service: "my-app-browser",
+    environment: process.env.NODE_ENV ?? "development",
+    enabled: !import.meta.hot,
+  })
+
+  // Optional: capture React render errors globally, even when an
+  // ErrorBoundary swallows them. Hook name varies by framework.
+  setReactErrorHandlers({
+    onCaughtError: (error) => captureException(error, { tags: { reactHandler: "onCaughtError" } }),
+    onUncaughtError: (error) => captureException(error, { tags: { reactHandler: "onUncaughtError" } }),
+    onRecoverableError: (error) => captureException(error, { tags: { reactHandler: "onRecoverableError" } }),
+  })
+}
+
+export function StradaBrowser() {
+  return null
+}
+```
+
+Render it **once** in your root layout:
+
+```tsx
+<body>
+  <StradaBrowser />
+  {children}
+</body>
+```
+
+Why a component and not a bare `import`? In RSC, a `"use client"` module is only sent to the browser if something in the rendered tree references it. A plain `import` would run on the server and get tree-shaken from the client bundle. Rendering `<StradaBrowser />` forces the bundler to ship and **evaluate** the chunk in the browser, which runs the top-level `initStrada()`.
+
+> The chunk evaluates **during hydration**, not before first paint. Pageview spans and React error handlers work. A synchronous error thrown before hydration is not captured. If you need pre-hydration capture, use an inline `<script>` in `<head>` instead.
+
+If your framework exposes an OpenTelemetry tracer hook (for example Spiceflow's `new Spiceflow({ tracer })`), pass the SDK tracer so request spans flow to the same project:
+
+```ts
+import { trace } from "@strada.sh/sdk"
+
+const tracer = trace.getTracer("my-app")
+// pass `tracer` to your framework's constructor / config
+```
+
+## 7. Verify
+
+Trigger a request and a frontend pageview, then check the data with the CLI:
+
+```bash
+# handled and uncaught errors, grouped by fingerprint
+strada issues list -p my-app --since 1h
+
+# raw span count (browser pageviews + server requests)
+strada query "SELECT count() FROM otel_traces WHERE Timestamp >= now() - INTERVAL 1 HOUR LIMIT 1" -p my-app
+
+# errors with their service name
+strada query "SELECT ExceptionType, ExceptionMessage, ServiceName FROM otel_errors WHERE Timestamp >= now() - INTERVAL 1 HOUR ORDER BY Timestamp DESC LIMIT 10" -p my-app
+```
+
+Browser and server rows share the same project. Filter by `ServiceName` to tell them apart (`my-app` vs `my-app-browser`).
+
+## 8. User identity (optional)
+
+Once the browser knows who the user is, set the `strada_uid` cookie (JS-readable) on login. The browser SDK reads it automatically and **propagates `user.id` to the server via W3C Baggage**, so server spans and logs for that request also carry the user id. See the [SDK reference](/sdk/README) for the cookie, Better Auth plugin, and server-side `identifyUser()` snapshot details.

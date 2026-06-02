@@ -8,7 +8,7 @@
  *
  * Everything flows through standard OTel OTLP HTTP/JSON. No custom transport.
  *
- * Analytics model (from docs/browser-analytics.md):
+ * Analytics model (from website/src/docs/browser-analytics.mdx):
  * - Pageviews = spans in otel_traces (SpanName = 'pageview')
  * - Custom events = log records in otel_logs (event.name attribute)
  * - Session = one session.id per tab, stored in sessionStorage

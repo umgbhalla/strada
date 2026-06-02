@@ -5,6 +5,1297 @@ description: OpenTelemetry-first error tracking, tracing, logs, metrics, and bro
 icon: lucide:package
 ---
 
-import SdkReadme from '../../../sdk/README.md'
+# @strada.sh/sdk
 
-<SdkReadme />
+**OpenTelemetry-first error tracking, tracing, logs, metrics, and browser analytics for Strada.**
+
+Import from `@strada.sh/sdk` in every runtime. The package uses export conditions so browsers get the browser runtime, Cloudflare Workers get the Workers runtime, and servers get the Node runtime.
+
+Always import OpenTelemetry APIs from `@strada.sh/sdk`, not from `@opentelemetry/*` packages directly. The SDK is a thin wrapper around those packages and re-exports the same APIs, so `trace.getTracer()`, `logs.getLogger()`, `metrics.getMeter()`, `context`, and `propagation` work the same way while staying connected to Strada's configured providers.
+
+```ts
+import { initStrada, captureException } from "@strada.sh/sdk"
+
+initStrada({
+  service: "api",
+  projectId: "01JTHG5M7XPQR8KNCZ0W4D", // TODO: replace with your project id, get one with `strada projects create`
+  token: process.env.STRADA_TOKEN, // Server-side only. Omit this in browser apps.
+  environment: "production",
+  version: "1.0.0",
+  enabled: !import.meta.hot,
+})
+
+// Set enabled: false to keep OTel APIs local without sending data to ingest.
+// In Vite/RSC dev servers, import.meta.hot is truthy during HMR.
+
+try {
+  throw new Error("db timeout")
+} catch (error) {
+  captureException(error, {
+    tags: { route: "/checkout" },
+  })
+}
+```
+
+## Use normal OpenTelemetry APIs
+
+After `initStrada()`, the global OTel providers are configured. Use the standard OTel APIs re-exported by `@strada.sh/sdk`.
+
+```ts
+import { initStrada, startSpan, logs, metrics, SeverityNumber } from "@strada.sh/sdk"
+
+initStrada({
+  projectId: "01JTHG5M7XPQR8KNCZ0W4D",
+  token: process.env.STRADA_TOKEN,
+  service: "worker",
+})
+
+const logger = logs.getLogger("jobs")
+const meter = metrics.getMeter("jobs")
+const counter = meter.createCounter("emails.sent")
+
+await startSpan({ name: "send-email" }, async (span) => {
+  logger.emit({
+    body: "sending email",
+    severityText: "INFO",
+    severityNumber: SeverityNumber.INFO,
+  })
+  await sendEmail()
+  counter.add(1)
+})
+```
+
+## Vite release metadata
+
+Use the **Vite plugin** in browser apps so Strada can tag every trace, log, and error with the exact build that produced it. Browsers cannot read deployment platform env vars at runtime, so the plugin reads them during `vite build` and injects safe public metadata into the bundle.
+
+```ts
+// vite.config.ts
+import { defineConfig } from "vite"
+import { stradaVitePlugin } from "@strada.sh/sdk/vite"
+
+export default defineConfig({
+  plugins: [stradaVitePlugin()],
+})
+```
+
+Then initialize the browser SDK normally. You do **not** need to pass release fields manually unless you want to override the detected values.
+Do not pass `token` in browser apps. Browser ingest is anonymous and rate limited because any browser token would be public.
+
+```ts
+import { initStrada } from "@strada.sh/sdk"
+
+initStrada({
+  projectId: "01JTHG5M7XPQR8KNCZ0W4D",
+  service: "frontend",
+  environment: "production",
+})
+```
+
+The plugin uses existing platform variables when present, then falls back to local git for the commit and branch during local builds. If the platform does not provide a deployment id, Strada uses the commit SHA as `deployment.id` so every deployment still has a stable identifier.
+
+| Metadata | Platform env vars | Standard OTel resource attribute |
+| -------- | ----------------- | -------------------------------- |
+| Release/version | `STRADA_RELEASE_VERSION`, `STRADA_RELEASE`, `SENTRY_RELEASE`, `npm_package_version` | `service.version` |
+| Commit SHA | `VERCEL_GIT_COMMIT_SHA`, `RENDER_GIT_COMMIT`, `CF_PAGES_COMMIT_SHA`, `WORKERS_CI_COMMIT_SHA`, `GITHUB_SHA` | `vcs.ref.head.revision` |
+| Branch/ref | `VERCEL_GIT_COMMIT_REF`, `RENDER_GIT_BRANCH`, `CF_PAGES_BRANCH`, `WORKERS_CI_BRANCH`, `GITHUB_HEAD_REF`, `GITHUB_REF_NAME` | `vcs.ref.head.name` |
+| Deployment id | `VERCEL_DEPLOYMENT_ID`, `WORKERS_CI_BUILD_UUID`, `RENDER_INSTANCE_ID`, `FLY_MACHINE_VERSION`, `GITHUB_RUN_ID`, otherwise commit SHA | `deployment.id` |
+
+GitHub Actions sets `GITHUB_SHA`, `GITHUB_HEAD_REF`, `GITHUB_REF_NAME`, and `GITHUB_RUN_ID` automatically. For pull request workflows, `GITHUB_SHA` is usually the synthetic merge commit. If you want the PR head commit instead, pass it explicitly:
+
+```yaml
+env:
+  STRADA_RELEASE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+```
+
+You can override any value explicitly:
+
+```ts
+stradaVitePlugin({
+  version: "frontend@1.4.2",
+  releaseCommit: "9f3a12b0c45d...",
+  releaseBranch: "main",
+  deploymentId: "dpl_123",
+})
+```
+
+These are **standard OpenTelemetry resource attributes**. Strada stores them in `ResourceAttributes` for raw logs and traces. Error extraction maps `service.version` to the denormalized `Release` column, while commit and deployment metadata stay queryable through resource attributes.
+
+## User Identity
+
+Pass **`userId`** to `initStrada()` when the current user is already known. The browser SDK injects it into spans/logs/errors as `user.id` and propagates it to backend SDKs through W3C Baggage.
+
+```ts
+import { initStrada } from "@strada.sh/sdk"
+
+initStrada({
+  projectId: "01JTHG5M7XPQR8KNCZ0W4D",
+  service: "frontend",
+  userId: () => window.__APP_USER__?.id,
+})
+```
+
+When login/logout happens after initialization, call **`identifyUser()`** in the browser. Browser calls only persist `user.id` in the JS-readable `strada_uid` cookie and update in-memory context. They do not store email/name/profile data.
+
+```ts
+import { identifyUser } from "@strada.sh/sdk/browser"
+
+identifyUser({ id: user.id })
+identifyUser(null) // logout: clear cookie and in-memory user id
+```
+
+Call **`identifyUser()` from trusted server code** to replace the latest profile snapshot in `otel_users`. This still uses OTLP logs: the SDK emits `event.name = "strada.user.identify"`, the collector stores the raw event in `otel_logs`, and extracts the latest profile row into `otel_users` for SQL joins.
+
+```ts
+import { identifyUser } from "@strada.sh/sdk"
+
+identifyUser({
+  id: user.id,
+  email: user.email,
+  name: user.name,
+  image: user.image,
+  organizationId: account.id,
+  organizationName: account.name,
+})
+```
+
+Only `user.id` is stored in cookies. **Email, image, name, and organization fields** are explicit server-side profile data so PII is not copied into every telemetry row.
+
+Every server `identifyUser()` call is a **full snapshot** for that user. Pass all profile fields you want to keep, because a later call with only `{ id, image }` intentionally replaces missing fields with empty values in the latest `otel_users` row.
+
+## Default instrumentation
+
+The SDK does **not** install the OTel auto-instrumentation packages by default. It does not monkey-patch `fetch`, `XMLHttpRequest`, `http`, `express`, database clients, or `console.*`.
+
+`initStrada()` only wires OTel providers, exporters, context propagation, and a small set of Strada-owned lifecycle hooks.
+
+| Runtime | Automatic traces | Automatic logs |
+| ------- | ---------------- | -------------- |
+| **Browser** | A `pageview` span starts on `initStrada()`, restarts on SPA navigation, and ends when the tab is hidden | Uncaught `window.error` and `unhandledrejection` events are sent as exception logs |
+| **Node** | No spans are created automatically | `uncaughtException` and `unhandledRejection` are sent as exception logs |
+| **Cloudflare Workers** | No spans are created automatically | No process/global error handlers. Only explicit SDK calls send logs |
+
+Everything else is **explicit**. Use `startSpan()` for spans, `logs.getLogger().emit()` for logs, `track()` for custom event logs, and `captureException()` for handled error logs.
+
+```diagram
+initStrada()
+  ├─ browser only: span "pageview" ─────────► /v1/traces
+  ├─ browser/node error handlers ───────────► /v1/logs
+  └─ manual OTel / Strada helper calls ─────► /v1/traces or /v1/logs
+```
+
+Install optional OTel auto-instrumentation separately if you want automatic HTTP, database, document load, or interaction spans. See [Auto-instrumentation (optional)](#auto-instrumentation-optional).
+
+## Create traces and spans
+
+Use `startSpan` after `initStrada()`. It creates a span, sets it as active in the current context, and auto-ends it when the callback finishes. If the callback throws, the span is marked as ERROR and the exception is recorded automatically.
+
+```ts
+import { initStrada, startSpan } from "@strada.sh/sdk"
+
+initStrada({
+  projectId: "01JTHG5M7XPQR8KNCZ0W4D",
+  service: "api",
+})
+
+await startSpan({ name: "checkout.request" }, async (span) => {
+  span.setAttribute("checkout.id", "chk_123")
+  span.setAttribute("user.id", "user_123")
+
+  span.addEvent("payment.started")
+  span.setAttribute("checkout.step", "payment")
+  await processPayment()
+  // span auto-ends here. If processPayment() throws, the span gets
+  // ERROR status and the exception is recorded automatically.
+})
+```
+
+### Parent and child spans
+
+Nesting `startSpan` calls automatically creates parent-child relationships. The outer span becomes the parent. No manual context wiring needed.
+
+```ts
+import { initStrada, startSpan } from "@strada.sh/sdk"
+
+initStrada({
+  projectId: "01JTHG5M7XPQR8KNCZ0W4D",
+  service: "api",
+})
+
+await startSpan({ name: "checkout.request" }, async () => {
+  // This span is automatically a child of checkout.request
+  await startSpan({ name: "db.insert-order" }, async (span) => {
+    span.setAttribute("db.system", "postgresql")
+    span.setAttribute("db.operation", "INSERT")
+    await insertOrder()
+  })
+})
+```
+
+Spans from **different tracer instances** also nest correctly. Parent-child is determined by the active OTel Context, not by which tracer created the span. So spans from `startSpan()`, `trace.getTracer('my-app')`, and auto-instrumentation libraries all end up in the same trace tree as long as they share the same context.
+
+**Browser limitation:** async nesting (across `await` boundaries) only works on **Node.js and Cloudflare Workers**, where `AsyncLocalStorage` preserves context across async operations. In browsers, the OTel `StackContextManager` loses context after `await`. Synchronous nesting works correctly everywhere. This is a known limitation of the OTel browser SDK, not specific to Strada.
+
+### `startSpan` vs `startInactiveSpan`
+
+**Use `startSpan` by default.** It creates a span, sets it as active in context, auto-ends it, and auto-records errors. Any spans created inside the callback are automatically parented.
+
+`startInactiveSpan` only creates a span. It does **not** set it as active and does **not** auto-end. You must call `span.end()` yourself. Use this for work that should not parent subsequent spans.
+
+The difference matters because the **active span** determines what future spans get parented to. With `startSpan`, everything created inside the callback becomes a child. With `startInactiveSpan`, the context is unchanged, so subsequent spans stay siblings of the inactive span rather than children.
+
+In a trace viewer:
+
+```diagram
+startSpan produces a nested tree          startInactiveSpan produces flat siblings
+
+process-order ████████████████████        process-order ████████████████████
+  ├─ validate  ████████                      ├─ send-email    ██████████████
+  └─ charge    ████████████                  ├─ send-webhook  █████████████
+                                             └─ log-audit     █████
+```
+
+#### When to use `startSpan`
+
+Use it for **sequential work with sub-steps** where you want a hierarchy in the trace viewer.
+
+```ts
+import { startSpan } from "@strada.sh/sdk"
+
+// HTTP request handler: the request span parents all sub-operations
+await startSpan({ name: "POST /checkout" }, async () => {
+  await startSpan({ name: "validate-cart" }, async () => {
+    await validateCart(cartId)
+  })
+  await startSpan({ name: "charge-payment" }, async (span) => {
+    span.setAttribute("payment.provider", "stripe")
+    await chargeCard(paymentMethod)
+  })
+  await startSpan({ name: "send-confirmation" }, async () => {
+    await sendEmail(userId)
+  })
+})
+```
+
+Other good uses: database transactions with multiple queries, multi-step pipelines, middleware chains, any operation where the sub-steps are logically "inside" the parent.
+
+#### When to use `startInactiveSpan`
+
+Use it for **fire-and-forget work**, **parallel fan-out**, or **background tasks** that run independently and should not parent anything that happens after them.
+
+```ts
+import { startSpan, startInactiveSpan } from "@strada.sh/sdk"
+
+await startSpan({ name: "process-order" }, async () => {
+  // These run in parallel and don't parent each other or subsequent work
+  const emailSpan = startInactiveSpan({ name: "send-email" })
+  const webhookSpan = startInactiveSpan({ name: "notify-webhook" })
+
+  await Promise.all([
+    sendEmail(order).finally(() => emailSpan.end()),
+    notifyWebhook(order).finally(() => webhookSpan.end()),
+  ])
+})
+```
+
+Other good uses: scheduling a job onto a queue (the span measures the enqueue, not the job execution), starting a timer or interval, kicking off a cache warm that completes later.
+
+```ts
+// Enqueue a job: the span covers the enqueue call, not the job itself
+const span = startInactiveSpan({ name: "enqueue-report-generation" })
+span.setAttribute("job.type", "monthly-report")
+await queue.add("generate-report", { month: "2025-01" })
+span.end()
+```
+
+### `using` with inactive spans
+
+`startInactiveSpan` returns a span that implements `Symbol.dispose`, so you can use JavaScript's `using` declaration to auto-end it when the block exits. No manual `.end()` call needed.
+
+```ts
+import { startInactiveSpan } from "@strada.sh/sdk"
+
+{
+  using span = startInactiveSpan({ name: "background-cleanup" })
+  span.setAttribute("queue", "jobs")
+  await cleanupStaleJobs()
+} // span.end() called automatically here
+```
+
+This works for both normal exits and throws. If an error is thrown inside the block, the span is still ended.
+
+```ts
+import { startInactiveSpan, SpanStatusCode } from "@strada.sh/sdk"
+
+{
+  using span = startInactiveSpan({ name: "risky-operation" })
+  try {
+    await doRiskyWork()
+  } catch (err) {
+    // record the error on the span before it auto-ends
+    span.recordException(err instanceof Error ? err : new Error(String(err)))
+    span.setStatus({ code: SpanStatusCode.ERROR })
+    throw err
+  }
+} // span.end() called automatically, even after the throw
+```
+
+`using` spans are **not active in context**. Child spans created inside the block are not automatically parented to them. Use `startSpan` (callback form) when you need parent-child nesting. Use `using` + `startInactiveSpan` when you want auto-cleanup for a detached span without a callback wrapper.
+
+### Raw OTel tracing API
+
+If you need full control, the standard OTel `trace.getTracer().startActiveSpan()` API is still available. `startSpan` is sugar on top of it.
+
+```ts
+import { trace, SpanStatusCode } from "@strada.sh/sdk"
+
+const tracer = trace.getTracer("checkout")
+
+await tracer.startActiveSpan("process-order", async (span) => {
+  try {
+    await processOrder()
+    span.setStatus({ code: SpanStatusCode.OK })
+  } catch (error) {
+    span.recordException(error instanceof Error ? error : new Error(String(error)))
+    span.setStatus({ code: SpanStatusCode.ERROR })
+    throw error
+  } finally {
+    span.end()
+  }
+})
+```
+
+## Logging
+
+For app logs, use `getLogger()`. It returns a superset of the standard OTel logger: raw `.emit()` plus console-style methods that send OTel log records to Strada.
+
+```ts
+import { initStrada, getLogger } from "@strada.sh/sdk"
+
+initStrada({
+  projectId: "01JTHG5M7XPQR8KNCZ0W4D",
+  service: "api",
+})
+
+const logger = getLogger("checkout")
+
+logger.debug("cache miss", "user:123")
+logger.info("checkout started")
+logger.warn("slow query", { durationMs: 928 })
+logger.error("payment failed", { reason: "card_declined" })
+```
+
+These methods are intentionally **not** exception capture. `logger.error()` creates an error-severity log in `otel_logs`, but it does not add `exception.*` attributes and does not create an issue in `otel_errors`. Use `captureException(error)` for issue tracking.
+
+### Structured logs and attributes
+
+Pass **one plain object** as the only argument to emit a structured log. The object becomes `LogAttributes`, and `message` becomes the log body when it is a string:
+
+```ts
+logger.info({
+  message: "checkout started",
+  checkoutId: "chk_123",
+  "user.id": "user_123",
+  plan: "pro",
+  retry: false,
+})
+```
+
+This lands in `otel_logs` like:
+
+```ts
+{
+  Body: "checkout started",
+  SeverityText: "INFO",
+  LogAttributes: {
+    message: "checkout started",
+    checkoutId: "chk_123",
+    "user.id": "user_123",
+    plan: "pro",
+    retry: "false",
+  },
+}
+```
+
+If you pass multiple arguments, the call is treated like `console.*`: the arguments are formatted into the body and no structured attributes are added.
+
+```ts
+logger.info("checkout started", { checkoutId: "chk_123" })
+// Body = 'checkout started {"checkoutId":"chk_123"}'
+// LogAttributes = {}
+```
+
+Use raw OTel `.emit()` when you need full control:
+
+```ts
+logger.emit({
+  body: "payment authorized",
+  severityText: "INFO",
+  severityNumber: SeverityNumber.INFO,
+  attributes: {
+    checkoutId: "chk_123",
+  },
+})
+```
+
+`console.log()` and other console methods are still **not** patched or sent by default. Only calls to `getLogger().info()`, `getLogger().emit()`, `logs.getLogger().emit()`, `track()`, `captureException()`, and automatic runtime handlers listed below send log records.
+
+## Emit logs with raw OpenTelemetry
+
+The standard OTel logs API is `logs.getLogger().emit()`. In most cases, `severityNumber` is enough. `severityText` is optional.
+
+Important: **`console.log()` and other console methods are not sent by default**. The browser SDK exports logs you emit through `getLogger()`, the OTel logs API, `track()`, `captureException()`, and uncaught browser errors. It does not monkey-patch `console.log`, `console.info`, `console.warn`, or `console.error`.
+
+```ts
+import { initStrada, logs, SeverityNumber } from "@strada.sh/sdk"
+
+initStrada({
+  projectId: "01JTHG5M7XPQR8KNCZ0W4D",
+  service: "frontend",
+})
+
+const logger = logs.getLogger("app")
+
+logger.emit({
+  severityNumber: SeverityNumber.INFO,
+  body: "checkout started",
+  attributes: {
+    "event.name": "checkout_started",
+    "user.id": "user_123",
+    "custom.plan": "pro",
+  },
+})
+```
+
+### Error logs with raw OTel
+
+```ts
+import { initStrada, logs, SeverityNumber } from "@strada.sh/sdk"
+
+initStrada({
+  projectId: "01JTHG5M7XPQR8KNCZ0W4D",
+  service: "api",
+})
+
+const logger = logs.getLogger("app")
+
+try {
+  throw new TypeError("payment failed")
+} catch (error) {
+  const err = error instanceof Error ? error : new Error(String(error))
+
+  logger.emit({
+    severityNumber: SeverityNumber.ERROR,
+    body: err.message,
+    attributes: {
+      "exception.type": err.name,
+      "exception.message": err.message,
+      "exception.stacktrace": err.stack ?? "",
+    },
+  })
+}
+```
+
+### Same thing with Strada helpers
+
+For analytics-style events, prefer `track()` in the browser:
+
+```ts
+import { initStrada, track } from "@strada.sh/sdk"
+
+initStrada({
+  projectId: "01JTHG5M7XPQR8KNCZ0W4D",
+  service: "frontend",
+})
+
+track("checkout_started", {
+  plan: "pro",
+  source: "pricing-page",
+})
+```
+
+For errors, prefer `captureException()` when you want Strada's error conventions:
+
+```ts
+import { initStrada, captureException } from "@strada.sh/sdk"
+
+initStrada({
+  projectId: "01JTHG5M7XPQR8KNCZ0W4D",
+  service: "api",
+})
+
+try {
+  throw new Error("payment failed")
+} catch (error) {
+  captureException(error, {
+    handled: true,
+    mechanism: "generic",
+  })
+}
+```
+
+## Identify the current user
+
+The SDK reads the user ID from a **cookie** (`strada_uid` by default). Set this cookie when the user logs in. The browser SDK picks it up automatically on every span, log, error, and custom event.
+
+```ts
+initStrada({
+  projectId: "01JTHG5M7XPQR8KNCZ0W4D",
+  service: "frontend",
+})
+
+document.cookie = `strada_uid=${encodeURIComponent(user.id)}; Path=/; SameSite=Lax; Secure`
+```
+
+The cookie must be **JS-readable** (not `httpOnly`) so the browser SDK can access it via `document.cookie`.
+
+### Setting the cookie from your backend
+
+Set the same cookie from your backend after login if you already have auth middleware. This keeps the user ID available before browser code runs and makes the value stable across page loads.
+
+```ts
+app.use(async (req, res, next) => {
+  const session = await auth.api.getSession({ headers: req.headers })
+  if (session?.user) {
+    res.setHeader("Set-Cookie", `strada_uid=${encodeURIComponent(session.user.id)}; Path=/; SameSite=Lax; Secure; Max-Age=31536000`)
+  }
+  next()
+})
+```
+
+### Better Auth
+
+With **Better Auth**, prefer the Strada plugin instead of writing cookie middleware manually. It sets the `strada_uid` cookie and tracks auth lifecycle events as custom events.
+
+```ts
+import { betterAuth } from "better-auth/minimal"
+import { strataBetterAuth } from "@strada.sh/sdk/better-auth"
+
+export const auth = betterAuth({
+  plugins: [
+    strataBetterAuth(),
+  ],
+})
+```
+
+The plugin emits `auth.signup`, `auth.login`, and `auth.logout` events with `user.id`, `custom.user_email`, `custom.auth_provider`, `custom.auth_method`, and `custom.auth_path` attributes. Disable email/name attributes with `strataBetterAuth({ includeUserDetails: false })`.
+
+### Server-side user identification
+
+For browser-initiated requests, the backend gets `user.id` automatically via W3C Baggage. For server-first requests, put the user into baggage in auth middleware using standard OTel `propagation` APIs:
+
+```ts
+import { context, propagation } from "@strada.sh/sdk"
+
+app.use(async (req, res, next) => {
+  const session = await auth.api.getSession({ headers: req.headers })
+  if (!session?.user) return next()
+
+  res.setHeader("Set-Cookie", `strada_uid=${encodeURIComponent(session.user.id)}; Path=/; SameSite=Lax; Secure; Max-Age=31536000`)
+
+  const baggage = propagation.createBaggage({
+    "user.id": { value: session.user.id },
+  })
+  const ctx = propagation.setBaggage(context.active(), baggage)
+
+  return context.with(ctx, next)
+})
+```
+
+That makes `user.id` show up in both **server spans** and **server logs** for the current request.
+
+## Browser pageview tracking
+
+The browser SDK automatically tracks pageviews as OTel **spans** in `otel_traces`. No setup needed beyond `initStrada()`.
+
+```ts
+import { initStrada } from "@strada.sh/sdk"
+
+initStrada({
+  projectId: "01JTHG5M7XPQR8KNCZ0W4D",
+  service: "frontend",
+})
+// A pageview span starts immediately and is sent to otel_traces.
+```
+
+**How it works:**
+
+- On `initStrada()`, a span named `"pageview"` starts for the current URL
+- Every span gets `session.id`, `url.path`, `url.query`, `url.full`, `user.id` injected automatically
+- Manual spans, custom events, and optional auto-instrumentation are parented to the active pageview when no other span is active
+- On SPA navigation (detected via the Navigation API), the old span ends and a new one starts
+- On tab close (`visibilitychange: hidden`), the current span ends and flushes
+
+**The pageview span shape:**
+
+```json
+{
+  "name": "pageview",
+  "attributes": {
+    "session.id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+    "url.path": "/pricing",
+    "url.query": "?plan=pro",
+    "url.full": "https://app.example.com/pricing",
+    "http.request.header.referer": "https://google.com",
+    "user.id": "user_123"
+  }
+}
+```
+
+SPA navigation is auto-detected across all frameworks (Next.js, React Router, Vue Router, SvelteKit) via the [Navigation API](https://developer.mozilla.org/en-US/docs/Web/API/Navigation_API). Each navigation ends the current pageview and starts a new one with `navigation.type` (`"push"`, `"replace"`, `"traverse"`) and `navigation.user_initiated` attributes.
+
+Two **materialized views** in ClickHouse/Tinybird pre-aggregate pageview spans at ingest time into compact tables (`otel_analytics_pages`, `otel_analytics_sessions`) for fast dashboard queries (top pages, browsers, countries, bounce rate, session duration). See [Browser Analytics](/docs/browser-analytics) for the full schema and queries.
+
+## Browser custom events
+
+In the browser runtime, Strada also exposes `track()` for product analytics style events.
+
+```ts
+import { initStrada, track } from "@strada.sh/sdk"
+
+initStrada({
+  projectId: "01JTHG5M7XPQR8KNCZ0W4D",
+  service: "frontend",
+})
+
+track("signup_started", {
+  plan: "pro",
+  source: "hero",
+})
+```
+
+These events are emitted as **log records**, not spans. Later you can query them from `otel_logs` using `event.name`.
+
+Custom properties are automatically prefixed with `custom.` so they don't collide with standard OTel attributes:
+
+```ts
+track("purchase", {
+  plan: "pro",     // stored as custom.plan
+  amount: 49,      // stored as custom.amount
+})
+```
+
+The log record is automatically correlated to the active pageview span via `TraceId`/`SpanId`. Context attributes (`session.id`, `url.path`, `user.id`) are injected automatically. You only pass event-specific properties.
+
+## What it sends
+
+```diagram
+browser / server code
+        │
+        ├─ traces  ───────────────► /v1/traces
+        ├─ logs    ───────────────► /v1/logs
+        └─ metrics ───────────────► /v1/metrics
+                                          │
+                                          ▼
+                                   Strada collector
+                                          │
+                        ┌─────────────────┴─────────────────┐
+                        ▼                                   ▼
+                   otel_traces                         otel_logs
+```
+
+### Browser spans
+
+The browser runtime adds:
+
+- `session.id` from `sessionStorage`
+- `url.path`, `url.query`, `url.full`
+- `http.request.header.referer`
+- `user.id` from `strada_uid` cookie or `StradaOptions.userId`
+
+It also starts a `pageview` span and usually parents later browser work to that pageview when no other span is active.
+
+### Browser custom events
+
+`track("signup_started")` becomes a log record like this:
+
+```json
+{
+  "body": "signup_started",
+  "eventName": "signup_started",
+  "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+  "spanId": "00f067aa0ba902b7",
+  "attributes": {
+    "event.name": "signup_started",
+    "session.id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+    "url.path": "/pricing",
+    "url.full": "https://app.example.com/pricing",
+    "user.id": "user_123",
+    "custom.plan": "pro",
+    "custom.source": "hero"
+  },
+  "resource": {
+    "service.name": "frontend",
+    "service.version": "1.0.0"
+  }
+}
+```
+
+### Browser pageview hierarchy
+
+```diagram
+trace: pageview /pricing
+├─ span: pageview
+├─ span: load-pricing-plans
+└─ log: signup_started
+```
+
+Important detail: `session.id` is the stable browser session identifier. It is **not** one giant tab-wide `TraceId`.
+
+### Exception logs
+
+`captureException(error)` emits a log record with OTel exception fields.
+
+```json
+{
+  "body": "payment failed",
+  "eventName": "exception",
+  "severityText": "ERROR",
+  "attributes": {
+    "exception.type": "Error",
+    "exception.message": "payment failed",
+    "exception.stacktrace": "Error: payment failed...",
+    "exception.mechanism.type": "generic",
+    "exception.mechanism.handled": "true",
+    "session.id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+    "user.id": "user_123"
+  }
+}
+```
+
+The collector later extracts these into the `otel_errors` table for grouping and issue views.
+
+## Cloudflare Workers
+
+The Workers runtime is a minimal, opt-in only entry. No automatic instrumentation, no automatic spans. The SDK only sends data when you explicitly call `captureException()`, `trace.getTracer()`, or `logs.getLogger()`. If none of these are called, zero HTTP requests are made to the collector.
+
+This keeps the bundle small and avoids the per-request billing overhead of automatic instrumentation. For automatic instrumentation of KV, D1, Durable Objects, fetch, etc., use Cloudflare's built-in tracing instead (see below).
+
+```ts
+import { initStrada, captureException } from "@strada.sh/sdk"
+
+export default {
+  fetch(request, env) {
+    initStrada({ projectId: env.STRADA_PROJECT_ID, token: env.STRADA_TOKEN, service: "api" })
+
+    try {
+      return handleRequest(request)
+    } catch (err) {
+      captureException(err)
+      return new Response("error", { status: 500 })
+    }
+  },
+} satisfies ExportedHandler<Env>
+```
+
+Same API as Node. `initStrada()` is safe to call on every request (no-op after the first call). Config comes from `env` bindings since Workers don't have `process.env`.
+
+Manual spans and logs work the same way:
+
+```ts
+import { initStrada, startSpan } from "@strada.sh/sdk"
+
+export default {
+  fetch(request, env) {
+    initStrada({ projectId: env.STRADA_PROJECT_ID, token: env.STRADA_TOKEN, service: "api" })
+
+    return startSpan({ name: "process-order" }, async (span) => {
+      span.setAttribute("order.id", "ord_123")
+      // ...
+      return new Response("ok")
+    })
+  },
+} satisfies ExportedHandler<Env>
+```
+
+No `flush()`, no `ctx.waitUntil()`, no special imports. The SDK auto-flushes via `waitUntil` from `cloudflare:workers` whenever telemetry is emitted. If nothing is emitted, zero HTTP requests.
+
+### Flushing in scheduled handlers and Durable Objects
+
+The auto-flush works well for HTTP request handlers. For **scheduled (cron) handlers**, **queue consumers**, and **Durable Object alarms**, logs emitted near the end of execution may not flush before the isolate terminates. Call `flush()` explicitly before returning:
+
+```ts
+import { initStrada, getLogger, flush } from "@strada.sh/sdk"
+
+export default {
+  async scheduled(controller, env, ctx) {
+    initStrada({ projectId: env.STRADA_PROJECT_ID, token: env.STRADA_TOKEN, service: "cron" })
+    const logger = getLogger("alerts")
+
+    logger.info({ message: "cron started" })
+    await doWork()
+    logger.info({ message: "cron finished" })
+
+    // Flush before returning so ctx.waitUntil keeps the isolate alive
+    // until all buffered logs are exported
+    await flush()
+  },
+} satisfies ExportedHandler<Env>
+```
+
+Without the explicit `flush()`, the `BatchLogRecordProcessor` may still be buffering the last few log records when the handler returns and the isolate shuts down.
+
+### Cloudflare built-in tracing (automatic instrumentation)
+
+For automatic instrumentation, use Cloudflare's built-in tracing. It instruments at the runtime level (KV, D1, Durable Objects, fetch, handler invocations) without any SDK overhead:
+
+```jsonc
+// wrangler.jsonc
+{
+  "observability": {
+    "traces": { "enabled": true }
+  }
+}
+```
+
+This works alongside the Strada SDK. Use built-in tracing for automatic spans, and the SDK for error capture, custom events, and manual spans.
+
+### Workers requirements
+
+The Workers entry requires the `nodejs_compat` compatibility flag for `AsyncLocalStorage` context propagation:
+
+```jsonc
+// wrangler.jsonc
+{
+  "compatibility_flags": ["nodejs_compat"]
+}
+```
+
+## Under the hood
+
+## Root import uses conditions
+
+`@strada.sh/sdk` resolves differently by runtime:
+
+- **browser bundlers** get the browser implementation (WebTracerProvider, session management, pageview spans)
+- **Cloudflare Workers** get the Workers implementation (BasicTracerProvider, auto-flush via waitUntil, no automatic spans)
+- **Node.js / Bun / Deno** get the server implementation (NodeTracerProvider, process handlers, resource detection)
+
+That means the same import path can configure different OTel SDKs without user changes.
+
+## Exporters, batching, and flush behavior
+
+By default the SDK uses **OTLP HTTP JSON exporters** for every signal:
+
+- **browser traces** → `OTLPTraceExporter` to `/v1/traces`
+- **browser logs** → `OTLPLogExporter` to `/v1/logs`
+- **Node traces** → `OTLPTraceExporter` to `/v1/traces`
+- **Node logs** → `OTLPLogExporter` to `/v1/logs`
+- **Node metrics** → `OTLPMetricExporter` to `/v1/metrics`
+- **Workers traces** → `OTLPTraceExporter` to `/v1/traces` (auto-flushed via waitUntil)
+- **Workers logs** → `OTLPLogExporter` to `/v1/logs` (auto-flushed via waitUntil)
+
+You can tune batching and cadence with `telemetry` in `initStrada()`:
+
+```ts
+initStrada({
+  projectId: "01JTHG5M7XPQR8KNCZ0W4D",
+  service: "api",
+  telemetry: {
+    traces: {
+      scheduledDelayMillis: 1000,
+      maxExportBatchSize: 128,
+      maxQueueSize: 1024,
+      exportTimeoutMillis: 10000,
+    },
+    logs: {
+      scheduledDelayMillis: 1000,
+      maxExportBatchSize: 128,
+    },
+    metrics: {
+      exportIntervalMillis: 5000,
+      exportTimeoutMillis: 3000,
+    },
+  },
+})
+```
+
+The SDK intentionally reuses familiar OTel option names:
+
+- `telemetry.traces` uses the same shape as OTel batch span processor browser config
+- `telemetry.logs` uses the same shape as OTel batch log record processor browser config
+- `telemetry.metrics` uses the same shape as `PeriodicExportingMetricReaderOptions`, minus exporter internals
+
+### Trace and log batching defaults
+
+Spans and logs are not sent one-by-one. They go through the standard OTel batch processors.
+
+Unless you override OTel env vars, the default batch behavior is:
+
+- **scheduled delay**: `5000ms`
+- **max export batch size**: `512`
+- **max queue size**: `2048`
+- **export timeout**: `30000ms`
+
+So in normal operation, ended spans and emitted logs are usually exported within about **5 seconds**, or sooner if the batch fills up.
+
+### Node metrics cadence
+
+Node metrics use `PeriodicExportingMetricReader` with an explicit export interval of **10 seconds** in this SDK.
+
+```diagram
+spans/logs: batched, usually every ~5s
+metrics: periodic export every 10s
+```
+
+### Manual flush and shutdown
+
+The SDK exposes:
+
+- `flush()` → flush buffered telemetry without tearing down the SDK
+- `shutdown()` → flush and shut down the SDK/providers
+
+On **Node.js**, the SDK registers process handlers so buffered telemetry is not lost on exit:
+
+- `uncaughtException` captures the error, flushes logs + traces + metrics, then exits
+- `SIGTERM` / `SIGINT` call `shutdown()`
+- `beforeExit` calls `flush()` for **natural** exits (event loop drains, a CLI calls `process.exit()` from a later tick, or a short-lived script finishes). This is the case that signals miss
+
+- `telemetry.metrics` is currently only meaningful on Node.js. Workers do not configure a metric exporter; `metrics.getMeter()` returns a noop on Workers
+
+#### Process lifetime and span export
+
+Spans only export once they **end** and the batch processor flushes (the ~5s timer, a full batch, a registered process handler, or an explicit `flush()`). This matters for short-lived or externally-killed processes:
+
+| Exit path | Buffered telemetry flushed? |
+| --- | --- |
+| Event loop drains naturally | Yes, via `beforeExit` |
+| `SIGTERM` / `SIGINT` | Yes, via `shutdown()` |
+| `uncaughtException` | Yes, then exits |
+| `process.exit()` in the same synchronous tick | Only what already flushed; `beforeExit` does not fire on an immediate `process.exit()` |
+| `SIGKILL` (`kill -9`) | No. The OS terminates immediately; nothing can run |
+
+If a parent process kills the SDK process with `SIGKILL`, or you call `process.exit()` right after emitting telemetry, the last buffered spans/logs are lost. For those cases, call `flush()` explicitly at a controlled boundary (for example right after an important span ends), or lower `telemetry.traces.scheduledDelayMillis` so the batch timer fires sooner.
+
+```ts
+import { startSpan, flush } from "@strada.sh/sdk"
+
+await startSpan({ name: "critical.op" }, async (span) => {
+  // ... important work ...
+})
+// guarantee export even if this process is killed seconds later
+await flush()
+```
+
+On **Cloudflare Workers**:
+
+- Auto-flush via `waitUntil` from `cloudflare:workers` whenever telemetry is emitted
+- Multiple span ends / log emits in the same microtask share one flush
+- If no telemetry is emitted, zero HTTP requests are made
+- `flush()` is available for manual use but rarely needed
+
+On the **browser**:
+
+- `flush()` calls `forceFlush()` on the tracer and logger providers
+- `shutdown()` removes listeners, ends the current pageview, and shuts down the providers
+
+### Browser page close behavior
+
+The browser SDK relies on the **standard OTel browser batch processor behavior**.
+
+That means:
+
+- pageviews end on `visibilitychange: hidden`
+- OTel batch processors **auto flush on document hide by default**
+- OTel browser processors also install a **`pagehide` fallback**, mainly for Safari compatibility
+- you can turn that off with `telemetry.traces.disableAutoFlushOnDocumentHide` or `telemetry.logs.disableAutoFlushOnDocumentHide`
+
+The browser OTLP HTTP exporter uses `fetch` with **`keepalive: true`** when possible, which improves the chance that an export already in progress can finish during page teardown. But there is still **no hard guarantee** that telemetry buffered in memory right before tab close will be delivered.
+
+Strada does **not** add its own extra unload hook on top of this. It relies on the upstream OTel browser behavior:
+
+- flush on `visibilitychange` when the document becomes hidden
+- flush on `pagehide` as a fallback
+- export with `fetch(..., { keepalive: true })`
+
+The browser exporter does **not** use `navigator.sendBeacon()` directly in the current installed OTel path.
+
+Practical rule:
+
+- if the batch timer already fired, the data is likely already on the way
+- if the user closes the tab immediately after an event, some very recent telemetry may be lost
+
+If this matters for a particular flow, call `flush()` yourself at a controlled boundary.
+
+## Browser-to-server context propagation
+
+The SDK automatically propagates `session.id` and `user.id` from the browser to the backend using **W3C Baggage**. Every outgoing `fetch`/`XHR` request from the browser includes both `traceparent` and `baggage` HTTP headers.
+
+```diagram
+   Browser                                      Server
+   session.id = abc                             BaggageSpanProcessor reads baggage:
+   user.id    = user_123                          session.id ──► span attribute
+        │                                          user.id    ──► span attribute
+        │  fetch POST /api/checkout
+        │  headers:                              BaggageLogProcessor reads baggage:
+        │    traceparent: 00-abc123...             session.id ──► log attribute
+        │    baggage: strada.session.id=abc,        user.id    ──► log attribute
+        │             user.id=user_123
+        ▼
+   ────────────────────────────────────────►  request arrives with baggage
+```
+
+This means backend spans and log records created within a browser-initiated request automatically carry the browser's `session.id` and `user.id`. No app code needed.
+
+**What this enables:**
+
+- Backend custom events (emitted via `logs.getLogger().emit()`) are correlated to the browser session
+- Errors captured on the backend include the browser session context
+- You can query all events for a session across browser and backend in a single SQL query:
+
+```sql
+SELECT Timestamp, ServiceName, LogAttributes['event.name'] AS event
+FROM otel_logs
+WHERE LogAttributes['session.id'] = {session_id:String}
+ORDER BY Timestamp ASC
+```
+
+**How it works under the hood:**
+
+- The browser SDK registers a `CompositePropagator` with `W3CTraceContextPropagator` + `W3CBaggagePropagator`
+- The `PageviewContextManager` injects current baggage (session.id + user.id) into the OTel context on every outgoing request
+- The Node SDK registers the same composite propagator to extract baggage from incoming requests
+- `BaggageSpanProcessor` reads the baggage and sets `session.id` / `user.id` as span attributes
+- `BaggageLogProcessor` does the same for log records
+
+Baggage updates live. When the `strada_uid` cookie changes, the next outgoing request will carry the updated `user.id`.
+
+## Browser runtime
+
+The browser build sets up:
+
+- `WebTracerProvider`
+- `LoggerProvider`
+- OTLP HTTP exporters for traces and logs
+- W3C Baggage propagation for session.id and user.id
+- global `error` and `unhandledrejection` handlers
+- pageview span lifecycle
+- SPA navigation detection via the Navigation API
+- log filtering for noisy browser junk like `Script error.` and extension frames
+
+## Node runtime
+
+The server build sets up:
+
+- `NodeTracerProvider` for traces with `AsyncLocalStorageContextManager`
+- `MeterProvider` for metrics
+- `LoggerProvider` for logs
+- OTLP HTTP exporters for traces, logs, metrics
+- W3C Baggage extraction with `BaggageSpanProcessor` and `BaggageLogProcessor`
+- Resource detection (`telemetry.sdk.*`, `process.*`, `host.*`, `OTEL_RESOURCE_ATTRIBUTES`)
+- global `uncaughtException` and `unhandledRejection` handlers
+- `flush()` and `shutdown()` helpers for graceful process exit
+
+## Workers runtime
+
+The Workers build is minimal and opt-in only:
+
+- `BasicTracerProvider` for traces with `AsyncLocalStorage` context manager (requires `nodejs_compat`)
+- `LoggerProvider` for logs
+- OTLP HTTP exporters for traces and logs
+- W3C Baggage extraction with `BaggageSpanProcessor` and `BaggageLogProcessor`
+- Auto-flush via `waitUntil` from `cloudflare:workers` (no manual flush needed)
+- `cloud.provider: cloudflare` and `cloud.platform: cloudflare.workers` resource attributes
+- No automatic spans, no process handlers
+- No metrics provider. `metrics.getMeter()` returns a noop on Workers. Use Cloudflare Analytics Engine or Workers Observability for metrics instead
+- Zero HTTP requests to the collector unless user code creates telemetry
+
+## Auto-instrumentation (optional)
+
+The SDK does **not** include auto-instrumentation by default. It only sets up providers, exporters, and error handlers. If you want automatic spans for HTTP requests, database queries, or browser interactions, install the OTel auto-instrumentation packages separately.
+
+### Node auto-instrumentation
+
+Automatically creates spans for outgoing/incoming HTTP requests, database queries (pg, mysql, mongodb, redis), gRPC calls, and more. No code changes needed; it monkey-patches Node.js modules at import time.
+
+```bash
+pnpm add @opentelemetry/auto-instrumentations-node
+```
+
+```ts
+import { getNodeAutoInstrumentations } from "@opentelemetry/auto-instrumentations-node"
+import { registerInstrumentations } from "@opentelemetry/instrumentation"
+import { initStrada } from "@strada.sh/sdk"
+
+initStrada({
+  projectId: "01JTHG5M7XPQR8KNCZ0W4D",
+  service: "api",
+})
+
+// Call after initStrada() so the global providers are registered
+registerInstrumentations({
+  instrumentations: [getNodeAutoInstrumentations()],
+})
+```
+
+This adds spans for `http`, `https`, `fetch`, `express`, `fastify`, `koa`, `pg`, `mysql`, `mongodb`, `redis`, `ioredis`, `grpc`, `graphql`, `aws-sdk`, `fs`, `dns`, `net`, and many more. See the [full list](https://github.com/open-telemetry/opentelemetry-js-contrib/tree/main/metapackages/auto-instrumentations-node).
+
+### Browser auto-instrumentation
+
+Automatically creates spans for `fetch`, `XMLHttpRequest`, document load timing, and user interactions (clicks, navigation). Useful for seeing how long page loads and API calls take without adding manual spans.
+
+```bash
+pnpm add @opentelemetry/auto-instrumentations-web
+```
+
+```ts
+import { getWebAutoInstrumentations } from "@opentelemetry/auto-instrumentations-web"
+import { registerInstrumentations } from "@opentelemetry/instrumentation"
+import { initStrada } from "@strada.sh/sdk"
+
+initStrada({
+  projectId: "01JTHG5M7XPQR8KNCZ0W4D",
+  service: "frontend",
+})
+
+registerInstrumentations({
+  instrumentations: [getWebAutoInstrumentations()],
+})
+```
+
+This adds spans for:
+- **fetch / XHR** — every `fetch()` and `XMLHttpRequest` call becomes a span with URL, method, status code, and duration
+- **document load** — spans for DNS, TCP, TLS, request, response, DOM processing, and load event timing
+- **user interaction** — spans for click events on interactive elements
+
+### Cloudflare Workers auto-instrumentation
+
+Workers use Cloudflare's **built-in tracing** instead of a JS instrumentation package. It instruments at the runtime level (inside workerd), so it has zero bundle size impact and zero per-request overhead:
+
+```jsonc
+// wrangler.jsonc
+{
+  "observability": {
+    "traces": { "enabled": true }
+  }
+}
+```
+
+This auto-instruments KV, D1, Durable Objects, fetch, handler invocations, and more. It supports OTLP export to external backends. Use it alongside the Strada SDK: built-in tracing for automatic spans, the SDK for error capture and custom events.
+
+### Why it's not built in
+
+Auto-instrumentation packages are large. The Node metapackage pulls in ~30 instrumentation libraries, AWS/GCP resource detectors, gRPC bindings, and polyfills, adding **~2MB** to the bundle. The browser package adds **~70kB**. The Workers entry has **no auto-instrumentation at all** since Cloudflare's built-in tracing handles it at the runtime level with zero bundle cost. By keeping auto-instrumentation opt-in, the SDK stays lightweight for users who only need error tracking, custom events, or manual tracing.
+
+## Error handling semantics
+
+`captureException()` always normalizes the input to an `Error`, runs ignore filters, applies `beforeSend`, then emits a log record.
+
+`beforeSend` can:
+
+- return the same `Error`
+- return a rewritten `Error`
+- return `null` to drop the event
+
+## Query shape later
+
+Custom events are easy to query because they carry `event.name`.
+
+```sql
+SELECT
+  Timestamp,
+  ServiceName,
+  LogAttributes['event.name'] AS event_name,
+  LogAttributes['user.id'] AS user_id,
+  LogAttributes['session.id'] AS session_id,
+  LogAttributes['url.path'] AS url_path
+FROM otel_logs
+WHERE mapContains(LogAttributes, 'event.name')
+ORDER BY Timestamp DESC
+LIMIT 100
+```
+
+That excludes ordinary logs that do not have `event.name`.
+
+## Important details
+
+- **Import from `@strada.sh/sdk`**. You usually do not need `/node` or `/browser`. Workers resolve automatically via the `workerd` export condition
+- **Initialize early**. On Node.js, do it before loading the rest of the app. On Workers, call it at the top of your handler (safe to call every request)
+- **Custom events are logs**, not spans
+- **Exceptions are logs first**. The collector extracts them into `otel_errors`
+- **Browser sessions use `session.id`**, not a single session-wide trace
+- **Pageview spans are roots**. Fetch/XHR/user-interaction spans usually become children of the current pageview
+- **Session context propagates to the backend** via W3C Baggage. Backend spans and logs within a browser-initiated request automatically get `session.id` and `user.id`
+
+## API summary
+
+### Main helpers
+
+- `initStrada(options)`
+- `startSpan({ name }, callback)` — creates a span, auto-ends, auto-records errors
+- `startInactiveSpan({ name })` — creates a detached span (manual end)
+- `captureException(error, opts?)`
+- `setTags(tags)`
+- `flush()`
+- `shutdown()`
+
+### Re-exported OTel APIs
+
+- `trace`
+- `logs`
+- `metrics`
+- `context`
+- `propagation`
+- `SpanStatusCode`
+- `SpanKind`
+
+## Prefer `getLogger()` over `console.*`
+
+`console.log()` and other console methods are **not** sent to Strada. They only appear in platform-specific logs (Cloudflare Workers dashboard, Node stdout) and are not queryable with SQL. Use `getLogger()` instead so your logs land in `otel_logs` and are searchable with the Strada CLI and TUI.
+
+```ts
+import { initStrada, getLogger } from "@strada.sh/sdk"
+
+initStrada({
+  projectId: "01JTHG5M7XPQR8KNCZ0W4D",
+  service: "api",
+})
+
+const logger = getLogger("api")
+
+// These are queryable with `strada logs` and SQL
+logger.info({ message: "checkout started", checkoutId: "chk_123" })
+logger.error({ message: "payment failed", error: String(err) })
+```
+
+If you also want local console output during development, create a thin wrapper:
+
+```ts
+import { getLogger } from "@strada.sh/sdk"
+
+const sdkLogger = getLogger("api")
+
+export const logger = {
+  info(...args: Parameters<typeof sdkLogger.info>) {
+    console.log(...args)
+    sdkLogger.info(...args)
+  },
+  warn(...args: Parameters<typeof sdkLogger.warn>) {
+    console.warn(...args)
+    sdkLogger.warn(...args)
+  },
+  error(...args: Parameters<typeof sdkLogger.error>) {
+    console.error(...args)
+    sdkLogger.error(...args)
+  },
+  debug(...args: Parameters<typeof sdkLogger.debug>) {
+    console.debug(...args)
+    sdkLogger.debug(...args)
+  },
+}
+```
+
+This sends logs to both Strada and the local console. Use the wrapper in development, or use `getLogger()` directly when you only care about Strada-queryable logs.
+
+## When to use raw OTel vs Strada helpers
+
+- use **`startSpan()`** for spans (auto-end, auto-error recording)
+- use **raw OTel APIs** (`trace.getTracer()`) when you need full span control
+- use **`captureException()`** when you want Strada error conventions
+- use **`track()`** in the browser when you want analytics events in `otel_logs`
+
+## Summary
+
+`@strada.sh/sdk` is a thin OTel setup layer.
+
+It does **not** replace OpenTelemetry. It configures it correctly for Strada, adds a few useful conventions, then gets out of the way.

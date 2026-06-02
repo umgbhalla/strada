@@ -56,13 +56,13 @@ All queries use **ClickHouse SQL**. You can use any ClickHouse SQL syntax, funct
 For the full task-oriented walkthrough (create project, server + browser, env var rules, RSC pattern, verify), read the quickstart:
 
 ```bash
-cat docs/quickstart.md # read the full output, NEVER pipe to head/tail
+cat website/src/docs/quickstart.mdx # read the full output, NEVER pipe to head/tail
 ```
 
-For the exhaustive API reference and per-runtime details, read the SDK README:
+For the exhaustive API reference and per-runtime details, read the SDK reference:
 
 ```bash
-cat sdk/README.md # read the full output, NEVER pipe to head/tail
+cat website/src/sdk/README.mdx # read the full output, NEVER pipe to head/tail
 ```
 
 The SDK package is `@strada.sh/sdk`. The import path auto-resolves by runtime: browsers get the browser entry, Workers get the Workers entry, Node.js gets the server entry. **One import path works everywhere.** Get the project ID and first server-side token from `strada projects create <slug>`; create more org-wide ingest tokens later with `strada tokens create --scope ingest <name>`.
@@ -96,7 +96,7 @@ Rules to never break:
 
 - **Never ship `STRADA_TOKEN` to the browser.** It is a server secret.
 - **Browser project id needs a public prefix** or the bundler will strip it.
-- In **RSC / server-rendered** apps, run browser `initStrada()` from a side-effect-only `"use client"` module rendered once in the root layout (a component that returns `null`). A bare `import` runs on the server and gets tree-shaken from the client bundle. See `docs/quickstart.md` for the pattern.
+- In **RSC / server-rendered** apps, run browser `initStrada()` from a side-effect-only `"use client"` module rendered once in the root layout (a component that returns `null`). A bare `import` runs on the server and gets tree-shaken from the client bundle. See `website/src/docs/quickstart.mdx` for the pattern.
 - If the framework exposes an OTel tracer hook (e.g. Spiceflow `new Spiceflow({ tracer })`), pass `trace.getTracer("my-app")` from the SDK so request spans flow to the same project.
 
 ## Terminal UI

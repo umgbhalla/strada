@@ -522,7 +522,7 @@ Strada does **not** host a database for you. Instead, it uses [Tinybird](https:/
 - **No idle cost**: pay only for active queries and ingestion. No traffic = minimal bill
 - **Built-in isolation**: JWT row-level filtering scopes each project automatically
 
-See the [Tinybird pricing breakdown](./docs/tinybird-pricing.md) for detailed cost estimates.
+See the [Tinybird pricing breakdown](https://strada.sh/docs/tinybird-pricing) for detailed cost estimates.
 
 ## SDK
 
@@ -548,7 +548,7 @@ After `initStrada()`, all standard OTel APIs work: `trace.getTracer()`, `logs.ge
 - `setTags(tags)` sets tags merged into subsequent error attributes
 - `flush()` / `shutdown()` for manual lifecycle control
 
-See the full [SDK documentation](./sdk/README.md) for detailed API reference, auto-instrumentation setup, batching config, and browser/server context propagation.
+See the full [SDK documentation](https://strada.sh/sdk/README) for detailed API reference, auto-instrumentation setup, batching config, and browser/server context propagation.
 
 ## Sourcemaps
 
@@ -581,7 +581,7 @@ This works with Claude Code, Cursor, Windsurf, and other AI coding agents. The s
 
 ## Docs
 
-- [SDK reference](./sdk/README.md)
-- [Browser analytics](./docs/browser-analytics.md)
-- [Tinybird pricing breakdown](./docs/tinybird-pricing.md)
-- [Cloudflare Workers OTel export](./docs/cloudflare-workers-otel-export.md)
+- [SDK reference](https://strada.sh/sdk/README)
+- [Browser analytics](https://strada.sh/docs/browser-analytics)
+- [Tinybird pricing breakdown](https://strada.sh/docs/tinybird-pricing)
+- [Cloudflare Workers OTel export](https://strada.sh/docs/cloudflare-workers-otel-export)
