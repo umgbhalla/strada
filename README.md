@@ -581,6 +581,7 @@ This works with Claude Code, Cursor, Windsurf, and other AI coding agents. The s
 
 ## Docs
 
+- [Quickstart](https://strada.sh/docs/quickstart)
 - [SDK reference](https://strada.sh/sdk/README)
 - [Browser analytics](https://strada.sh/docs/browser-analytics)
 - [Tinybird pricing breakdown](https://strada.sh/docs/tinybird-pricing)
