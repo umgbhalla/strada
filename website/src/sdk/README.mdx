@@ -644,7 +644,7 @@ initStrada({
 
 SPA navigation is auto-detected across all frameworks (Next.js, React Router, Vue Router, SvelteKit) via the [Navigation API](https://developer.mozilla.org/en-US/docs/Web/API/Navigation_API). Each navigation ends the current pageview and starts a new one with `navigation.type` (`"push"`, `"replace"`, `"traverse"`) and `navigation.user_initiated` attributes.
 
-Two **materialized views** in ClickHouse/Tinybird pre-aggregate pageview spans at ingest time into compact tables (`otel_analytics_pages`, `otel_analytics_sessions`) for fast dashboard queries (top pages, browsers, countries, bounce rate, session duration). See [Browser Analytics](/docs/browser-analytics) for the full schema and queries.
+Two **materialized views** in ClickHouse/Tinybird pre-aggregate pageview spans at ingest time into compact tables (`otel_analytics_pages`, `otel_analytics_sessions`) for fast dashboard queries (top pages, browsers, countries, bounce rate, session duration). See [Browser Analytics](../docs/browser-analytics.mdx) for the full schema and queries.
 
 ## Browser custom events
 
