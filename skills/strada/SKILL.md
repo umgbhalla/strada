@@ -53,27 +53,51 @@ All queries use **ClickHouse SQL**. You can use any ClickHouse SQL syntax, funct
 
 ## Setting up a TypeScript or JavaScript project
 
-Read the SDK README for full setup instructions, API reference, and code examples for every runtime (Node.js, browser, Cloudflare Workers):
+For the full task-oriented walkthrough (create project, server + browser, env var rules, RSC pattern, verify), read the quickstart:
+
+```bash
+cat docs/quickstart.md # read the full output, NEVER pipe to head/tail
+```
+
+For the exhaustive API reference and per-runtime details, read the SDK README:
 
 ```bash
 cat sdk/README.md # read the full output, NEVER pipe to head/tail
 ```
 
-The SDK package is `@strada.sh/sdk`. The import path auto-resolves by runtime: browsers get the browser entry, Workers get the Workers entry, Node.js gets the server entry. One import path works everywhere.
+The SDK package is `@strada.sh/sdk`. The import path auto-resolves by runtime: browsers get the browser entry, Workers get the Workers entry, Node.js gets the server entry. **One import path works everywhere.** Get the project ID and first server-side token from `strada projects create <slug>`; create more org-wide ingest tokens later with `strada tokens create --scope ingest <name>`.
+
+When a project has both a frontend and a backend, set up **both** runtimes against the **same project ID**.
+
+**Server** (Node, Bun, Workers). Pass the `token`:
 
 ```ts
 import { initStrada, captureException } from "@strada.sh/sdk"
 
 initStrada({
-  projectId: "<project-id>",
-  token: process.env.STRADA_TOKEN,
+  projectId: process.env.STRADA_PROJECT_ID,
+  token: process.env.STRADA_TOKEN, // server only
   service: "my-app",
 })
 ```
 
-Get the project ID and first server-side token from `strada projects create <slug>`. Create more
-org-wide ingest tokens later with `strada tokens create --scope ingest <name>`. Omit `token` in browser apps;
-browser ingest is anonymous and rate limited.
+**Browser.** Omit the `token` (browser ingest is anonymous and rate limited). The project ID must come from a **public-prefixed** env var (`VITE_`, `NEXT_PUBLIC_`, etc.) so the bundler inlines it:
+
+```ts
+import { initStrada } from "@strada.sh/sdk"
+
+initStrada({
+  projectId: process.env.PUBLIC_STRADA_PROJECT_ID,
+  service: "my-app-browser",
+})
+```
+
+Rules to never break:
+
+- **Never ship `STRADA_TOKEN` to the browser.** It is a server secret.
+- **Browser project id needs a public prefix** or the bundler will strip it.
+- In **RSC / server-rendered** apps, run browser `initStrada()` from a side-effect-only `"use client"` module rendered once in the root layout (a component that returns `null`). A bare `import` runs on the server and gets tree-shaken from the client bundle. See `docs/quickstart.md` for the pattern.
+- If the framework exposes an OTel tracer hook (e.g. Spiceflow `new Spiceflow({ tracer })`), pass `trace.getTracer("my-app")` from the SDK so request spans flow to the same project.
 
 ## Terminal UI
 

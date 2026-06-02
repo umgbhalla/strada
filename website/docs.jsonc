@@ -36,7 +36,7 @@
           {
             "group": "Getting Started",
             "icon": "lucide:rocket",
-            "pages": ["index", "sdk/README"]
+            "pages": ["index", "docs/quickstart", "sdk/README"]
           },
           {
             "group": "Guides",
