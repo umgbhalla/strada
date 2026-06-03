@@ -83,6 +83,11 @@ export const ATTR = {
   /** Telemetry SDK language/runtime. */
   "telemetry.sdk.language": "telemetry.sdk.language",
 
+  // -- Pageview tracking --
+
+  /** Where the pageview was tracked: "browser" (JS SDK) or "server" (server SDK trackPageview). */
+  "pageview.source": "pageview.source",
+
   // -- SPA navigation (set on pageview spans during client-side navigation) --
 
   /** How the navigation was triggered: "push", "replace", "traverse". From Navigation API. */

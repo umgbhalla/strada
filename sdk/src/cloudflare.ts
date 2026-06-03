@@ -61,6 +61,7 @@ import {
   type StradaOptions,
   type CaptureExceptionOptions,
   type StradaTelemetryOptions,
+  type TrackPageviewOptions,
   type StradaLogger,
   applyBeforeSend,
   normalizeError,
@@ -75,6 +76,7 @@ import {
   resolveReleaseAttributes,
   shouldExportTelemetry,
   emitUserIdentifyLog,
+  buildPageviewAttributes,
   ATTR,
   BAGGAGE_SESSION_ID,
   BAGGAGE_USER_ID,
@@ -93,6 +95,7 @@ export {
   type StradaOptions,
   type CaptureExceptionOptions,
   type StradaTelemetryOptions,
+  type TrackPageviewOptions,
   type StradaUserIdentity,
   type StartSpanOptions,
   type DisposableSpan,
@@ -508,6 +511,45 @@ export function track(
     body: name,
     attributes,
   });
+}
+
+/**
+ * Track a server-side pageview as an OTel span. Emits a zero-duration span
+ * with SpanName = 'pageview' and pageview.source = 'server', which flows
+ * through the same analytics materialized views as browser pageview spans.
+ *
+ * Use this for traffic the browser SDK can't see: bots, AI crawlers,
+ * JS-blocked visitors, or SSR-only pages. Auto-flushes via waitUntil.
+ *
+ * session.id and user.id are read from W3C Baggage on the active OTel
+ * context when not passed explicitly, so browser-initiated requests
+ * automatically inherit the browser session identity.
+ *
+ * @example
+ * ```ts
+ * export default {
+ *   fetch(request, env) {
+ *     initStrada({ projectId: '...', service: 'docs', token: env.STRADA_TOKEN })
+ *     const url = new URL(request.url)
+ *     trackPageview({ path: url.pathname, url: url.href })
+ *   }
+ * }
+ * ```
+ */
+export function trackPageview(opts: TrackPageviewOptions): void {
+  if (!_tracerProvider) {
+    console.warn(
+      "[@strada.sh/sdk] trackPageview() called before initStrada(). Pageview was not sent.",
+    );
+    return;
+  }
+
+  const baggage = propagation.getBaggage(otelContext.active());
+  const attributes = buildPageviewAttributes(opts, baggage);
+
+  const span = trace.getTracer("strada").startSpan("pageview", { attributes });
+  span.end();
+  // Auto-flush is handled by AutoFlushSpanProcessor
 }
 
 /** Emit a trusted user profile event over OTLP logs for extraction into otel_users. */

@@ -557,6 +557,7 @@ export function startPageSpan(
   _currentPageviewSpan = tracer.startSpan("pageview", {
     attributes: {
       [ATTR["session.id"]]: _sessionId ?? "",
+      [ATTR["pageview.source"]]: "browser",
       ...getPageAttributes(pageUrl, referrer),
       ...extraAttributes,
     },

@@ -144,6 +144,61 @@ export interface StradaUserIdentity {
   attributes?: Record<string, string>;
 }
 
+export interface TrackPageviewOptions {
+  /** Page pathname, e.g. "/pricing". Required. */
+  path: string;
+  /** Full page URL, e.g. "https://acme.com/pricing?plan=pro". */
+  url?: string;
+  /** Query string, e.g. "?plan=pro". Derived from url if not set. */
+  query?: string;
+  /** Referrer URL or domain. */
+  referrer?: string;
+  /** Session ID. Falls back to baggage session.id from the active OTel context. */
+  sessionId?: string;
+  /** User ID. Falls back to baggage user.id from the active OTel context. */
+  userId?: string;
+  /** Extra span attributes to set on the pageview span. */
+  attributes?: Record<string, string>;
+}
+
+/**
+ * Build the span attributes for a server-side trackPageview() call.
+ * Shared by node.ts and cloudflare.ts so the attribute shape is consistent.
+ */
+export function buildPageviewAttributes(
+  opts: TrackPageviewOptions,
+  baggage: import("@opentelemetry/api").Baggage | undefined,
+): Record<string, string> {
+  const sessionId =
+    opts.sessionId ??
+    baggage?.getEntry(BAGGAGE_SESSION_ID)?.value ??
+    "";
+  const userId =
+    opts.userId ??
+    baggage?.getEntry(BAGGAGE_USER_ID)?.value;
+
+  // Derive query from URL if not provided
+  let query = opts.query ?? "";
+  if (!query && opts.url) {
+    try {
+      query = new URL(opts.url).search;
+    } catch {
+      // malformed URL, skip
+    }
+  }
+
+  return {
+    [ATTR["url.path"]]: opts.path,
+    [ATTR["pageview.source"]]: "server",
+    ...(opts.url ? { [ATTR["url.full"]]: opts.url } : {}),
+    ...(query ? { [ATTR["url.query"]]: query } : {}),
+    ...(opts.referrer ? { [ATTR["http.request.header.referer"]]: opts.referrer } : {}),
+    ...(sessionId ? { [ATTR["session.id"]]: sessionId } : {}),
+    ...(userId ? { [ATTR["user.id"]]: userId } : {}),
+    ...opts.attributes,
+  };
+}
+
 export interface StradaReleaseMetadata {
   version?: string;
   commit?: string;

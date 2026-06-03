@@ -49,6 +49,7 @@ import {
   type StradaOptions,
   type CaptureExceptionOptions,
   type StradaTelemetryOptions,
+  type TrackPageviewOptions,
   type StradaLogger,
   applyBeforeSend,
   normalizeError,
@@ -65,6 +66,7 @@ import {
   resolveReleaseAttributes,
   shouldExportTelemetry,
   emitUserIdentifyLog,
+  buildPageviewAttributes,
   ATTR,
   BAGGAGE_SESSION_ID,
   BAGGAGE_USER_ID,
@@ -83,6 +85,7 @@ export {
   type StradaOptions,
   type CaptureExceptionOptions,
   type StradaTelemetryOptions,
+  type TrackPageviewOptions,
   type StradaUserIdentity,
   type StartSpanOptions,
   type DisposableSpan,
@@ -586,6 +589,42 @@ export function track(
     body: name,
     attributes,
   });
+}
+
+/**
+ * Track a server-side pageview as an OTel span. Emits a zero-duration span
+ * with SpanName = 'pageview' and pageview.source = 'server', which flows
+ * through the same analytics materialized views as browser pageview spans.
+ *
+ * Use this for traffic the browser SDK can't see: bots, AI crawlers,
+ * JS-blocked visitors, or SSR-only pages. For normal browser visitors,
+ * the JS SDK already tracks pageviews automatically.
+ *
+ * session.id and user.id are read from W3C Baggage on the active OTel
+ * context when not passed explicitly, so browser-initiated requests
+ * automatically inherit the browser session identity.
+ *
+ * @example
+ * ```ts
+ * app.use((req, res, next) => {
+ *   trackPageview({ path: req.path, url: req.url, referrer: req.headers.referer })
+ *   next()
+ * })
+ * ```
+ */
+export function trackPageview(opts: TrackPageviewOptions): void {
+  if (!_tracerProvider) {
+    console.warn(
+      "[@strada.sh/sdk] trackPageview() called before initStrada(). Pageview was not sent.",
+    );
+    return;
+  }
+
+  const baggage = propagation.getBaggage(otelContext.active());
+  const attributes = buildPageviewAttributes(opts, baggage);
+
+  const span = trace.getTracer("strada").startSpan("pageview", { attributes });
+  span.end();
 }
 
 /**
