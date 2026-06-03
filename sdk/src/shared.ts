@@ -811,7 +811,58 @@ export const SPAN_CONTEXT_ATTR_KEYS: string[] = [
   "http.request.method", // new OTel semconv (v1.20+)
   "http.method",         // old OTel semconv (pre-v1.20)
   "http.target",         // old semconv, includes path + query
+  "http.url",            // old semconv, full URL
 ];
+
+/**
+ * Read the `.attributes` object from an SDK span at runtime.
+ * The OTel API `Span` interface only exposes `setAttribute()`, but the
+ * SDK `Span` class always has a readable `.attributes` property. This
+ * helper safely duck-types it so callers don't need `as unknown as ...`.
+ */
+export function readSpanAttributes(
+  span: unknown,
+): Record<string, unknown> | undefined {
+  if (span != null && typeof span === "object" && "attributes" in span) {
+    return (span as { attributes: Record<string, unknown> }).attributes;
+  }
+  return undefined;
+}
+
+/**
+ * Derive `url.path` from old HTTP semantic conventions when the new
+ * `url.path` attribute is not present.
+ *
+ * Normalization chain:
+ * 1. `url.path` (new semconv) - use as-is
+ * 2. `http.target` (old semconv) - strip query string
+ * 3. `http.url` (old semconv) - parse URL, extract pathname
+ *
+ * Returns undefined if no URL can be derived.
+ */
+export function deriveUrlPath(
+  attrs: Record<string, unknown>,
+): string | undefined {
+  const direct = attrs[ATTR["url.path"]];
+  if (typeof direct === "string" && direct) return direct;
+
+  const target = attrs["http.target"];
+  if (typeof target === "string" && target) {
+    const qIdx = target.indexOf("?");
+    return qIdx >= 0 ? target.slice(0, qIdx) || "/" : target;
+  }
+
+  const oldUrl = attrs["http.url"];
+  if (typeof oldUrl === "string" && oldUrl) {
+    try {
+      return new URL(oldUrl).pathname;
+    } catch {
+      // malformed URL, skip
+    }
+  }
+
+  return undefined;
+}
 
 // ---------------------------------------------------------------------------
 // startSpan — ergonomic span creation (Sentry-style)

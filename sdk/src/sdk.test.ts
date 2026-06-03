@@ -34,6 +34,8 @@ import {
   DEFAULT_DENY_URLS,
   ATTR,
   SPAN_CONTEXT_ATTR_KEYS,
+  readSpanAttributes,
+  deriveUrlPath,
   createStradaBaggage,
   BAGGAGE_SESSION_ID,
   BAGGAGE_USER_ID,
@@ -1393,21 +1395,98 @@ describe("SPAN_CONTEXT_ATTR_KEYS", () => {
     expect(SPAN_CONTEXT_ATTR_KEYS).toContain("http.route");
     expect(SPAN_CONTEXT_ATTR_KEYS).toContain("http.request.method");
     expect(SPAN_CONTEXT_ATTR_KEYS).toContain("http.method");
+    expect(SPAN_CONTEXT_ATTR_KEYS).toContain("http.target");
+    expect(SPAN_CONTEXT_ATTR_KEYS).toContain("http.url");
   });
 });
 
 // ---------------------------------------------------------------------------
-// BaggageLogProcessor span context injection (node.ts)
+// readSpanAttributes
 // ---------------------------------------------------------------------------
-// Verifies that the BaggageLogProcessor reads the active span's attributes
-// and injects curated context keys (url.path, http.route, etc.) into log
-// records. This is how server-side captureException() gets the request URL.
 
-describe("BaggageLogProcessor injects active span context into logs", () => {
+describe("readSpanAttributes", () => {
+  it("reads attributes from an SDK span", () => {
+    const exporter = new InMemorySpanExporter();
+    const provider = new BasicTracerProvider({
+      spanProcessors: [new SimpleSpanProcessor(exporter)],
+    });
+    const span = provider.getTracer("test").startSpan("test-span");
+    span.setAttribute("url.path", "/api/orders");
+
+    const attrs = readSpanAttributes(span);
+    expect(attrs).toBeTruthy();
+    expect(attrs!["url.path"]).toBe("/api/orders");
+    span.end();
+  });
+
+  it("returns undefined for null/undefined", () => {
+    expect(readSpanAttributes(null)).toBeUndefined();
+    expect(readSpanAttributes(undefined)).toBeUndefined();
+  });
+
+  it("returns undefined for objects without attributes", () => {
+    expect(readSpanAttributes({ name: "not-a-span" })).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// deriveUrlPath
+// ---------------------------------------------------------------------------
+
+describe("deriveUrlPath", () => {
+  it("returns url.path directly when present", () => {
+    expect(deriveUrlPath({ "url.path": "/api/users" })).toBe("/api/users");
+  });
+
+  it("strips query string from http.target", () => {
+    expect(deriveUrlPath({ "http.target": "/api/users?page=2" })).toBe("/api/users");
+  });
+
+  it("returns http.target as-is when no query string", () => {
+    expect(deriveUrlPath({ "http.target": "/api/users" })).toBe("/api/users");
+  });
+
+  it("returns / when http.target is just a query string", () => {
+    expect(deriveUrlPath({ "http.target": "?page=2" })).toBe("/");
+  });
+
+  it("extracts pathname from http.url", () => {
+    expect(deriveUrlPath({ "http.url": "https://example.com/api/users?page=2" })).toBe("/api/users");
+  });
+
+  it("prefers url.path over http.target and http.url", () => {
+    expect(deriveUrlPath({
+      "url.path": "/from-new",
+      "http.target": "/from-old",
+      "http.url": "https://example.com/from-oldest",
+    })).toBe("/from-new");
+  });
+
+  it("falls back from url.path to http.target when url.path is empty", () => {
+    expect(deriveUrlPath({
+      "url.path": "",
+      "http.target": "/fallback",
+    })).toBe("/fallback");
+  });
+
+  it("returns undefined when no URL-related attrs exist", () => {
+    expect(deriveUrlPath({ "db.statement": "SELECT 1" })).toBeUndefined();
+  });
+
+  it("handles malformed http.url gracefully", () => {
+    expect(deriveUrlPath({ "http.url": "not-a-url" })).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Span context propagation (parent → child spans, log injection)
+// ---------------------------------------------------------------------------
+// Tests the mechanisms that BaggageSpanProcessor and BaggageLogProcessor
+// use to propagate request context through nested spans and into logs.
+
+describe("span context propagation mechanisms", () => {
   let tracerProvider: NodeTracerProvider;
   let spanExporter: InMemorySpanExporter;
-  let logExporter: InMemoryLogRecordExporter;
-  let loggerProvider: LoggerProvider;
 
   beforeEach(() => {
     spanExporter = new InMemorySpanExporter();
@@ -1415,38 +1494,23 @@ describe("BaggageLogProcessor injects active span context into logs", () => {
       spanProcessors: [new SimpleSpanProcessor(spanExporter)],
     });
     tracerProvider.register();
-
-    logExporter = new InMemoryLogRecordExporter();
-    // Import BaggageLogProcessor dynamically since it's not exported
-    // from shared.ts. Instead, test the behavior end-to-end by using
-    // the actual initStrada flow indirectly: create a logger provider
-    // with our own processor and emit within an active span context.
-    loggerProvider = new LoggerProvider({
-      processors: [new SimpleLogRecordProcessor(logExporter)],
-    });
-    logs.setGlobalLoggerProvider(loggerProvider);
   });
 
   afterEach(async () => {
     await tracerProvider.shutdown();
-    await loggerProvider.shutdown();
     trace.disable();
     context.disable();
-    logs.disable();
   });
 
   it("SDK span exposes .attributes at runtime for context injection", () => {
-    // This test verifies our assumption that SDK spans have a readable
-    // .attributes property, which BaggageLogProcessor relies on.
     const tracer = trace.getTracer("test");
     tracer.startActiveSpan("http-handler", (span) => {
       span.setAttribute("url.path", "/api/users");
       span.setAttribute("http.route", "/api/users/:id");
 
-      // Verify the active span's attributes are accessible
       const activeSpan = trace.getActiveSpan();
       expect(activeSpan).toBeTruthy();
-      const attrs = (activeSpan as unknown as { attributes?: Record<string, unknown> }).attributes;
+      const attrs = readSpanAttributes(activeSpan);
       expect(attrs).toBeTruthy();
       expect(attrs!["url.path"]).toBe("/api/users");
       expect(attrs!["http.route"]).toBe("/api/users/:id");
@@ -1455,20 +1519,30 @@ describe("BaggageLogProcessor injects active span context into logs", () => {
     });
   });
 
-  it("log emitted inside active span can read span context attributes", () => {
-    // This test verifies the mechanism that BaggageLogProcessor uses:
-    // reading the active span from otelContext.active() during onEmit.
+  it("active span is readable during nested span execution", () => {
+    // Simulates: HTTP handler span → DB query span → captureException
+    // The BaggageLogProcessor reads the active span (DB query), which
+    // should have inherited url.path from the parent HTTP span via
+    // BaggageSpanProcessor.
     const tracer = trace.getTracer("test");
-    tracer.startActiveSpan("GET /checkout", (span) => {
-      span.setAttribute("url.path", "/checkout");
-      span.setAttribute("http.method", "GET");
+    tracer.startActiveSpan("GET /api/orders", (httpSpan) => {
+      httpSpan.setAttribute("url.path", "/api/orders");
+      httpSpan.setAttribute("http.method", "GET");
 
-      // The active span is available during log emission
-      const activeSpan = trace.getActiveSpan();
-      expect(activeSpan).toBeDefined();
-      expect(activeSpan!.spanContext().spanId).toBe(span.spanContext().spanId);
+      tracer.startActiveSpan("db.query", (dbSpan) => {
+        // The active span is now the DB query span
+        const active = trace.getActiveSpan();
+        expect(active).toBeTruthy();
+        expect(active!.spanContext().spanId).toBe(dbSpan.spanContext().spanId);
 
-      span.end();
+        // The parent span's attributes are readable for propagation
+        const parentAttrs = readSpanAttributes(httpSpan);
+        expect(parentAttrs!["url.path"]).toBe("/api/orders");
+
+        dbSpan.end();
+      });
+
+      httpSpan.end();
     });
   });
 });

@@ -79,6 +79,8 @@ import {
   BAGGAGE_SESSION_ID,
   BAGGAGE_USER_ID,
   SPAN_CONTEXT_ATTR_KEYS,
+  readSpanAttributes,
+  deriveUrlPath,
   type StradaUserIdentity,
   ERROR_SEVERITY,
   ERROR_SEVERITY_TEXT,
@@ -234,6 +236,22 @@ class AutoFlushLogProcessor implements LogRecordProcessor {
 
 class BaggageSpanProcessor implements SpanProcessor {
   onStart(span: Span): void {
+    // Propagate curated context attrs from parent span to child
+    const parentSpan = trace.getSpan(otelContext.active());
+    if (parentSpan) {
+      const parentAttrs = readSpanAttributes(parentSpan);
+      if (parentAttrs) {
+        for (const key of SPAN_CONTEXT_ATTR_KEYS) {
+          const value = parentAttrs[key];
+          if (value != null) span.setAttribute(key, String(value));
+        }
+        if (!parentAttrs[ATTR["url.path"]]) {
+          const derived = deriveUrlPath(parentAttrs);
+          if (derived) span.setAttribute(ATTR["url.path"], derived);
+        }
+      }
+    }
+
     const baggage = propagation.getBaggage(otelContext.active());
     if (!baggage) return;
 
@@ -278,13 +296,17 @@ class BaggageLogProcessor implements LogRecordProcessor {
     // request handlers automatically carry the request URL.
     const activeSpan = trace.getSpan(otelContext.active());
     if (activeSpan) {
-      const spanAttrs = (activeSpan as unknown as { attributes?: Record<string, unknown> }).attributes;
+      const spanAttrs = readSpanAttributes(activeSpan);
       if (spanAttrs) {
         for (const key of SPAN_CONTEXT_ATTR_KEYS) {
           const value = spanAttrs[key];
-          if (value != null && !record.attributes[key]) {
+          if (value != null && !Object.prototype.hasOwnProperty.call(record.attributes, key)) {
             record.setAttribute(key, String(value));
           }
+        }
+        if (!Object.prototype.hasOwnProperty.call(record.attributes, ATTR["url.path"])) {
+          const derived = deriveUrlPath(spanAttrs);
+          if (derived) record.setAttribute(ATTR["url.path"], derived);
         }
       }
     }

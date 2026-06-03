@@ -68,6 +68,8 @@ import {
   BAGGAGE_SESSION_ID,
   BAGGAGE_USER_ID,
   SPAN_CONTEXT_ATTR_KEYS,
+  readSpanAttributes,
+  deriveUrlPath,
   type StradaUserIdentity,
   ERROR_SEVERITY,
   ERROR_SEVERITY_TEXT,
@@ -202,12 +204,37 @@ function scheduleFlush(): void {
 
 /**
  * Reads session.id and user.id from incoming W3C Baggage (propagated by the
- * browser SDK) and sets them as span attributes. This means every backend
- * span created within a browser-initiated request automatically carries the
- * browser session and user context without the app developer doing anything.
+ * browser SDK) and sets them as span attributes. Also propagates curated
+ * request-context attributes (url.path, http.route, etc.) from parent spans
+ * to child spans so nested spans inherit the HTTP handler's URL context.
+ *
+ * Without parent propagation, captureException() inside a child span
+ * (e.g. a DB query span) would not see url.path because only the parent
+ * HTTP handler span has it.
  */
 class BaggageSpanProcessor implements SpanProcessor {
   onStart(span: Span): void {
+    // Propagate curated context attrs from parent span to child.
+    // This ensures nested spans (DB query inside HTTP handler) inherit
+    // url.path, http.route, etc. from the parent HTTP handler span.
+    const parentSpan = trace.getSpan(otelContext.active());
+    if (parentSpan) {
+      const parentAttrs = readSpanAttributes(parentSpan);
+      if (parentAttrs) {
+        for (const key of SPAN_CONTEXT_ATTR_KEYS) {
+          const value = parentAttrs[key];
+          if (value != null) {
+            span.setAttribute(key, String(value));
+          }
+        }
+        // Normalize old HTTP semconv into url.path if not already set
+        if (!parentAttrs[ATTR["url.path"]]) {
+          const derived = deriveUrlPath(parentAttrs);
+          if (derived) span.setAttribute(ATTR["url.path"], derived);
+        }
+      }
+    }
+
     const baggage = propagation.getBaggage(otelContext.active());
     if (!baggage) return;
 
@@ -268,15 +295,18 @@ class BaggageLogProcessor implements LogRecordProcessor {
     // HTTP handlers automatically carry the request URL.
     const activeSpan = trace.getSpan(otelContext.active());
     if (activeSpan) {
-      // SDK spans expose .attributes at runtime; the API type doesn't
-      // declare it but the SDK Span class always has it.
-      const spanAttrs = (activeSpan as unknown as { attributes?: Record<string, unknown> }).attributes;
+      const spanAttrs = readSpanAttributes(activeSpan);
       if (spanAttrs) {
         for (const key of SPAN_CONTEXT_ATTR_KEYS) {
           const value = spanAttrs[key];
-          if (value != null && !record.attributes[key]) {
+          if (value != null && !Object.prototype.hasOwnProperty.call(record.attributes, key)) {
             record.setAttribute(key, String(value));
           }
+        }
+        // Normalize old HTTP semconv into url.path if not already set
+        if (!Object.prototype.hasOwnProperty.call(record.attributes, ATTR["url.path"])) {
+          const derived = deriveUrlPath(spanAttrs);
+          if (derived) record.setAttribute(ATTR["url.path"], derived);
         }
       }
     }
