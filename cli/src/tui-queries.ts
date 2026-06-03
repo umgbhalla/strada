@@ -93,6 +93,8 @@ export interface IssueRow {
   lastSeen: string;
   lastServiceName: string;
   lastUrlPath: string;
+  lastHttpRoute: string;
+  lastHttpMethod: string;
   lastEnvironment: string;
 }
 
@@ -134,6 +136,8 @@ export function buildIssuesListSQL(opts: IssuesListOpts): string {
         countIf(MechanismHandled = false) AS unhandled_count,
         anyLast(ServiceName) AS last_service_name,
         anyLast(Tags['url.path']) AS last_url_path,
+        anyLast(Tags['http.route']) AS last_http_route,
+        if(anyLast(Tags['http.method']) != '', anyLast(Tags['http.method']), anyLast(Tags['http.request.method'])) AS last_http_method,
         anyLast(Environment) AS last_environment
     FROM otel_errors
     WHERE ${conditions.join("\n  AND ")}
@@ -166,6 +170,8 @@ export async function queryIssuesList(
     lastSeen: str(r, "last_seen"),
     lastServiceName: str(r, "last_service_name"),
     lastUrlPath: str(r, "last_url_path"),
+    lastHttpRoute: str(r, "last_http_route"),
+    lastHttpMethod: str(r, "last_http_method"),
     lastEnvironment: str(r, "last_environment"),
   }));
   return { data, hasMore };
@@ -206,6 +212,10 @@ export interface IssueEvent {
   urlPath: string;
   /** url.full from Tags, e.g. "https://example.com/pricing?plan=pro" */
   urlFull: string;
+  /** http.route from Tags, e.g. "/api/users/:id" */
+  httpRoute: string;
+  /** http.method or http.request.method from Tags, e.g. "GET" */
+  httpMethod: string;
   /** user.id from Tags */
   userId: string;
   /** session.id from Tags */
@@ -263,8 +273,9 @@ export async function queryIssueDetail(
     LIMIT 1
   `.trim();
 
-  // Extract url.path, url.full, user.id, session.id from Tags map,
-  // and browser.brands from ResourceAttributes for display in the TUI.
+  // Extract url.path, url.full, http.route, http.method, user.id,
+  // session.id from Tags map, and browser.brands from ResourceAttributes.
+  // http.method falls back to http.request.method (new OTel semconv).
   const eventsSql = dedent`
     SELECT
         Timestamp,
@@ -283,6 +294,8 @@ export async function queryIssueDetail(
         Tags,
         Tags['url.path'] AS url_path,
         Tags['url.full'] AS url_full,
+        Tags['http.route'] AS http_route,
+        if(Tags['http.method'] != '', Tags['http.method'], Tags['http.request.method']) AS http_method,
         Tags['user.id'] AS user_id,
         Tags['session.id'] AS session_id,
         ResourceAttributes['browser.brands'] AS browser
@@ -349,6 +362,8 @@ export async function queryIssueDetail(
     tags: e.Tags as Record<string, string> | string,
     urlPath: str(e, "url_path"),
     urlFull: str(e, "url_full"),
+    httpRoute: str(e, "http_route"),
+    httpMethod: str(e, "http_method"),
     userId: str(e, "user_id"),
     sessionId: str(e, "session_id"),
     browser: str(e, "browser"),
