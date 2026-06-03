@@ -86,17 +86,25 @@ export function extractErrorsFromTraces(body: ExportTraceServiceRequest, project
 
       for (const span of ss.spans ?? []) {
         let extractedStandardException = false;
+        // Span-level attributes carry context like url.path, session.id,
+        // user.id that exception events don't have. Merge them so error
+        // rows include the request/page context where the error happened.
+        // Event attributes win on collision (they have the exception.* keys).
+        const spanAttrsForContext = convertAttributes(span.attributes);
 
         for (const event of span.events ?? []) {
           // OTel convention: exception events have name "exception"
           if (event.name !== "exception") continue;
 
-          const attrs = convertAttributes(event.attributes);
-          const exceptionType = attrs[ATTR["exception.type"]] ?? "";
-          const exceptionMessage = attrs[ATTR["exception.message"]] ?? "";
+          const eventAttrs = convertAttributes(event.attributes);
+          const exceptionType = eventAttrs[ATTR["exception.type"]] ?? "";
+          const exceptionMessage = eventAttrs[ATTR["exception.message"]] ?? "";
 
           if (!exceptionType && !exceptionMessage) continue;
           extractedStandardException = true;
+
+          // Merge span context into event attrs so tags include url.path etc.
+          const attrs = { ...spanAttrsForContext, ...eventAttrs };
 
           const row = buildErrorRow({
             projectId,
@@ -119,18 +127,17 @@ export function extractErrorsFromTraces(body: ExportTraceServiceRequest, project
 
         if (extractedStandardException) continue;
 
-        const spanAttrs = convertAttributes(span.attributes);
         const cloudflareException = getCloudflareTraceException({
           span,
-          spanAttrs,
+          spanAttrs: spanAttrsForContext,
           resourceAttrs,
         });
         if (!cloudflareException) continue;
 
-        spanAttrs[ATTR["exception.type"]] = cloudflareException.type;
-        spanAttrs[ATTR["exception.message"]] = cloudflareException.message;
-        spanAttrs[ATTR["exception.mechanism.type"]] = "cloudflare.outcome";
-        spanAttrs[ATTR["exception.mechanism.handled"]] = "false";
+        spanAttrsForContext[ATTR["exception.type"]] = cloudflareException.type;
+        spanAttrsForContext[ATTR["exception.message"]] = cloudflareException.message;
+        spanAttrsForContext[ATTR["exception.mechanism.type"]] = "cloudflare.outcome";
+        spanAttrsForContext[ATTR["exception.mechanism.handled"]] = "false";
 
         const row = buildErrorRow({
           projectId,
@@ -140,7 +147,7 @@ export function extractErrorsFromTraces(body: ExportTraceServiceRequest, project
           serviceName,
           exceptionType: cloudflareException.type,
           exceptionMessage: cloudflareException.message,
-          attrs: spanAttrs,
+          attrs: spanAttrsForContext,
           resourceAttrs,
           scopeAttrs,
           release,

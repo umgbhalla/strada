@@ -78,6 +78,7 @@ import {
   ATTR,
   BAGGAGE_SESSION_ID,
   BAGGAGE_USER_ID,
+  SPAN_CONTEXT_ATTR_KEYS,
   type StradaUserIdentity,
   ERROR_SEVERITY,
   ERROR_SEVERITY_TEXT,
@@ -270,6 +271,22 @@ class BaggageLogProcessor implements LogRecordProcessor {
 
       const userId = baggage.getEntry(BAGGAGE_USER_ID)?.value;
       if (userId) record.setAttribute(ATTR["user.id"], userId);
+    }
+
+    // Inject request-scoped context from the active span (url.path,
+    // http.route, etc.) so captureException() and track() calls inside
+    // request handlers automatically carry the request URL.
+    const activeSpan = trace.getSpan(otelContext.active());
+    if (activeSpan) {
+      const spanAttrs = (activeSpan as unknown as { attributes?: Record<string, unknown> }).attributes;
+      if (spanAttrs) {
+        for (const key of SPAN_CONTEXT_ATTR_KEYS) {
+          const value = spanAttrs[key];
+          if (value != null && !record.attributes[key]) {
+            record.setAttribute(key, String(value));
+          }
+        }
+      }
     }
 
     this.inner.onEmit(...args);

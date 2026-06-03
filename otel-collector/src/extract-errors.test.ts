@@ -508,7 +508,7 @@ describe("extractErrorsFromTraces", () => {
     expect(extractErrorsFromTraces({ resourceSpans: [] }, "acme")).toBe("");
   });
 
-  it("extracts error from span exception event", () => {
+  it("extracts error from span exception event and merges span attributes into tags", () => {
     const input: ExportTraceServiceRequest = {
       resourceSpans: [
         {
@@ -528,6 +528,14 @@ describe("extractErrorsFromTraces", () => {
                   startTimeUnixNano: "1544712660000000000",
                   endTimeUnixNano: "1544712661000000000",
                   status: { code: 2, message: "error" },
+                  // Span-level attributes carry request context (url.path, session.id)
+                  // that should be merged into the error row's tags.
+                  attributes: [
+                    { key: "url.path", value: { stringValue: "/api/orders" } },
+                    { key: "session.id", value: { stringValue: "sess-abc" } },
+                    { key: "user.id", value: { stringValue: "user-42" } },
+                    { key: "http.method", value: { stringValue: "POST" } },
+                  ],
                   events: [
                     {
                       timeUnixNano: "1544712660500000000",
@@ -577,6 +585,13 @@ describe("extractErrorsFromTraces", () => {
     expect(row.source_signal).toBe("trace");
     expect(row.release).toBe("2.0.0");
     expect(row.fingerprint_hash).toMatch(/^[0-9a-f]{32}$/);
+    // Span-level context attributes are merged into tags
+    expect(row.tags["url.path"]).toBe("/api/orders");
+    expect(row.tags["session.id"]).toBe("sess-abc");
+    expect(row.tags["user.id"]).toBe("user-42");
+    expect(row.tags["http.method"]).toBe("POST");
+    // exception.* attributes from the event should NOT leak into tags
+    expect(row.tags["exception.type"]).toBeUndefined();
   });
 
   it("extracts Cloudflare uncaught exceptions from root span outcome when no exception event exists", () => {

@@ -149,6 +149,7 @@ export function IssuesView({ projectId, projects, services, servicesLoading, isL
       isLoading={isLoading || parentLoading || aiSearch.isSearching}
       isShowingDetail={true}
       filtering={false}
+      // accessoryTagsLayout={[ 10,10,16,16]}
       navigationTitle={navigationTitle}
       onSearchTextChange={aiSearch.onSearchTextChange}
       searchBarPlaceholder="unresolved since last week, service api…"
@@ -172,6 +173,11 @@ export function IssuesView({ projectId, projects, services, servicesLoading, isL
           80,
         );
 
+        // Show level and URL path as subtitle so users see where errors happened at a glance
+        const subtitleParts = [issue.lastLevel || "error"];
+        if (issue.lastUrlPath) subtitleParts.push(issue.lastUrlPath);
+        const subtitle = subtitleParts.join(" · ");
+
         const accessories: { text?: string; tag?: string | { value: string; color?: string } }[] = [
           { tag: { value: formatCount(issue.eventCount), color: Color.Orange } },
         ];
@@ -185,7 +191,7 @@ export function IssuesView({ projectId, projects, services, servicesLoading, isL
           <List.Item
             key={issue.fingerprintHash}
             title={title}
-            subtitle={issue.lastLevel || "error"}
+            subtitle={subtitle}
             icon={{ source: ICON.circleFilled, tintColor: iconColor }}
             accessories={accessories}
             detail={
@@ -368,8 +374,13 @@ function IssueDetailView({ projectId, fingerprint }: { projectId: string; finger
                 {s.environments.map((env: string) => <Detail.Metadata.TagList.Item key={env} text={env} color={Color.Orange} />)}
               </Detail.Metadata.TagList>
             )}
+            {s.urlPaths.length > 0 && (
+              <Detail.Metadata.TagList title="URL Paths">
+                {s.urlPaths.map((p: string) => <Detail.Metadata.TagList.Item key={p} text={p} color={Color.SecondaryText} />)}
+              </Detail.Metadata.TagList>
+            )}
             <Detail.Metadata.Separator />
-            {latestEvent?.urlPath ? <Detail.Metadata.Label title="URL" text={latestEvent.urlPath} /> : null}
+            {latestEvent?.urlPath ? <Detail.Metadata.Label title="Latest URL" text={latestEvent.urlPath} /> : null}
             {latestEvent?.userId ? <Detail.Metadata.Label title="User" text={latestEvent.userId} /> : null}
             {latestEvent?.browser ? <Detail.Metadata.Label title="Browser" text={latestEvent.browser} /> : null}
             {latestEvent?.sessionId ? <Detail.Metadata.Label title="Session" text={latestEvent.sessionId.slice(0, 12) + "…"} /> : null}

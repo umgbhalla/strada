@@ -790,6 +790,29 @@ export function shouldExportTelemetry(options: StradaOptions): boolean {
 export const BAGGAGE_SESSION_ID = "strada.session.id";
 export const BAGGAGE_USER_ID = "user.id";
 
+/**
+ * Attribute keys to extract from the active span into log records.
+ * These carry request-scoped context (URL, HTTP method) that helps
+ * understand where an error or event happened on the server.
+ *
+ * The BaggageLogProcessor in node.ts and cloudflare.ts reads these
+ * from the active span and injects them into every log record, so
+ * captureException() and track() calls inside HTTP handlers
+ * automatically include the request URL without app code doing anything.
+ *
+ * "Only set if not already present" prevents overwriting values set by
+ * the browser ContextLogProcessor or user code.
+ */
+export const SPAN_CONTEXT_ATTR_KEYS: string[] = [
+  ATTR["url.path"],
+  ATTR["url.full"],
+  ATTR["url.query"],
+  "http.route",          // route pattern, e.g. "/users/:id"
+  "http.request.method", // new OTel semconv (v1.20+)
+  "http.method",         // old OTel semconv (pre-v1.20)
+  "http.target",         // old semconv, includes path + query
+];
+
 // ---------------------------------------------------------------------------
 // startSpan — ergonomic span creation (Sentry-style)
 // ---------------------------------------------------------------------------

@@ -638,7 +638,10 @@ describe.sequential('collector integration with official OTel SDKs', () => {
                 "ScopeAttributes": {},
                 "ServiceName": "collector-integration-test",
                 "SourceSignal": "trace",
-                "Tags": {},
+                "Tags": {
+                  "http.method": "POST",
+                  "http.route": "/checkout",
+                },
               },
             ],
             "table": "otel_errors",

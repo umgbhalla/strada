@@ -184,6 +184,7 @@ export interface IssueSummary {
   services: string[];
   releases: string[];
   environments: string[];
+  urlPaths: string[];
 }
 
 export interface IssueEvent {
@@ -255,7 +256,8 @@ export async function queryIssueDetail(
         max(Timestamp) AS last_seen,
         groupUniqArray(ServiceName) AS services,
         groupUniqArray(Release) AS releases,
-        groupUniqArray(Environment) AS environments
+        groupUniqArray(Environment) AS environments,
+        groupUniqArrayIf(Tags['url.path'], Tags['url.path'] != '') AS url_paths
     FROM otel_errors
     WHERE FingerprintHash = '${opts.fingerprint}'
     LIMIT 1
@@ -326,6 +328,7 @@ export async function queryIssueDetail(
           services: parseArray(s.services),
           releases: parseArray(s.releases).filter(Boolean),
           environments: parseArray(s.environments).filter(Boolean),
+          urlPaths: parseArray(s.url_paths).filter(Boolean),
         }
       : null;
 
