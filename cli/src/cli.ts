@@ -42,8 +42,16 @@ cli.command("", "Browse Strada in the terminal").action(async () => {
   if (!isBun) {
     const { spawnSync } = await import("node:child_process");
     const { fileURLToPath } = await import("node:url");
-    const __filename = fileURLToPath(import.meta.url);
-    const result = spawnSync("bun", [__filename, ...process.argv.slice(2)], {
+    const path = await import("node:path");
+    // import.meta.url resolves to cli.js, but we need bin.js (the
+    // entrypoint that calls cli.parse()). Without this, bun loads cli.js
+    // which only exports the cli object and never calls .parse(), so the
+    // TUI silently exits with code 0.
+    const binPath = path.resolve(
+      path.dirname(fileURLToPath(import.meta.url)),
+      "bin.js",
+    );
+    const result = spawnSync("bun", [binPath, ...process.argv.slice(2)], {
       stdio: "inherit",
       env: process.env,
     });
