@@ -184,7 +184,6 @@ export function IssuesView({ projectId, projects, services, servicesLoading, isL
         // Use empty tag values to omit visually while keeping alignment.
         const accessories: { text?: string; tag?: string | { value: string; color?: string } }[] = [
           { tag: { value: formatCount(issue.eventCount), color: Color.Orange } },
-          hasUnhandled ? { tag: { value: "unhandled", color: Color.Red } } : { tag: "" },
           status !== "open" ? { tag: { value: status, color: status === "resolved" ? Color.Green : Color.SecondaryText } } : { tag: "" },
           { text: timeAgo(issue.lastSeen) },
         ];
@@ -267,6 +266,9 @@ export function IssuesView({ projectId, projects, services, servicesLoading, isL
                 />
                 <ActionPanel.Section title="Copy">
                   <Action.CopyToClipboard title="Copy Fingerprint" content={issue.fingerprintHash} />
+                   {issue.lastStacktrace && (
+                    <Action.CopyToClipboard title="Copy Stacktrace" content={issue.lastStacktrace} />
+                  )}
                 </ActionPanel.Section>
                 <CommonActions services={services} servicesLoading={servicesLoading} revalidate={revalidate} />
               </ActionPanel>
@@ -413,6 +415,9 @@ function IssueDetailView({ projectId, fingerprint }: { projectId: string; finger
       actions={
         <ActionPanel>
           <Action.CopyToClipboard title="Copy Fingerprint" content={fingerprint} />
+          {latestEvent?.exceptionStacktrace && (
+            <Action.CopyToClipboard title="Copy Stacktrace" content={latestEvent.exceptionStacktrace} />
+          )}
           {latestEvent?.traceId ? <Action.CopyToClipboard title="Copy Trace ID" content={latestEvent.traceId} /> : null}
           {latestEvent?.urlFull ? <Action.CopyToClipboard title="Copy URL" content={latestEvent.urlFull} /> : null}
           {latestEvent?.httpRoute ? <Action.CopyToClipboard title="Copy Route" content={latestEvent.httpRoute} /> : null}
