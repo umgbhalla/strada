@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.5.0
+
+1. **Enriched issue detail view** -- issue detail now shows URL path, user ID, session ID, browser brands, and environment alongside the existing metadata. The events table displays URL path and user ID columns. A 30-day frequency bar chart renders below the metadata so you can see error trends at a glance.
+
+2. **HTTP method and route in issues list** -- the issues list subtitle now shows `POST /api/users/:id` style labels combining `http.method` and `http.route` (or `url.path` as fallback). The full detail view also shows method, route, and URL path as separate metadata labels.
+
+3. **30-day frequency chart in both list and detail** -- each issue shows a daily frequency bar graph for the last 30 days. In the list view, frequency data for all visible issues is batch-fetched in a single SQL query to avoid N+1 requests. Bar width adapts to terminal width.
+
+4. **Copy stacktrace action** -- press the action key on any issue to copy the full stacktrace (prefixed with error type and message) to the clipboard. Available in both the issues list and the pushed detail view.
+
+5. **URL path visible in issues list** -- the issues list subtitle shows the URL path inline (e.g. `error · /api/orders`) so you can see which endpoint errored without opening the detail view.
+
+6. **Server-side `url.path` propagation into error rows** -- errors captured via `captureException()` in Node or Cloudflare Workers HTTP handlers now include `url.path`, `http.route`, and `http.method` in their tags. Errors from `span.recordException()` also inherit span-level attributes. This powers the new URL display in the TUI.
+
+7. **Removed unhandled tag from issues list** -- the red dot icon color already communicates unhandled status; the redundant text tag is gone for a cleaner layout.
+
+8. **Fixed bin.js entrypoint resolution under bun** -- the CLI re-spawn logic now resolves the `bin.js` path correctly when running under bun.
+
 ## 0.4.0
 
 1. **Interactive TUI** -- run `strada` with no arguments to launch a Raycast-like terminal UI for browsing issues, logs, traces, and analytics. Built with termcast and zustand for state persistence across restarts:

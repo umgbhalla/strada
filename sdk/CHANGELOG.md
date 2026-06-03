@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.5.0
+
+1. **Automatic request context propagation into errors and logs** -- `captureException()` and manual log records inside HTTP handlers now automatically carry `url.path`, `http.route`, `http.method`, and other request-scoped attributes without any app code. `BaggageLogProcessor` reads curated attributes from the active span and injects them into every log record:
+
+   ```ts
+   app.get('/api/orders', async (req, res) => {
+     // The HTTP handler span has url.path="/api/orders"
+     // Any error captured here automatically includes it
+     captureException(new Error('out of stock'))
+     // → error row in otel_errors has Tags["url.path"] = "/api/orders"
+   })
+   ```
+
+   This works for all server runtimes (Node, Cloudflare Workers). Nested child spans (DB queries, HTTP client calls) inherit parent request context unless they have their own URL attributes.
+
+2. **Child span attributes no longer overwritten by parent** -- `BaggageSpanProcessor` was unconditionally copying parent attributes to child spans, overwriting the child's own values. For example, a client span `POST /v1/payment_intents` inside a server handler `GET /checkout` would incorrectly show the parent's `url.path`. Fixed by checking `hasOwnProperty` on the child span before setting parent values.
+
+3. **Old HTTP semconv normalization** -- spans using old OpenTelemetry semantic conventions (`http.target`, `http.url`) now get `url.path` derived automatically. `http.target` gets its query string stripped; `http.url` gets parsed and the pathname extracted. Both `BaggageSpanProcessor` and `BaggageLogProcessor` apply this normalization as a fallback.
+
+4. **Telemetry export disabled by default in dev mode** -- when `import.meta.hot` is truthy (Vite, Webpack HMR, RSC dev servers), telemetry is no longer sent to the ingest endpoint. Local OTel providers still work so `trace.getTracer()` and `logs.getLogger()` function during development; only the network export is suppressed. Override with `enabled: true` to force export in dev, or `enabled: false` to disable everywhere:
+
+   ```ts
+   initStrada({
+     projectId: '...',
+     enabled: true, // force export even in dev
+   })
+   ```
+
 ## 0.4.0
 
 1. **Better Auth integration plugin** -- new `@strada.sh/sdk/better-auth` export provides a type-only Better Auth plugin that tracks auth lifecycle events (signup, login, logout) and sets the `strada_uid` cookie for browser SDK user correlation:
