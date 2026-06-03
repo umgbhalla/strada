@@ -4,6 +4,7 @@
 import {
   Action,
   ActionPanel,
+  BarGraph,
   Color,
   Detail,
   List,
@@ -21,8 +22,10 @@ import {
   queryIssuesList,
   queryIssueDetail,
   queryIssueMetadata,
+  queryIssuesFrequency,
   type IssueRow,
   type IssueMetadata,
+  type IssueFrequencyBucket,
   type AiFilterResult,
 } from "../tui-queries.ts";
 import { store, useStore, ICON } from "./store.ts";
@@ -79,6 +82,16 @@ function renderStacktraceMarkdown(framesJson?: string, rawStacktrace?: string): 
 // Use terminal height as page size so the first page fills the visible area.
 const ISSUES_PAGE_SIZE = Math.max(10, (process.stdout.rows || 30) - 5);
 
+// The list detail panel is roughly half the terminal width minus padding.
+// Compute bar width so 30 daily bars fill the available space.
+const FREQUENCY_DAYS = 30;
+const FREQ_BAR_GAP = 1;
+const DETAIL_WIDTH = Math.floor((process.stdout.columns || 120) / 2) - 4;
+// Reserve ~6 cols for Y-axis labels + separator
+const FREQ_PLOT_WIDTH = DETAIL_WIDTH - 6;
+// Each bar slot is barWidth + gap, so barWidth = floor(slotWidth) - gap
+const FREQ_BAR_WIDTH = Math.max(1, Math.floor(FREQ_PLOT_WIDTH / FREQUENCY_DAYS) - FREQ_BAR_GAP);
+
 export function IssuesView({ projectId, projects, services, servicesLoading, isLoading: parentLoading }: ViewProps): ReactNode {
   const service = useStore((s) => s.service);
   const { push } = useNavigation();
@@ -106,16 +119,19 @@ export function IssuesView({ projectId, projects, services, servicesLoading, isL
           offset: page * ISSUES_PAGE_SIZE,
           aiFilter,
         });
-        // Fetch metadata for the current page's fingerprints.
-        // Flatten metadata into each item so it survives JSON serialization
+        // Fetch metadata and frequency for the current page's fingerprints.
+        // Flatten into each item so it survives JSON serialization
         // (useCachedPromise caches via JSON, and Map serializes to {}).
         const fps = result.data.map((i) => i.fingerprintHash);
-        const metadataMap = fps.length > 0 ? await queryIssueMetadata(pid, fps) : new Map<string, IssueMetadata>();
+        const [metadataMap, frequencyMap] = fps.length > 0
+          ? await Promise.all([queryIssueMetadata(pid, fps), queryIssuesFrequency(pid, fps)])
+          : [new Map<string, IssueMetadata>(), new Map<string, IssueFrequencyBucket[]>()];
         store.setState({ lastQueryMs: Math.round(performance.now() - t0) });
         return {
           data: result.data.map((issue) => ({
             issue,
             metadata: metadataMap.get(issue.fingerprintHash),
+            frequency: frequencyMap.get(issue.fingerprintHash) || [],
           })),
           hasMore: result.hasMore,
         };
@@ -124,11 +140,9 @@ export function IssuesView({ projectId, projects, services, servicesLoading, isL
     { keepPreviousData: true },
   );
 
-  const items: { issue: IssueRow; metadata?: IssueMetadata }[] = data ?? [];
+  const items: { issue: IssueRow; metadata?: IssueMetadata; frequency: IssueFrequencyBucket[] }[] = data ?? [];
   const issues = items.map((item) => item.issue);
-  const getMeta = (fp: string): IssueMetadata | undefined => {
-    return items.find((item) => item.issue.fingerprintHash === fp)?.metadata;
-  };
+  const getItem = (fp: string) => items.find((item) => item.issue.fingerprintHash === fp);
 
   return (
     <List
@@ -142,9 +156,11 @@ export function IssuesView({ projectId, projects, services, servicesLoading, isL
       searchBarAccessory={<NavigationDropdown projects={projects} />}
     >
       {issues.map((issue: IssueRow) => {
-        const meta = getMeta(issue.fingerprintHash);
+        const item = getItem(issue.fingerprintHash);
+        const meta = item?.metadata;
         const status = meta?.status || "open";
         const hasUnhandled = issue.unhandledCount > 0;
+        const freq = item?.frequency?.length ? buildFrequencyData(item.frequency) : null;
 
         let iconColor = Color.Orange;
         if (status === "resolved") iconColor = Color.Green;
@@ -180,15 +196,35 @@ export function IssuesView({ projectId, projects, services, servicesLoading, isL
                   renderStacktraceMarkdown(issue.lastFrames, issue.lastStacktrace),
                 ].join("\n")}
                 metadata={
-                  <List.Item.Detail.Metadata>
-                    <List.Item.Detail.Metadata.Label title="Events" text={String(issue.eventCount)} />
-                    <List.Item.Detail.Metadata.Label title="Unhandled" text={String(issue.unhandledCount)} />
-                    <List.Item.Detail.Metadata.Label title="First seen" text={timeAgo(issue.firstSeen)} />
-                    <List.Item.Detail.Metadata.Label title="Last seen" text={timeAgo(issue.lastSeen)} />
-                    <List.Item.Detail.Metadata.Separator />
-                    <List.Item.Detail.Metadata.Label title="Status" text={{ value: status, color: status === "open" ? Color.Red : Color.Green }} />
-                    <List.Item.Detail.Metadata.Label title="Fingerprint" text={issue.fingerprintHash.slice(0, 16) + "…"} />
-                  </List.Item.Detail.Metadata>
+                  <>
+                    <List.Item.Detail.Metadata>
+                      <List.Item.Detail.Metadata.Label title="Events" text={String(issue.eventCount)} />
+                      <List.Item.Detail.Metadata.Label title="Unhandled" text={String(issue.unhandledCount)} />
+                      <List.Item.Detail.Metadata.Label title="First seen" text={timeAgo(issue.firstSeen)} />
+                      <List.Item.Detail.Metadata.Label title="Last seen" text={timeAgo(issue.lastSeen)} />
+                      <List.Item.Detail.Metadata.Separator />
+                      <List.Item.Detail.Metadata.Label title="Status" text={{ value: status, color: status === "open" ? Color.Red : Color.Green }} />
+                      {issue.lastServiceName ? <List.Item.Detail.Metadata.Label title="Service" text={issue.lastServiceName} /> : null}
+                      {issue.lastUrlPath ? <List.Item.Detail.Metadata.Label title="URL" text={issue.lastUrlPath} /> : null}
+                      {issue.lastEnvironment ? <List.Item.Detail.Metadata.Label title="Env" text={issue.lastEnvironment} /> : null}
+                      <List.Item.Detail.Metadata.Separator />
+                      <List.Item.Detail.Metadata.Label title="Fingerprint" text={issue.fingerprintHash.slice(0, 16) + "…"} />
+                    </List.Item.Detail.Metadata>
+                    {freq && (
+                      <BarGraph
+                        height={6}
+                        labels={freq.labels}
+                        barWidth={FREQ_BAR_WIDTH}
+                        barGap={FREQ_BAR_GAP}
+                        showYAxis={true}
+                        yTicks={3}
+                        showLegend={false}
+                        marginTop={2}
+                      >
+                        <BarGraph.Series data={freq.data} color={Color.Red} />
+                      </BarGraph>
+                    )}
+                  </>
                 }
               />
             }
@@ -234,6 +270,39 @@ export function IssuesView({ projectId, projects, services, servicesLoading, isL
 
 // ── Issue detail view (pushed) ────────────────────────────────────
 
+const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/**
+ * Build a full 30-day frequency array from sparse daily buckets, filling gaps with 0.
+ * Returns parallel labels and data arrays for BarGraph. Labels show "Jan 5" on
+ * the 1st of each week-ish interval to keep the axis readable.
+ */
+function buildFrequencyData(buckets: IssueFrequencyBucket[]): { labels: string[]; data: number[] } {
+  const now = new Date();
+  const labels: string[] = [];
+  const data: number[] = [];
+  const bucketMap = new Map<string, number>();
+  for (const b of buckets) {
+    try {
+      const d = new Date(b.bucket);
+      const key = `${d.getUTCFullYear()}-${d.getUTCMonth()}-${d.getUTCDate()}`;
+      bucketMap.set(key, b.count);
+    } catch {
+      // skip malformed timestamps
+    }
+  }
+
+  for (let i = 29; i >= 0; i--) {
+    const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
+    const key = `${d.getUTCFullYear()}-${d.getUTCMonth()}-${d.getUTCDate()}`;
+    // Show label every 7 days to avoid clutter
+    const dayIdx = 29 - i;
+    labels.push(dayIdx % 7 === 0 ? `${MONTH_NAMES[d.getUTCMonth()]} ${d.getUTCDate()}` : "");
+    data.push(bucketMap.get(key) || 0);
+  }
+  return { labels, data };
+}
+
 function IssueDetailView({ projectId, fingerprint }: { projectId: string; fingerprint: string }): ReactNode {
   const { data, isLoading } = useCachedPromise(
     async (pid: string, fp: string) => queryIssueDetail({ projectId: pid, fingerprint: fp, eventsLimit: 10 }),
@@ -256,46 +325,80 @@ function IssueDetailView({ projectId, fingerprint }: { projectId: string; finger
     "",
     `## Recent Events (${data.events.length})`,
     "",
-    "| Time | Service | Release | Trace |",
-    "|------|---------|---------|-------|",
+    "| Time | Service | URL | User | Trace |",
+    "|------|---------|-----|------|-------|",
     ...data.events.map((e: typeof data.events[number]) => {
       const ts = e.timestamp.replace("T", " ").replace(/\.\d+Z?$/, "");
-      return `| ${ts} | ${e.serviceName} | ${e.release || "—"} | ${e.traceId ? e.traceId.slice(0, 12) + "…" : "—"} |`;
+      const url = e.urlPath || "—";
+      const user = e.userId ? truncate(e.userId, 16) : "—";
+      return `| ${ts} | ${e.serviceName} | ${url} | ${user} | ${e.traceId ? e.traceId.slice(0, 12) + "…" : "—"} |`;
     }),
   ].join("\n");
+
+  const hasFrequencyData = data.frequency.length > 0;
+  const freq = hasFrequencyData ? buildFrequencyData(data.frequency) : null;
 
   return (
     <Detail
       navigationTitle={`${s.lastType}: ${truncate(s.lastMessage, 40)}`}
       markdown={markdown}
       metadata={
-        <Detail.Metadata>
-          <Detail.Metadata.Label title="Events" text={String(s.eventCount)} />
-          <Detail.Metadata.Label title="Unhandled" text={String(s.unhandledCount)} />
-          <Detail.Metadata.Separator />
-          <Detail.Metadata.Label title="First seen" text={s.firstSeen} />
-          <Detail.Metadata.Label title="Last seen" text={s.lastSeen} />
-          <Detail.Metadata.Separator />
-          <Detail.Metadata.Label title="Mechanism" text={s.lastMechanism || "generic"} />
-          <Detail.Metadata.Label title="Handled" text={{ value: s.lastHandled === "true" ? "Yes" : "No", color: s.lastHandled === "true" ? Color.Green : Color.Red }} />
-          {s.services.length > 0 && (
-            <Detail.Metadata.TagList title="Services">
-              {s.services.map((svc: string) => <Detail.Metadata.TagList.Item key={svc} text={svc} color={Color.Blue} />)}
-            </Detail.Metadata.TagList>
+        <>
+          <Detail.Metadata>
+            <Detail.Metadata.Label title="Events" text={String(s.eventCount)} />
+            <Detail.Metadata.Label title="Unhandled" text={String(s.unhandledCount)} />
+            <Detail.Metadata.Separator />
+            <Detail.Metadata.Label title="First seen" text={s.firstSeen} />
+            <Detail.Metadata.Label title="Last seen" text={s.lastSeen} />
+            <Detail.Metadata.Separator />
+            <Detail.Metadata.Label title="Mechanism" text={s.lastMechanism || "generic"} />
+            <Detail.Metadata.Label title="Handled" text={{ value: s.lastHandled === "true" ? "Yes" : "No", color: s.lastHandled === "true" ? Color.Green : Color.Red }} />
+            {s.services.length > 0 && (
+              <Detail.Metadata.TagList title="Services">
+                {s.services.map((svc: string) => <Detail.Metadata.TagList.Item key={svc} text={svc} color={Color.Blue} />)}
+              </Detail.Metadata.TagList>
+            )}
+            {s.releases.length > 0 && (
+              <Detail.Metadata.TagList title="Releases">
+                {s.releases.map((r: string) => <Detail.Metadata.TagList.Item key={r} text={r} color={Color.Purple} />)}
+              </Detail.Metadata.TagList>
+            )}
+            {s.environments.length > 0 && (
+              <Detail.Metadata.TagList title="Environments">
+                {s.environments.map((env: string) => <Detail.Metadata.TagList.Item key={env} text={env} color={Color.Orange} />)}
+              </Detail.Metadata.TagList>
+            )}
+            <Detail.Metadata.Separator />
+            {latestEvent?.urlPath ? <Detail.Metadata.Label title="URL" text={latestEvent.urlPath} /> : null}
+            {latestEvent?.userId ? <Detail.Metadata.Label title="User" text={latestEvent.userId} /> : null}
+            {latestEvent?.browser ? <Detail.Metadata.Label title="Browser" text={latestEvent.browser} /> : null}
+            {latestEvent?.sessionId ? <Detail.Metadata.Label title="Session" text={latestEvent.sessionId.slice(0, 12) + "…"} /> : null}
+            <Detail.Metadata.Separator />
+            <Detail.Metadata.Label title="Fingerprint" text={fingerprint} />
+          </Detail.Metadata>
+          {freq && (
+            <BarGraph
+              height={8}
+              labels={freq.labels}
+              barWidth={FREQ_BAR_WIDTH}
+              barGap={FREQ_BAR_GAP}
+              showYAxis={true}
+              yTicks={3}
+              showLegend={false}
+              marginTop={2}
+            >
+              <BarGraph.Series data={freq.data} color={Color.Red} />
+            </BarGraph>
           )}
-          {s.releases.length > 0 && (
-            <Detail.Metadata.TagList title="Releases">
-              {s.releases.map((r: string) => <Detail.Metadata.TagList.Item key={r} text={r} color={Color.Purple} />)}
-            </Detail.Metadata.TagList>
-          )}
-          <Detail.Metadata.Separator />
-          <Detail.Metadata.Label title="Fingerprint" text={fingerprint} />
-        </Detail.Metadata>
+        </>
       }
       actions={
         <ActionPanel>
           <Action.CopyToClipboard title="Copy Fingerprint" content={fingerprint} />
           {latestEvent?.traceId ? <Action.CopyToClipboard title="Copy Trace ID" content={latestEvent.traceId} /> : null}
+          {latestEvent?.urlFull ? <Action.CopyToClipboard title="Copy URL" content={latestEvent.urlFull} /> : null}
+          {latestEvent?.userId ? <Action.CopyToClipboard title="Copy User ID" content={latestEvent.userId} /> : null}
+          {latestEvent?.sessionId ? <Action.CopyToClipboard title="Copy Session ID" content={latestEvent.sessionId} /> : null}
         </ActionPanel>
       }
     />

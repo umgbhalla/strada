@@ -91,6 +91,9 @@ export interface IssueRow {
   unhandledCount: number;
   firstSeen: string;
   lastSeen: string;
+  lastServiceName: string;
+  lastUrlPath: string;
+  lastEnvironment: string;
 }
 
 export type IssuesListOpts = BaseQueryOptions & { unhandled?: boolean; offset?: number; aiFilter?: AiFilterResult };
@@ -128,7 +131,10 @@ export function buildIssuesListSQL(opts: IssuesListOpts): string {
         count() AS event_count,
         min(Timestamp) AS first_seen,
         max(Timestamp) AS last_seen,
-        countIf(MechanismHandled = false) AS unhandled_count
+        countIf(MechanismHandled = false) AS unhandled_count,
+        anyLast(ServiceName) AS last_service_name,
+        anyLast(Tags['url.path']) AS last_url_path,
+        anyLast(Environment) AS last_environment
     FROM otel_errors
     WHERE ${conditions.join("\n  AND ")}
     GROUP BY FingerprintHash
@@ -158,6 +164,9 @@ export async function queryIssuesList(
     unhandledCount: num(r, "unhandled_count"),
     firstSeen: str(r, "first_seen"),
     lastSeen: str(r, "last_seen"),
+    lastServiceName: str(r, "last_service_name"),
+    lastUrlPath: str(r, "last_url_path"),
+    lastEnvironment: str(r, "last_environment"),
   }));
   return { data, hasMore };
 }
@@ -192,6 +201,23 @@ export interface IssueEvent {
   traceId: string;
   spanId: string;
   tags: Record<string, string> | string;
+  /** url.path from Tags, e.g. "/pricing" */
+  urlPath: string;
+  /** url.full from Tags, e.g. "https://example.com/pricing?plan=pro" */
+  urlFull: string;
+  /** user.id from Tags */
+  userId: string;
+  /** session.id from Tags */
+  sessionId: string;
+  /** browser.brands from ResourceAttributes, e.g. "Chrome 147" */
+  browser: string;
+}
+
+export interface IssueFrequencyBucket {
+  /** ISO timestamp of the bucket start */
+  bucket: string;
+  /** Number of error events in this bucket */
+  count: number;
 }
 
 /** Parse a value that may be a JS array, JSON array string, or ClickHouse array string */
@@ -213,7 +239,7 @@ function parseArray(value?: unknown): string[] {
 
 export async function queryIssueDetail(
   opts: BaseQueryOptions & { fingerprint: string; eventsLimit?: number },
-): Promise<{ summary: IssueSummary | null; events: IssueEvent[] }> {
+): Promise<{ summary: IssueSummary | null; events: IssueEvent[]; frequency: IssueFrequencyBucket[] }> {
   const eventsLimit = opts.eventsLimit || 5;
 
   const summarySql = dedent`
@@ -235,6 +261,8 @@ export async function queryIssueDetail(
     LIMIT 1
   `.trim();
 
+  // Extract url.path, url.full, user.id, session.id from Tags map,
+  // and browser.brands from ResourceAttributes for display in the TUI.
   const eventsSql = dedent`
     SELECT
         Timestamp,
@@ -250,16 +278,36 @@ export async function queryIssueDetail(
         ServiceName,
         TraceId,
         SpanId,
-        Tags
+        Tags,
+        Tags['url.path'] AS url_path,
+        Tags['url.full'] AS url_full,
+        Tags['user.id'] AS user_id,
+        Tags['session.id'] AS session_id,
+        ResourceAttributes['browser.brands'] AS browser
     FROM otel_errors
     WHERE FingerprintHash = '${opts.fingerprint}'
     ORDER BY Timestamp DESC
     LIMIT ${eventsLimit}
   `.trim();
 
-  const [summaryRes, eventsRes] = await Promise.all([
+  // Frequency: 30 daily buckets covering the last 30 days.
+  // Used to render a bar chart of error occurrence over time.
+  const frequencySql = dedent`
+    SELECT
+        toStartOfDay(Timestamp) AS bucket,
+        count() AS count
+    FROM otel_errors
+    WHERE FingerprintHash = '${opts.fingerprint}'
+      AND Timestamp >= now() - INTERVAL 30 DAY
+    GROUP BY bucket
+    ORDER BY bucket ASC
+    LIMIT 30
+  `.trim();
+
+  const [summaryRes, eventsRes, frequencyRes] = await Promise.all([
     queryProject(opts.projectId, summarySql),
     queryProject(opts.projectId, eventsSql),
+    queryProject(opts.projectId, frequencySql),
   ]);
 
   const s = summaryRes.data?.[0];
@@ -296,9 +344,19 @@ export async function queryIssueDetail(
     traceId: str(e, "TraceId"),
     spanId: str(e, "SpanId"),
     tags: e.Tags as Record<string, string> | string,
+    urlPath: str(e, "url_path"),
+    urlFull: str(e, "url_full"),
+    userId: str(e, "user_id"),
+    sessionId: str(e, "session_id"),
+    browser: str(e, "browser"),
   }));
 
-  return { summary, events };
+  const frequency = (frequencyRes.data ?? []).map((r) => ({
+    bucket: str(r, "bucket"),
+    count: num(r, "count"),
+  }));
+
+  return { summary, events, frequency };
 }
 
 export interface IssueMetadata {
@@ -328,6 +386,43 @@ export async function queryIssueMetadata(
     for (const row of res.data ?? []) {
       const fp = str(row, "FingerprintHash");
       map.set(fp, { fingerprintHash: fp, status: str(row, "Status") || "open" });
+    }
+    return map;
+  } catch {
+    return new Map();
+  }
+}
+
+/**
+ * Batch-fetch 7-day daily frequency for multiple fingerprints in a single query.
+ * Returns a map from FingerprintHash to an array of daily buckets.
+ */
+export async function queryIssuesFrequency(
+  projectId: string,
+  fingerprints: string[],
+): Promise<Map<string, IssueFrequencyBucket[]>> {
+  if (fingerprints.length === 0) return new Map();
+  try {
+    const inList = fingerprints.map((f) => `'${f}'`).join(", ");
+    const sql = dedent`
+      SELECT
+          FingerprintHash,
+          toStartOfDay(Timestamp) AS bucket,
+          count() AS count
+      FROM otel_errors
+      WHERE FingerprintHash IN (${inList})
+        AND Timestamp >= now() - INTERVAL 30 DAY
+      GROUP BY FingerprintHash, bucket
+      ORDER BY FingerprintHash, bucket ASC
+      LIMIT 5000
+    `.trim();
+    const res = await queryProject(projectId, sql);
+    const map = new Map<string, IssueFrequencyBucket[]>();
+    for (const row of res.data ?? []) {
+      const fp = str(row, "FingerprintHash");
+      const entry = map.get(fp) || [];
+      entry.push({ bucket: str(row, "bucket"), count: num(row, "count") });
+      map.set(fp, entry);
     }
     return map;
   } catch {
