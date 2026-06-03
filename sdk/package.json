@@ -26,7 +26,11 @@
   "exports": {
     "./package.json": "./package.json",
     ".": {
-      "types": "./dist/index.d.ts",
+      "types": {
+        "workerd": "./dist/cloudflare.d.ts",
+        "browser": "./dist/browser.d.ts",
+        "default": "./dist/index.d.ts"
+      },
       "workerd": "./dist/cloudflare.js",
       "browser": "./dist/browser.js",
       "default": "./dist/index.js"

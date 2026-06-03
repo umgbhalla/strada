@@ -162,40 +162,58 @@ export interface TrackPageviewOptions {
 }
 
 /**
- * Build the span attributes for a server-side trackPageview() call.
- * Shared by node.ts and cloudflare.ts so the attribute shape is consistent.
+ * Build span attributes for a server-side trackPageview() call.
+ * Shared by node.ts and cloudflare.ts.
  */
 export function buildPageviewAttributes(
   opts: TrackPageviewOptions,
   baggage: import("@opentelemetry/api").Baggage | undefined,
 ): Record<string, string> {
+  // MVs require session.id != ''; fall back to ephemeral UUID for bots
   const sessionId =
     opts.sessionId ??
     baggage?.getEntry(BAGGAGE_SESSION_ID)?.value ??
-    "";
+    `server:${crypto.randomUUID()}`;
   const userId =
     opts.userId ??
     baggage?.getEntry(BAGGAGE_USER_ID)?.value;
 
-  // Derive query from URL if not provided
+  // Only set url.full for absolute URLs; relative ones (Express req.url)
+  // break domainWithoutWWW() in the MV
+  let urlFull: string | undefined;
+  let path = opts.path;
   let query = opts.query ?? "";
-  if (!query && opts.url) {
+
+  if (opts.url) {
     try {
-      query = new URL(opts.url).search;
+      const parsed = new URL(opts.url);
+      urlFull = parsed.href;
+      path ||= parsed.pathname;
+      query ||= parsed.search;
     } catch {
-      // malformed URL, skip
+      // Relative URL; extract path/query manually
+      if (opts.url.startsWith("/")) {
+        const qIdx = opts.url.indexOf("?");
+        if (qIdx >= 0) {
+          path ||= opts.url.slice(0, qIdx) || "/";
+          query ||= opts.url.slice(qIdx);
+        } else {
+          path ||= opts.url;
+        }
+      }
     }
   }
 
+  // opts.attributes spread first so canonical fields can't be overridden
   return {
-    [ATTR["url.path"]]: opts.path,
+    ...opts.attributes,
+    [ATTR["url.path"]]: path,
     [ATTR["pageview.source"]]: "server",
-    ...(opts.url ? { [ATTR["url.full"]]: opts.url } : {}),
+    [ATTR["session.id"]]: sessionId,
+    ...(urlFull ? { [ATTR["url.full"]]: urlFull } : {}),
     ...(query ? { [ATTR["url.query"]]: query } : {}),
     ...(opts.referrer ? { [ATTR["http.request.header.referer"]]: opts.referrer } : {}),
-    ...(sessionId ? { [ATTR["session.id"]]: sessionId } : {}),
     ...(userId ? { [ATTR["user.id"]]: userId } : {}),
-    ...opts.attributes,
   };
 }
 
