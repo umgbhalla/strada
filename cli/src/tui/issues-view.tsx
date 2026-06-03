@@ -173,19 +173,21 @@ export function IssuesView({ projectId, projects, services, servicesLoading, isL
           80,
         );
 
-        // Show level and URL path as subtitle so users see where errors happened at a glance
+        // Show level, method, and URL as subtitle so users see where errors happened at a glance.
+        // Prefer http.route over url.path when available (route is more concise, e.g. /users/:id).
         const subtitleParts = [issue.lastLevel || "error"];
-        if (issue.lastUrlPath) subtitleParts.push(issue.lastUrlPath);
+        const urlLabel = [issue.lastHttpMethod, issue.lastHttpRoute || issue.lastUrlPath].filter(Boolean).join(" ");
+        if (urlLabel) subtitleParts.push(urlLabel);
         const subtitle = subtitleParts.join(" · ");
 
+        // Fixed-length accessories: every item must have the same count.
+        // Use empty tag values to omit visually while keeping alignment.
         const accessories: { text?: string; tag?: string | { value: string; color?: string } }[] = [
           { tag: { value: formatCount(issue.eventCount), color: Color.Orange } },
+          hasUnhandled ? { tag: { value: "unhandled", color: Color.Red } } : { tag: "" },
+          status !== "open" ? { tag: { value: status, color: status === "resolved" ? Color.Green : Color.SecondaryText } } : { tag: "" },
+          { text: timeAgo(issue.lastSeen) },
         ];
-        if (hasUnhandled) accessories.push({ tag: { value: "unhandled", color: Color.Red } });
-        if (status !== "open") {
-          accessories.push({ tag: { value: status, color: status === "resolved" ? Color.Green : Color.SecondaryText } });
-        }
-        accessories.push({ text: timeAgo(issue.lastSeen) });
 
         return (
           <List.Item
@@ -211,6 +213,8 @@ export function IssuesView({ projectId, projects, services, servicesLoading, isL
                       <List.Item.Detail.Metadata.Separator />
                       <List.Item.Detail.Metadata.Label title="Status" text={{ value: status, color: status === "open" ? Color.Red : Color.Green }} />
                       {issue.lastServiceName ? <List.Item.Detail.Metadata.Label title="Service" text={issue.lastServiceName} /> : null}
+                      {issue.lastHttpMethod ? <List.Item.Detail.Metadata.Label title="Method" text={issue.lastHttpMethod} /> : null}
+                      {issue.lastHttpRoute ? <List.Item.Detail.Metadata.Label title="Route" text={issue.lastHttpRoute} /> : null}
                       {issue.lastUrlPath ? <List.Item.Detail.Metadata.Label title="URL" text={issue.lastUrlPath} /> : null}
                       {issue.lastEnvironment ? <List.Item.Detail.Metadata.Label title="Env" text={issue.lastEnvironment} /> : null}
                       <List.Item.Detail.Metadata.Separator />
@@ -331,13 +335,14 @@ function IssueDetailView({ projectId, fingerprint }: { projectId: string; finger
     "",
     `## Recent Events (${data.events.length})`,
     "",
-    "| Time | Service | URL | User | Trace |",
-    "|------|---------|-----|------|-------|",
+    "| Time | Method | URL | Service | User |",
+    "|------|--------|-----|---------|------|",
     ...data.events.map((e: typeof data.events[number]) => {
       const ts = e.timestamp.replace("T", " ").replace(/\.\d+Z?$/, "");
-      const url = e.urlPath || "—";
+      const method = e.httpMethod || "—";
+      const url = e.httpRoute || e.urlPath || "—";
       const user = e.userId ? truncate(e.userId, 16) : "—";
-      return `| ${ts} | ${e.serviceName} | ${url} | ${user} | ${e.traceId ? e.traceId.slice(0, 12) + "…" : "—"} |`;
+      return `| ${ts} | ${method} | ${url} | ${e.serviceName} | ${user} |`;
     }),
   ].join("\n");
 
@@ -380,7 +385,9 @@ function IssueDetailView({ projectId, fingerprint }: { projectId: string; finger
               </Detail.Metadata.TagList>
             )}
             <Detail.Metadata.Separator />
-            {latestEvent?.urlPath ? <Detail.Metadata.Label title="Latest URL" text={latestEvent.urlPath} /> : null}
+            {latestEvent?.httpMethod ? <Detail.Metadata.Label title="Method" text={latestEvent.httpMethod} /> : null}
+            {latestEvent?.httpRoute ? <Detail.Metadata.Label title="Route" text={latestEvent.httpRoute} /> : null}
+            {latestEvent?.urlPath ? <Detail.Metadata.Label title="URL Path" text={latestEvent.urlPath} /> : null}
             {latestEvent?.userId ? <Detail.Metadata.Label title="User" text={latestEvent.userId} /> : null}
             {latestEvent?.browser ? <Detail.Metadata.Label title="Browser" text={latestEvent.browser} /> : null}
             {latestEvent?.sessionId ? <Detail.Metadata.Label title="Session" text={latestEvent.sessionId.slice(0, 12) + "…"} /> : null}
@@ -408,6 +415,7 @@ function IssueDetailView({ projectId, fingerprint }: { projectId: string; finger
           <Action.CopyToClipboard title="Copy Fingerprint" content={fingerprint} />
           {latestEvent?.traceId ? <Action.CopyToClipboard title="Copy Trace ID" content={latestEvent.traceId} /> : null}
           {latestEvent?.urlFull ? <Action.CopyToClipboard title="Copy URL" content={latestEvent.urlFull} /> : null}
+          {latestEvent?.httpRoute ? <Action.CopyToClipboard title="Copy Route" content={latestEvent.httpRoute} /> : null}
           {latestEvent?.userId ? <Action.CopyToClipboard title="Copy User ID" content={latestEvent.userId} /> : null}
           {latestEvent?.sessionId ? <Action.CopyToClipboard title="Copy Session ID" content={latestEvent.sessionId} /> : null}
         </ActionPanel>

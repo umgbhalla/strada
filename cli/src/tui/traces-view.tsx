@@ -120,14 +120,14 @@ export function TracesView({ projectId, projects, services, servicesLoading, isL
         const iconColor = hasErrors ? Color.Red : Color.Green;
         const durationMs = trace.durationNs / 1_000_000;
 
+        // Fixed-length accessories: every item must have the same count.
+        // Use empty tag values to omit visually while keeping alignment.
         const accessories: { text?: string; tag?: string | { value: string; color?: string } }[] = [
           { tag: { value: `${trace.spanCount} spans`, color: Color.SecondaryText } },
+          hasErrors ? { tag: { value: `${trace.errorSpanCount} err`, color: Color.Red } } : { tag: "" },
+          { tag: { value: formatDurationMs(durationMs), color: durationColor(durationMs, tracesDurationStats) } },
+          { text: timeAgo(trace.startTime) },
         ];
-        if (hasErrors) {
-          accessories.push({ tag: { value: `${trace.errorSpanCount} err`, color: Color.Red } });
-        }
-        accessories.push({ tag: { value: formatDurationMs(durationMs), color: durationColor(durationMs, tracesDurationStats) } });
-        accessories.push({ text: timeAgo(trace.startTime) });
 
         return (
           <List.Item
@@ -223,12 +223,12 @@ function SpanTreeView({ projectId, traceId }: { projectId: string; traceId: stri
         const iconColor = isError ? Color.Red : span.statusCode === "Ok" ? Color.Green : Color.SecondaryText;
         const durationStr = formatDurationMs(span.durationMs);
 
+        // Fixed-length accessories: every item must have the same count.
+        // Use empty tag values to omit visually while keeping alignment.
         const accessories: { text?: string; tag?: string | { value: string; color?: string } }[] = [
+          isError ? { tag: { value: "ERROR", color: Color.Red } } : { tag: "" },
           { tag: { value: durationStr, color: durationColor(span.durationMs, spanDurationStats) } },
         ];
-        if (isError) {
-          accessories.unshift({ tag: { value: "ERROR", color: Color.Red } });
-        }
 
         return (
           <List.Item
