@@ -149,7 +149,7 @@ export function IssuesView({ projectId, projects, services, servicesLoading, isL
       isLoading={isLoading || parentLoading || aiSearch.isSearching}
       isShowingDetail={true}
       filtering={false}
-      accessoryTagsLayout={[16,3, 6]}
+      accessoryTagsLayout={[16, 6, 10]}
       navigationTitle={navigationTitle}
       onSearchTextChange={aiSearch.onSearchTextChange}
       searchBarPlaceholder="unresolved since last week, service api…"
