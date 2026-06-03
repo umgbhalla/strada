@@ -548,6 +548,28 @@ After `initStrada()`, all standard OTel APIs work: `trace.getTracer()`, `logs.ge
 - `setTags(tags)` sets tags merged into subsequent error attributes
 - `flush()` / `shutdown()` for manual lifecycle control
 
+### Automatic context propagation
+
+The SDK automatically propagates request context so errors always show **where** they happened, without any app code.
+
+**Browser:** every span and log record gets `url.path`, `session.id`, and `user.id` from `window.location`, `sessionStorage`, and the `strada_uid` cookie.
+
+**Server (Node.js, Workers):** `captureException()` inside an HTTP handler automatically includes the handler's `url.path`, `http.route`, and `http.method`. This works even in **nested spans** (e.g., a DB query inside an Express handler) because the SDK propagates context from parent to child spans.
+
+```
+GET /api/orders (url.path="/api/orders", http.method="GET")
+  │
+  ├── db.query (inherits url.path="/api/orders" from parent)
+  │     └── captureException(err) → error row has url.path="/api/orders"
+  │
+  └── POST /v1/payment_intents (keeps its own url.path, not overwritten)
+        └── captureException(err) → error row has url.path="/v1/payment_intents"
+```
+
+The SDK also normalizes **old OTel semantic conventions** (`http.target`, `http.url`) into `url.path` so errors show a clean path regardless of which instrumentation version you use.
+
+**Browser-to-server:** `session.id` and `user.id` propagate from browser to backend via [W3C Baggage](https://www.w3.org/TR/baggage/) headers. Backend errors within a browser-initiated request carry the same session and user identity.
+
 See the full [SDK documentation](./website/src/sdk/README.mdx) for detailed API reference, auto-instrumentation setup, batching config, and browser/server context propagation.
 
 ## Sourcemaps

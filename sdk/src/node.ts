@@ -41,6 +41,7 @@ import {
 import { logs } from "@opentelemetry/api-logs";
 import type { Logger } from "@opentelemetry/api-logs";
 import { context as otelContext, metrics, propagation, trace } from "@opentelemetry/api";
+import type { Context } from "@opentelemetry/api";
 import { CompositePropagator, W3CBaggagePropagator, W3CTraceContextPropagator } from "@opentelemetry/core";
 
 import {
@@ -213,29 +214,44 @@ function scheduleFlush(): void {
  * HTTP handler span has it.
  */
 class BaggageSpanProcessor implements SpanProcessor {
-  onStart(span: Span): void {
+  onStart(span: Span, parentContext: Context): void {
+    // Read the child span's own attributes (set via options.attributes
+    // before processors run) so we don't overwrite them with parent values.
+    const spanAttrs = readSpanAttributes(span) ?? {};
+    const has = (key: string) =>
+      Object.prototype.hasOwnProperty.call(spanAttrs, key);
+
+    // Normalize the child's own old HTTP semconv into url.path first,
+    // so a child span with http.target but no url.path gets normalized
+    // before parent propagation fills in the gap.
+    if (!has(ATTR["url.path"])) {
+      const derivedFromChild = deriveUrlPath(spanAttrs);
+      if (derivedFromChild) span.setAttribute(ATTR["url.path"], derivedFromChild);
+    }
+
     // Propagate curated context attrs from parent span to child.
-    // This ensures nested spans (DB query inside HTTP handler) inherit
-    // url.path, http.route, etc. from the parent HTTP handler span.
-    const parentSpan = trace.getSpan(otelContext.active());
+    // Only set if the child doesn't already have the key, so a client
+    // span "POST /v1/payment_intents" is not overwritten by the parent
+    // server span "GET /checkout".
+    const parentSpan = trace.getSpan(parentContext);
     if (parentSpan) {
       const parentAttrs = readSpanAttributes(parentSpan);
       if (parentAttrs) {
         for (const key of SPAN_CONTEXT_ATTR_KEYS) {
           const value = parentAttrs[key];
-          if (value != null) {
+          if (value != null && !has(key)) {
             span.setAttribute(key, String(value));
           }
         }
-        // Normalize old HTTP semconv into url.path if not already set
-        if (!parentAttrs[ATTR["url.path"]]) {
-          const derived = deriveUrlPath(parentAttrs);
-          if (derived) span.setAttribute(ATTR["url.path"], derived);
+        // Derive url.path from parent's old semconv if child still has none
+        if (!has(ATTR["url.path"]) && !spanAttrs[ATTR["url.path"]]) {
+          const derivedFromParent = deriveUrlPath(parentAttrs);
+          if (derivedFromParent) span.setAttribute(ATTR["url.path"], derivedFromParent);
         }
       }
     }
 
-    const baggage = propagation.getBaggage(otelContext.active());
+    const baggage = propagation.getBaggage(parentContext);
     if (!baggage) return;
 
     const sessionId = baggage.getEntry(BAGGAGE_SESSION_ID)?.value;

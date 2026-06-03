@@ -310,6 +310,8 @@ The Node entry (`sdk/src/node.ts`) wraps `@opentelemetry/sdk-node`:
 
 - Configures OTLP HTTP exporters for traces, logs, and metrics
 - Configures W3C Baggage extraction via `BaggageSpanProcessor` and `BaggageLogProcessor`
+- Parent-to-child span context propagation (url.path, http.route, etc.)
+- Old HTTP semconv normalization (http.target, http.url → url.path)
 - Installs `process.on('uncaughtException')` and `process.on('unhandledRejection')`
 - Flushes and exits on fatal errors
 - Graceful shutdown on SIGTERM/SIGINT
@@ -339,6 +341,47 @@ Backend (BaggageSpanProcessor + BaggageLogProcessor extract from baggage)
 **Baggage key names:** `strada.session.id` and `user.id`. Constants are in `shared.ts` as `BAGGAGE_SESSION_ID` and `BAGGAGE_USER_ID`.
 
 **No SQL changes needed.** Baggage is only a transport mechanism. Once extracted, the values become regular span/log attributes stored in the same Map columns, indexed by the same bloom filters.
+
+### Server-side request context propagation (BaggageSpanProcessor + BaggageLogProcessor)
+
+Beyond baggage, the server SDK processors also propagate **request-scoped context attributes** so that `captureException()`, `track()`, and manual logs inside any HTTP handler automatically carry the request URL without app code doing anything.
+
+**BaggageSpanProcessor** does two things on every `onStart`:
+
+1. **Parent-to-child propagation.** Copies curated request-context attributes (`url.path`, `url.full`, `http.route`, `http.method`, etc.) from the parent span to the child span, but only if the child doesn't already have them. This means a DB query span nested inside an HTTP handler span inherits the handler's `url.path`. A child span that has its own URL attrs (e.g., an HTTP client call to Stripe) keeps its own values.
+
+2. **Old semconv normalization.** If neither the child nor the parent has `url.path` but has `http.target` (old OTel semconv) or `http.url`, the processor derives `url.path` from them. `http.target` gets its query string stripped; `http.url` gets parsed as a URL and the pathname extracted. The `deriveUrlPath()` helper in `shared.ts` handles this.
+
+**BaggageLogProcessor** reads the active span's attributes and injects curated context keys into every log record. The curated list is `SPAN_CONTEXT_ATTR_KEYS` in `shared.ts`. It also normalizes old semconv into `url.path` via `deriveUrlPath()`. Only sets values not already present on the log record (uses `hasOwnProperty` check).
+
+```
+HTTP Handler Span (url.path="/api/orders", http.method="GET")
+  │
+  ├── DB Query Span (inherits url.path="/api/orders" from parent)
+  │     │
+  │     └── captureException(err)
+  │           │
+  │           ▼
+  │         BaggageLogProcessor reads active span (DB Query)
+  │         → url.path="/api/orders" injected into log record
+  │         → error row in otel_errors has Tags["url.path"]="/api/orders"
+  │
+  └── HTTP Client Span (url.path="/v1/payment_intents", http.method="POST")
+        │
+        └── captureException(err)
+              │
+              ▼
+            BaggageLogProcessor reads active span (HTTP Client)
+            → url.path="/v1/payment_intents" (child's own, NOT parent's)
+```
+
+**Key design rules for these processors:**
+
+- Child span attributes always win over parent attributes (never overwrite)
+- `hasOwnProperty` check preserves intentionally falsy values like `""`
+- Use `parentContext` argument (not `otelContext.active()`) for the parent span
+- `readSpanAttributes()` in `shared.ts` safely duck-types the SDK span's `.attributes` property (the OTel API `Span` interface doesn't expose it, but the SDK class always has it)
+- `SPAN_CONTEXT_ATTR_KEYS` in `shared.ts` is the single source of truth for which attributes propagate; add new keys there when needed
 
 ### Optional peer dependencies
 
