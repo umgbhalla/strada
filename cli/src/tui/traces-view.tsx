@@ -108,9 +108,7 @@ export function TracesView({ projectId, projects, services, servicesLoading, isL
       filtering={false}
       navigationTitle={navigationTitle}
       onSearchTextChange={aiSearch.onSearchTextChange}
-      accessoryTagsLayout={
-        [8,8]
-      }
+      accessoryTagsLayout={[16, 8, 8, 8]}
       searchBarPlaceholder="since 2 hours ago, only service api…"
       pagination={pagination ? { pageSize: TRACES_PAGE_SIZE, hasMore: pagination.hasMore, onLoadMore: pagination.onLoadMore } : undefined}
       searchBarAccessory={<NavigationDropdown projects={projects} />}
@@ -122,9 +120,10 @@ export function TracesView({ projectId, projects, services, servicesLoading, isL
 
         // Fixed-length accessories: every item must have the same count.
         // Use empty tag values to omit visually while keeping alignment.
-        const accessories: { text?: string; tag?: string | { value: string; color?: string } }[] = [
+        const accessories: { text?: string; tag?: string | { value: string; color?: string } | null }[] = [
+          { tag: { value: trace.services.join(", "), color: Color.Blue } },
           { tag: { value: `${trace.spanCount} spans`, color: Color.SecondaryText } },
-          hasErrors ? { tag: { value: `${trace.errorSpanCount} err`, color: Color.Red } } : { tag: "" },
+          hasErrors ? { tag: { value: `${trace.errorSpanCount} err`, color: Color.Red } } : { tag: null },
           { tag: { value: formatDurationMs(durationMs), color: durationColor(durationMs, tracesDurationStats) } },
           { text: timeAgo(trace.startTime) },
         ];
@@ -133,7 +132,6 @@ export function TracesView({ projectId, projects, services, servicesLoading, isL
           <List.Item
             key={trace.traceId}
             title={trace.rootSpanName || "(no root span)"}
-            subtitle={trace.services.join(", ")}
             icon={{ source: ICON.circleFilled, tintColor: iconColor }}
             accessories={accessories}
             keywords={[trace.rootSpanName, ...trace.services, trace.traceId]}
@@ -225,8 +223,9 @@ function SpanTreeView({ projectId, traceId }: { projectId: string; traceId: stri
 
         // Fixed-length accessories: every item must have the same count.
         // Use empty tag values to omit visually while keeping alignment.
-        const accessories: { text?: string; tag?: string | { value: string; color?: string } }[] = [
-          isError ? { tag: { value: "ERROR", color: Color.Red } } : { tag: "" },
+        const accessories: { text?: string; tag?: string | { value: string; color?: string } | null }[] = [
+          { tag: { value: span.serviceName, color: Color.Blue } },
+          isError ? { tag: { value: "ERROR", color: Color.Red } } : { tag: null },
           { tag: { value: durationStr, color: durationColor(span.durationMs, spanDurationStats) } },
         ];
 
@@ -234,7 +233,6 @@ function SpanTreeView({ projectId, traceId }: { projectId: string; traceId: stri
           <List.Item
             key={`${span.spanId}-${i}`}
             title={`${displayPrefix}${span.spanName}`}
-            subtitle={span.serviceName}
             icon={{ source: ICON.circleFilled, tintColor: iconColor }}
             accessories={accessories}
             keywords={[span.spanName, span.serviceName, span.spanId, span.spanKind || "", span.statusCode || "", span.statusMessage || "", ...Object.entries(span.spanAttributes).filter(([, v]) => v !== "").flatMap(([k, v]) => [k, String(v)]), ...Object.entries(span.resourceAttributes).filter(([, v]) => v !== "").flatMap(([k, v]) => [k, String(v)])]}

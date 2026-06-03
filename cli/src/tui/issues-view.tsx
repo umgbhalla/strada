@@ -149,7 +149,7 @@ export function IssuesView({ projectId, projects, services, servicesLoading, isL
       isLoading={isLoading || parentLoading || aiSearch.isSearching}
       isShowingDetail={true}
       filtering={false}
-      // accessoryTagsLayout={[ 10,10,16,16]}
+      accessoryTagsLayout={[16,3, 6]}
       navigationTitle={navigationTitle}
       onSearchTextChange={aiSearch.onSearchTextChange}
       searchBarPlaceholder="unresolved since last week, service api…"
@@ -173,18 +173,12 @@ export function IssuesView({ projectId, projects, services, servicesLoading, isL
           80,
         );
 
-        // Show level, method, and URL as subtitle so users see where errors happened at a glance.
-        // Prefer http.route over url.path when available (route is more concise, e.g. /users/:id).
-        const subtitleParts = [issue.lastLevel || "error"];
-        const urlLabel = [issue.lastHttpMethod, issue.lastHttpRoute || issue.lastUrlPath].filter(Boolean).join(" ");
-        if (urlLabel) subtitleParts.push(urlLabel);
-        const subtitle = subtitleParts.join(" · ");
-
         // Fixed-length accessories: every item must have the same count.
         // Use empty tag values to omit visually while keeping alignment.
-        const accessories: { text?: string; tag?: string | { value: string; color?: string } }[] = [
+        const accessories: { text?: string; tag?: string | { value: string; color?: string } | null }[] = [
+          issue.lastServiceName ? { tag: { value: issue.lastServiceName, color: Color.Blue } } : { tag: null },
           { tag: { value: formatCount(issue.eventCount), color: Color.Orange } },
-          status !== "open" ? { tag: { value: status, color: status === "resolved" ? Color.Green : Color.SecondaryText } } : { tag: "" },
+          status !== "open" ? { tag: { value: status, color: status === "resolved" ? Color.Green : Color.SecondaryText } } : { tag: null },
           { text: timeAgo(issue.lastSeen) },
         ];
 
@@ -192,7 +186,6 @@ export function IssuesView({ projectId, projects, services, servicesLoading, isL
           <List.Item
             key={issue.fingerprintHash}
             title={title}
-            subtitle={subtitle}
             icon={{ source: ICON.circleFilled, tintColor: iconColor }}
             accessories={accessories}
             detail={
