@@ -45,20 +45,33 @@ async function queryAllProjects(options: AnalyticsOptions, sql: string) {
   return { slugs, rows: results.flatMap((data) => data.data ?? []) };
 }
 
-// ── Shared option definitions ─────────────────────────────────────
+// ── Shared option factory ─────────────────────────────────────────
 
-const sharedOptions = (cmd: ReturnType<typeof goke.prototype.command>) =>
-  cmd
+/** Create an analytics subcommand with the standard project/org/time/domain options pre-attached. */
+function analyticsCommand(name: string, description: string) {
+  return analyticsCli
+    .command(name, description)
     .option("-p, --project <slug>", z.array(z.string()).describe("Project slug override (repeatable, defaults to folder setup)"))
     .option("--org [name-or-id]", "Organization override (defaults to folder setup)")
     .option("-s, --service [name]", "Filter by service name")
     .option("--since [duration]", "Time range, e.g. 1h, 24h, 7d (default: 7d)")
     .option("-n, --limit [count]", "Max number of rows (default: 20)")
     .option("--domain [domain]", "Filter by domain");
+}
 
 // ── analytics pages ───────────────────────────────────────────────
 
-sharedOptions(analyticsCli.command("analytics pages", "Top pages by pageviews"))
+analyticsCommand(
+  "analytics pages",
+  dedent`
+    Top pages by pageviews from the otel_analytics_pages materialized view.
+
+    Shows pathname, pageview count, and unique visitor count. Uses
+    countMerge/uniqMerge for AggregatingMergeTree columns.
+
+      strada analytics pages -p my-app --since 30d
+  `,
+)
   .action(async (options: AnalyticsOptions, { console: output, process: proc }: GokeExecutionContext) => {
     const conditions = buildMvConditions(options);
     const limit = Number(options.limit) || 20;
@@ -105,7 +118,7 @@ sharedOptions(analyticsCli.command("analytics pages", "Top pages by pageviews"))
 
 // ── analytics browsers ────────────────────────────────────────────
 
-sharedOptions(analyticsCli.command("analytics browsers", "Top browsers by visitors"))
+analyticsCommand("analytics browsers", "Top browsers by unique visitors")
   .action(async (options: AnalyticsOptions, { console: output, process: proc }: GokeExecutionContext) => {
     const conditions = buildMvConditions(options);
     const limit = Number(options.limit) || 20;
@@ -151,7 +164,7 @@ sharedOptions(analyticsCli.command("analytics browsers", "Top browsers by visito
 
 // ── analytics devices ─────────────────────────────────────────────
 
-sharedOptions(analyticsCli.command("analytics devices", "Top devices by visitors"))
+analyticsCommand("analytics devices", "Top device types by unique visitors")
   .action(async (options: AnalyticsOptions, { console: output, process: proc }: GokeExecutionContext) => {
     const conditions = buildMvConditions(options);
     const limit = Number(options.limit) || 20;
@@ -197,7 +210,7 @@ sharedOptions(analyticsCli.command("analytics devices", "Top devices by visitors
 
 // ── analytics countries ───────────────────────────────────────────
 
-sharedOptions(analyticsCli.command("analytics countries", "Top countries by visitors"))
+analyticsCommand("analytics countries", "Top countries by unique visitors")
   .action(async (options: AnalyticsOptions, { console: output, process: proc }: GokeExecutionContext) => {
     const conditions = buildMvConditions(options);
     const limit = Number(options.limit) || 20;
@@ -243,7 +256,7 @@ sharedOptions(analyticsCli.command("analytics countries", "Top countries by visi
 
 // ── analytics referrers ───────────────────────────────────────────
 
-sharedOptions(analyticsCli.command("analytics referrers", "Top traffic sources by visitors"))
+analyticsCommand("analytics referrers", "Top traffic sources by unique visitors")
   .action(async (options: AnalyticsOptions, { console: output, process: proc }: GokeExecutionContext) => {
     const conditions = buildMvConditions(options);
     conditions.push(`Referrer != ''`);
@@ -293,7 +306,7 @@ sharedOptions(analyticsCli.command("analytics referrers", "Top traffic sources b
 
 // ── analytics languages ───────────────────────────────────────────
 
-sharedOptions(analyticsCli.command("analytics languages", "Top languages by visitors"))
+analyticsCommand("analytics languages", "Top browser languages by unique visitors")
   .action(async (options: AnalyticsOptions, { console: output, process: proc }: GokeExecutionContext) => {
     const conditions = buildMvConditions(options);
     const limit = Number(options.limit) || 20;
@@ -339,7 +352,18 @@ sharedOptions(analyticsCli.command("analytics languages", "Top languages by visi
 
 // ── analytics kpis ────────────────────────────────────────────────
 
-sharedOptions(analyticsCli.command("analytics kpis", "Summary KPIs: visitors, pageviews, bounce rate, session duration"))
+analyticsCommand(
+  "analytics kpis",
+  dedent`
+    Summary KPIs: unique visitors, pageviews, sessions, bounce rate, and
+    average session duration.
+
+    Queries both otel_analytics_pages and otel_analytics_sessions MVs.
+    This gives a quick health check of browser analytics data.
+
+      strada analytics kpis -p my-app --since 30d
+  `,
+)
   .action(async (options: AnalyticsOptions, { console: output, process: proc }: GokeExecutionContext) => {
     const pagesConditions = buildMvConditions(options);
     const sessionsConditions = buildMvConditions(options);
@@ -417,7 +441,7 @@ sharedOptions(analyticsCli.command("analytics kpis", "Summary KPIs: visitors, pa
 
 // ── analytics events ──────────────────────────────────────────────
 
-sharedOptions(analyticsCli.command("analytics events", "Top custom events by occurrence"))
+analyticsCommand("analytics events", "Top custom events by occurrence count")
   .option("-w, --where <expr>", z.array(z.string()).describe("Raw SQL WHERE condition (repeatable, ANDed)"))
   .action(async (options: AnalyticsOptions & { where?: string[] }, { console: output, process: proc }: GokeExecutionContext) => {
     const since = parseDuration(options.since || "7d");
@@ -469,7 +493,15 @@ sharedOptions(analyticsCli.command("analytics events", "Top custom events by occ
 // ── analytics realtime ────────────────────────────────────────────
 
 analyticsCli
-  .command("analytics realtime", "Active visitors in the last 5 minutes")
+  .command(
+    "analytics realtime",
+    dedent`
+      Count active visitors in the last 5 minutes.
+
+      Queries raw otel_traces for pageview spans with distinct session.id
+      values. This is a real-time metric, not from the materialized views.
+    `,
+  )
   .option("-p, --project <slug>", z.array(z.string()).describe("Project slug override (repeatable, defaults to folder setup)"))
   .option("--org [name-or-id]", "Organization override (defaults to folder setup)")
   .option("-s, --service [name]", "Filter by service name")

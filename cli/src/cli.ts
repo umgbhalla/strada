@@ -5,6 +5,7 @@
 // invoked under Node, the TUI re-spawns itself with `bun` via spawnSync.
 
 import { goke } from "goke";
+import dedent from "string-dedent";
 import packageJson from "../package.json" with { type: "json" };
 import { databaseCli } from "./database.ts";
 import { loginCli } from "./login.ts";
@@ -39,7 +40,16 @@ export const cli = goke("strada")
 
 // ── Default command (TUI) ─────────────────────────────────────────
 
-cli.command("", "Browse Strada in the terminal").action(async () => {
+cli.command(
+  "",
+  dedent`
+    Launch the interactive TUI to browse issues, logs, traces, and analytics.
+
+    Requires Bun for the terminal renderer. If invoked under Node, it
+    re-spawns itself with bun automatically. Switch views and projects
+    with Ctrl+P, filter services with Ctrl+K.
+  `,
+).action(async () => {
   // OpenTUI's Zig renderer requires Bun FFI. When running under Node,
   // re-spawn the same command with bun so the TUI works transparently.
   const isBun = typeof (globalThis as { Bun?: unknown }).Bun !== "undefined";

@@ -47,7 +47,7 @@ strada query "SELECT count() FROM otel_errors WHERE Timestamp >= now() - INTERVA
 strada issues list -p my-app --since 24h
 ```
 
-The `-p` flag takes a project slug. You get the slug from `strada projects list`.
+The `-p` flag takes a project slug. You get the slug from `strada projects list`. If you don't know the slug, run `strada projects list` first. Slugs often include an environment suffix (e.g. `my-app-prod`, not `my-app`).
 
 All queries use **ClickHouse SQL**. You can use any ClickHouse SQL syntax, functions, and operators. The query runs against the project's Tinybird/ClickHouse database with automatic project-scoped filtering via JWT.
 
@@ -141,6 +141,34 @@ if (result instanceof Error) {
 Always pass `tags` with at least a `route` or `handler` identifier so errors are filterable in the Strada dashboard.
 
 **AGENTS.md notice.** If a project uses strada, its `AGENTS.md` (or `*_AGENTS.md`) should include a section stating that all inline-handled errors must call `captureException` from `@strada.sh/sdk` instead of being swallowed with `console.error`/`console.warn`. If that section is missing, add it when you touch error handling code.
+
+## Debugging errors
+
+The fastest path to root-cause a production error is the `issues list` + `issues view` flow. Start here before writing SQL queries.
+
+```bash
+# 1. Find the top error groups in the last 24 hours
+strada issues list -p my-app --since 24h
+
+# 2. Pick a fingerprint from the output, view the full details
+strada issues view <fingerprint> -p my-app --events 3
+```
+
+`issues view` gives you the exception type, message, full stack trace with line numbers, mechanism (handled/unhandled), affected services, releases, and recent event timestamps. This is usually enough to identify the root cause without any SQL.
+
+If you need more context, use the TraceId from the events table to inspect the full request flow:
+
+```bash
+# 3. View the distributed trace for a specific error event
+strada traces view <traceId> -p my-app
+```
+
+For log context around the error:
+
+```bash
+# 4. Show logs correlated to the same trace
+strada logs -p my-app --trace-id <traceId>
+```
 
 ## Common mistakes
 

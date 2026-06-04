@@ -57,7 +57,15 @@ export async function resolveCurrentOrg(options: { org?: string; cwd?: string } 
 }
 
 orgsCli
-  .command("orgs list", "List all organizations you belong to")
+  .command(
+    "orgs list",
+    dedent`
+      List all organizations you belong to.
+
+      Shows org name, role, and ID. A green dot marks the org configured for
+      the current folder. If no org is configured, run 'strada setup'.
+    `,
+  )
   .action(async (_options, { console: output, process: proc }) => {
     const orgs = await fetchOrgs();
     const current = getResolvedConfig(proc.cwd);

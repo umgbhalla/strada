@@ -98,7 +98,26 @@ function str(row: Record<string, unknown>, key: string): string {
 // ── issues list ───────────────────────────────────────────────────
 
 issuesCli
-  .command("issues list", "List issue groups sorted by frequency")
+  .command(
+    "issues list",
+    dedent`
+      List error issue groups sorted by frequency.
+
+      Groups errors by FingerprintHash and shows the count, exception type,
+      message, status, and last seen time for each group. This is the starting
+      point for debugging production errors. Use --since to control the time
+      range and -s to filter by service.
+
+      After finding an issue, copy its fingerprint hash and run
+      'strada issues view <fingerprint>' to see the full stack trace and
+      recent events.
+
+      Examples:
+        strada issues list -p my-app --since 24h
+        strada issues list -p my-app -s api-server --unhandled
+        strada issues list -p frontend -p api --since 7d
+    `,
+  )
   .option("-p, --project <slug>", z.array(z.string()).describe("Project slug override (repeatable, defaults to folder setup)"))
   .option("--org [name-or-id]", "Organization override (defaults to folder setup)")
   .option("-s, --service [name]", "Filter by service name")
@@ -219,7 +238,23 @@ issuesCli
 // ── issues view ───────────────────────────────────────────────────
 
 issuesCli
-  .command("issues view <fingerprint>", "Show details for a single issue by fingerprint hash")
+  .command(
+    "issues view <fingerprint>",
+    dedent`
+      Show full details for a single issue by fingerprint hash.
+
+      Displays exception type, message, stack trace (structured frames when
+      available), triage status, mechanism (handled/unhandled), services,
+      releases, environments, and a table of recent error events with trace
+      correlation IDs.
+
+      Get the fingerprint hash from 'strada issues list'. The --events flag
+      controls how many recent occurrences to show (default 5).
+
+        strada issues view abc123def456 -p my-app
+        strada issues view abc123def456 -p my-app --events 10 --json
+    `,
+  )
   .option("-p, --project [slug]", "Project slug override (defaults to folder setup)")
   .option("--org [name-or-id]", "Organization override (defaults to folder setup)")
   .option("-n, --events [count]", "Number of recent error events to show (default: 5)")
@@ -390,7 +425,15 @@ issuesCli
 // ── issues resolve ────────────────────────────────────────────────
 
 issuesCli
-  .command("issues resolve <fingerprint>", "Mark an issue as resolved")
+  .command(
+    "issues resolve <fingerprint>",
+    dedent`
+      Mark an issue as resolved.
+
+      Sets the issue status to 'resolved' in otel_issue_state. If the same
+      error recurs, it will appear as a new open issue in 'strada issues list'.
+    `,
+  )
   .option("-p, --project [slug]", "Project slug override (defaults to folder setup)")
   .option("--org [name-or-id]", "Organization override (defaults to folder setup)")
   .action(async (fingerprint, options, { console: output, process: proc }) => {
@@ -408,7 +451,15 @@ issuesCli
 // ── issues mute ──────────────────────────────────────────────────
 
 issuesCli
-  .command("issues mute <fingerprint>", "Mute an issue (suppress from default listing)")
+  .command(
+    "issues mute <fingerprint>",
+    dedent`
+      Mute an issue to suppress it from the default listing.
+
+      Muted issues still collect error events but are hidden from the default
+      'strada issues list' output. Useful for known noise you plan to fix later.
+    `,
+  )
   .option("-p, --project [slug]", "Project slug override (defaults to folder setup)")
   .option("--org [name-or-id]", "Organization override (defaults to folder setup)")
   .action(async (fingerprint, options, { console: output, process: proc }) => {
@@ -426,7 +477,14 @@ issuesCli
 // ── issues unresolve ─────────────────────────────────────────────
 
 issuesCli
-  .command("issues unresolve <fingerprint>", "Reopen a resolved or muted issue")
+  .command(
+    "issues unresolve <fingerprint>",
+    dedent`
+      Reopen a resolved or muted issue.
+
+      Sets the status back to 'open' so it appears in the default listing again.
+    `,
+  )
   .option("-p, --project [slug]", "Project slug override (defaults to folder setup)")
   .option("--org [name-or-id]", "Organization override (defaults to folder setup)")
   .action(async (fingerprint, options, { console: output, process: proc }) => {
@@ -444,7 +502,15 @@ issuesCli
 // ── issues assign ────────────────────────────────────────────────
 
 issuesCli
-  .command("issues assign <fingerprint>", "Assign an issue to an org member")
+  .command(
+    "issues assign <fingerprint>",
+    dedent`
+      Assign an issue to an org member or remove the current assignee.
+
+      Pass --to <member-id> to assign, or --unassign to clear the assignee.
+      Get member IDs from the Strada website team page.
+    `,
+  )
   .option("-p, --project [slug]", "Project slug override (defaults to folder setup)")
   .option("--org [name-or-id]", "Organization override (defaults to folder setup)")
   .option("--to [member-id]", "Org member ID to assign")

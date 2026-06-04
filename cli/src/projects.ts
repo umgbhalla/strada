@@ -5,6 +5,7 @@
 // the API and updates the cache. This avoids an API call on every command.
 
 import { goke } from "goke";
+import dedent from "string-dedent";
 import { bold, cyan, dim } from "./colors.ts";
 import { getResolvedConfig, loadConfig, updateConfig } from "./config.ts";
 import type { CachedProject } from "./config.ts";
@@ -91,7 +92,16 @@ export async function resolveProjects(options: { project?: string[]; org?: strin
 // ── Project commands ──────────────────────────────────────────────
 
 projectsCli
-  .command("projects list", "List all projects in your organization")
+  .command(
+    "projects list",
+    dedent`
+      List all projects in the current organization.
+
+      Shows project slugs and IDs. Use the slug with -p in other commands.
+      Slugs often include an environment suffix (e.g. 'my-app-prod').
+      This also refreshes the local project cache.
+    `,
+  )
   .option("--org [name-or-id]", "Organization override (defaults to folder setup)")
   .action(async (options, { console: output }) => {
     const org = await ensureDefaultOrg({ org: options.org || undefined });
@@ -111,7 +121,19 @@ projectsCli
   });
 
 projectsCli
-  .command("projects create <slug>", "Create a new project")
+  .command(
+    "projects create <slug>",
+    dedent`
+      Create a new project and generate its first org-wide ingest token.
+
+      The slug becomes part of the ingest hostname: {projectId}-ingest.strada.sh.
+      The token printed at creation is shown only once. Save it as STRADA_TOKEN
+      for server-side SDKs. Browser SDKs do not need a token.
+
+        strada projects create my-app
+        strada projects create my-app-prod
+    `,
+  )
   .option("--org [name-or-id]", "Organization override (defaults to folder setup)")
   .action(async (slug, options, { console: output }) => {
     const { safeFetch } = getApiClient();
@@ -148,7 +170,16 @@ projectsCli
   });
 
 projectsCli
-  .command("projects delete <id>", "Delete a project")
+  .command(
+    "projects delete <id>",
+    dedent`
+      Delete a project by its ID.
+
+      This removes the project from D1. Data already ingested into
+      Tinybird/ClickHouse is not deleted. Get the project ID from
+      'strada projects list'.
+    `,
+  )
   .action(async (id, _options, { console: output }) => {
     const { safeFetch } = getApiClient();
     const res = await safeFetch("/api/v0/projects/:id", {
@@ -169,7 +200,15 @@ projectsCli
   });
 
 projectsCli
-  .command("query <sql>", "Run a SQL query against your project's database")
+  .command(
+    "query <sql>",
+    dedent`
+      Run a ClickHouse SQL query against a project's database.
+
+      Returns raw JSON. For formatted output use the top-level 'strada query'
+      command instead, which renders tables and supports FORMAT clauses.
+    `,
+  )
   .option("-p, --project [slug]", "Project slug override (defaults to folder setup)")
   .option("--org [name-or-id]", "Organization override (defaults to folder setup)")
   .action(async (sql, options, { console: output, process: proc }) => {
