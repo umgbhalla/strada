@@ -50,7 +50,8 @@ export interface CheckPayload {
   failureThreshold: number
   autoDisableAfterHours: number
   cooldownMinutes: number
-  destinations: Array<{ channel: string; destination: string }>
+  // No destinations in payload. Resolved from D1 inside the workflow step
+  // so webhook URLs (credentials) don't persist in Cloudflare Workflow state.
 }
 
 export interface HealthCheckWorkflowParams {
@@ -107,12 +108,26 @@ export class HealthCheckWorkflow extends WorkflowEntrypoint {
 }
 
 async function processOrgChecks(orgId: string, checks: CheckPayload[]): Promise<void> {
-  // Resolve DB config from D1 (no credentials in workflow params)
+  // Resolve DB config and destinations from D1 (no credentials in workflow params)
   const db = getDb()
   const dbConfig = await db.query.database.findFirst({ where: { orgId } })
   if (!dbConfig) {
     logger.warn({ message: 'no database config for org', orgId })
     return
+  }
+
+  // Resolve destinations per check from D1 (webhook URLs are credentials,
+  // never persisted in workflow params)
+  const checkDestinations = new Map<string, Array<{ channel: string; destination: string }>>()
+  for (const check of checks) {
+    const rule = await db.query.alertRule.findFirst({
+      where: { id: check.checkId },
+      with: { destinations: true },
+    })
+    checkDestinations.set(
+      check.checkId,
+      (rule?.destinations ?? []).map((d) => ({ channel: d.channel, destination: d.destination })),
+    )
   }
 
   // Resolve project JWTs for each unique projectId
@@ -210,9 +225,10 @@ async function processOrgChecks(orgId: string, checks: CheckPayload[]): Promise<
       logger.error({ message: 'failed to write check result', checkId: result.checkId, error: String(err) })
     }
 
-    // Handle alerts
+    // Handle alerts (destinations resolved from D1 earlier)
+    const destinations = checkDestinations.get(check.checkId) ?? []
     try {
-      await handleCheckAlerts({ dbConfig, project, check, currentResult: result, now })
+      await handleCheckAlerts({ dbConfig, project, check, destinations, currentResult: result, now })
     } catch (err) {
       logger.error({ message: 'alert handling failed', checkId: check.checkId, error: String(err) })
     }
@@ -277,10 +293,11 @@ async function handleCheckAlerts(ctx: {
   dbConfig: DbConfig
   project: ProjectJwtInfo
   check: CheckPayload
+  destinations: Array<{ channel: string; destination: string }>
   currentResult: CheckResult
   now: number
 }): Promise<void> {
-  const { dbConfig, project, check, currentResult, now } = ctx
+  const { dbConfig, project, check, destinations, currentResult, now } = ctx
   const nowIso = new Date(now).toISOString()
 
   const configState = await queryCheckConfig(dbConfig, project, check.checkId)
@@ -292,13 +309,15 @@ async function handleCheckAlerts(ctx: {
     // ── Recovery ──
     logger.info({ message: 'health check recovered', checkId: check.checkId, url: check.url })
 
-    await dispatchToDestinations(check.destinations, (dest) =>
-      sendHealthCheckNotification(dest, {
-        checkName: check.name, url: check.url, method: check.method,
-        statusCode: currentResult.statusCode, latencyMs: currentResult.latencyMs,
-        errorMessage: '', consecutiveFailures: 0, orgName: check.orgName, recovered: true,
-      }),
-    )
+    if (destinations.length > 0) {
+      await dispatchToDestinations(destinations, (dest) =>
+        sendHealthCheckNotification(dest, {
+          checkName: check.name, url: check.url, method: check.method,
+          statusCode: currentResult.statusCode, latencyMs: currentResult.latencyMs,
+          errorMessage: '', consecutiveFailures: 0, orgName: check.orgName, recovered: true,
+        }),
+      )
+    }
 
     await updateCheckConfig(dbConfig, project, check, {
       LastAlertStatus: 'ok', FirstFailedAt: null, LastCheckedAt: nowIso, Version: now,
@@ -312,13 +331,13 @@ async function handleCheckAlerts(ctx: {
     const cooldownMs = check.cooldownMinutes * 60_000
     const lastAlertedMs = configState?.lastAlertedAt ? new Date(configState.lastAlertedAt).getTime() : 0
     const cooldownElapsed = !configState?.lastAlertedAt || (now - lastAlertedMs >= cooldownMs)
-    const shouldAlert = !wasAlerting || cooldownElapsed
+    const shouldAlert = (!wasAlerting || cooldownElapsed) && destinations.length > 0
 
     if (shouldAlert) {
       const isRepeat = wasAlerting
       logger.info({ message: isRepeat ? 'health check re-alert (cooldown elapsed)' : 'health check alert', checkId: check.checkId, url: check.url, consecutiveFailures: lastResults.length })
 
-      const delivered = await dispatchToDestinations(check.destinations, (dest) =>
+      const delivered = await dispatchToDestinations(destinations, (dest) =>
         sendHealthCheckNotification(dest, {
           checkName: check.name, url: check.url, method: check.method,
           statusCode: currentResult.statusCode, latencyMs: currentResult.latencyMs,
@@ -327,30 +346,35 @@ async function handleCheckAlerts(ctx: {
         }),
       )
 
-      if (delivered) {
-        await updateCheckConfig(dbConfig, project, check, {
-          LastAlertStatus: 'alerting', FirstFailedAt: configState?.firstFailedAt || nowIso,
-          LastAlertedAt: nowIso, LastCheckedAt: nowIso, Version: now,
-        })
-      }
+      // Always update LastCheckedAt and failure state. Only set LastAlertedAt
+      // when delivery succeeds, so failed delivery doesn't eat the cooldown.
+      await updateCheckConfig(dbConfig, project, check, {
+        LastAlertStatus: 'alerting',
+        FirstFailedAt: configState?.firstFailedAt || nowIso,
+        ...(delivered ? { LastAlertedAt: nowIso } : {}),
+        LastCheckedAt: nowIso,
+        Version: now,
+      })
       return
     }
   }
 
-  // ── Auto-disable ──
-  if (check.autoDisableAfterHours > 0 && configState?.firstFailedAt) {
+  // ── Auto-disable (only when current result is failing AND threshold is met) ──
+  if (!currentResult.success && allFailed && check.autoDisableAfterHours > 0 && configState?.firstFailedAt) {
     const hoursDown = (now - new Date(configState.firstFailedAt).getTime()) / (1000 * 60 * 60)
     if (hoursDown >= check.autoDisableAfterHours) {
       logger.info({ message: 'auto-disabling health check', checkId: check.checkId, hoursDown })
 
-      await dispatchToDestinations(check.destinations, (dest) =>
-        sendHealthCheckNotification(dest, {
-          checkName: check.name, url: check.url, method: check.method,
-          statusCode: currentResult.statusCode, latencyMs: currentResult.latencyMs,
-          errorMessage: `Auto-disabled after ${Math.round(hoursDown)} hours of continuous failure`,
-          consecutiveFailures: lastResults.length, orgName: check.orgName, recovered: false,
-        }),
-      )
+      if (destinations.length > 0) {
+        await dispatchToDestinations(destinations, (dest) =>
+          sendHealthCheckNotification(dest, {
+            checkName: check.name, url: check.url, method: check.method,
+            statusCode: currentResult.statusCode, latencyMs: currentResult.latencyMs,
+            errorMessage: `Auto-disabled after ${Math.round(hoursDown)} hours of continuous failure`,
+            consecutiveFailures: lastResults.length, orgName: check.orgName, recovered: false,
+          }),
+        )
+      }
 
       // Update ClickHouse config
       await updateCheckConfig(dbConfig, project, check, {

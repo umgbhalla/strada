@@ -1,7 +1,10 @@
 // Health check dispatch. Called by the cron trigger every 5 minutes.
 // Loads health_check rules from D1, groups them by org, and spawns a
-// single HealthCheckWorkflow instance with lightweight params (IDs only,
-// no credentials). The workflow resolves DB config from D1 inside each step.
+// single HealthCheckWorkflow instance with lightweight params.
+//
+// Workflow params contain ONLY IDs and check config (URL, method, thresholds).
+// No credentials, no webhook URLs, no tokens. The workflow resolves
+// destinations and DB config from D1 inside each step.
 
 import { env } from 'cloudflare:workers'
 import { getLogger, flush } from '@strada.sh/sdk'
@@ -13,15 +16,14 @@ const logger = getLogger('health-check-dispatch')
 export async function dispatchHealthChecks(): Promise<void> {
   const db = getDb()
 
-  // Load all enabled health_check rules with destinations and org
+  // Load all enabled health_check rules (no destinations needed in params)
   const rules = await db.query.alertRule.findMany({
     where: { type: 'health_check', enabled: true },
-    with: { destinations: true, org: true, project: true },
+    with: { org: true, project: true },
   })
 
   if (rules.length === 0) return
 
-  // Build per-check payloads, each carrying its own project and destinations
   const checks: CheckPayload[] = []
 
   for (const rule of rules) {
@@ -29,13 +31,8 @@ export async function dispatchHealthChecks(): Promise<void> {
       logger.warn({ message: 'health_check rule missing check_url, skipping', ruleId: rule.id })
       continue
     }
-    if (!rule.destinations || rule.destinations.length === 0) {
-      logger.info({ message: 'health_check rule has no destinations, skipping', ruleId: rule.id })
-      continue
-    }
 
-    // Resolve the project for this check. Rules can be scoped to a project,
-    // or apply to all projects in the org (use first project for ClickHouse scoping).
+    // Resolve the project for ClickHouse scoping
     let projectId = rule.projectId
     if (!projectId) {
       const firstProject = await db.query.project.findFirst({ where: { orgId: rule.orgId } })
@@ -61,16 +58,11 @@ export async function dispatchHealthChecks(): Promise<void> {
       failureThreshold: rule.checkFailureThreshold ?? 2,
       autoDisableAfterHours: rule.checkAutoDisableAfterHours ?? 24,
       cooldownMinutes: rule.cooldownMinutes ?? 60,
-      destinations: rule.destinations.map((d) => ({
-        channel: d.channel,
-        destination: d.destination,
-      })),
     })
   }
 
   if (checks.length === 0) return
 
-  // Group by orgId so each org is a separate workflow step
   const orgIds = [...new Set(checks.map((c) => c.orgId))]
   logger.info({ message: 'dispatching health check workflow', orgCount: orgIds.length, totalChecks: checks.length })
 
