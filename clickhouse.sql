@@ -67,6 +67,7 @@ CREATE TABLE IF NOT EXISTS otel_analytics_pages
     `Referrer`     String                 CODEC(ZSTD(1)),
     `Device`       LowCardinality(String) CODEC(ZSTD(1)),
     `Browser`      LowCardinality(String) CODEC(ZSTD(1)),
+    `BotName`      LowCardinality(String) CODEC(ZSTD(1)),
     `Country`      LowCardinality(String) CODEC(ZSTD(1)),
     `Language`     LowCardinality(String) CODEC(ZSTD(1)),
     `Visits`       AggregateFunction(uniq, String),
@@ -74,7 +75,7 @@ CREATE TABLE IF NOT EXISTS otel_analytics_pages
 )
 ENGINE = AggregatingMergeTree
 PARTITION BY Date
-ORDER BY (ProjectId, ServiceName, Domain, Date, Device, Browser, Country, Language, Pathname, Referrer)
+ORDER BY (ProjectId, ServiceName, Domain, Date, Device, Browser, BotName, Country, Language, Pathname, Referrer)
 TTL Date + INTERVAL 90 DAY
 SETTINGS index_granularity = 8192;
 
@@ -121,12 +122,24 @@ SELECT
         WHEN match(ua, 'iphone|ipad|safari') THEN 'safari'
         ELSE 'Unknown'
     END AS Browser,
+    CASE
+        WHEN match(ua, 'gptbot|chatgpt|oai-searchbot|chatgpt-user') THEN 'ChatGPT'
+        WHEN match(ua, 'claudebot|claude-searchbot|claude-user|anthropic') THEN 'Claude'
+        WHEN match(ua, 'perplexitybot|perplexity-user|perplexity') THEN 'Perplexity'
+        WHEN match(ua, 'google-extended|google-agent|gemini') THEN 'Gemini'
+        WHEN match(ua, 'copilot') THEN 'Copilot'
+        WHEN match(ua, 'meta-externalagent|facebookexternalhit') THEN 'Meta'
+        WHEN match(ua, 'applebot') THEN 'Applebot'
+        WHEN match(ua, 'amazonbot') THEN 'Amazonbot'
+        WHEN match(ua, 'bot[^a-z]|crawl|spider|wget|curl|urllib|semrushbot|ahrefsbot|mj12bot|dotbot|bingbot|googlebot|yandex|baidu|bytespider|petalbot|twitterbot|linkedinbot|whatsapp|telegrambot|discordbot|slackbot|lighthouse|headless|phantom|puppeteer|python|java/|go-http|node-fetch|pingdom|uptimerobot|httrack|scrapy|feedfetcher|bitdiscovery') THEN 'other-bot'
+        ELSE ''
+    END AS BotName,
     Country,
     Language,
     uniqState(SessionId) AS Visits,
     countState() AS Hits
 FROM source
-GROUP BY ProjectId, Date, ServiceName, Domain, Pathname, Referrer, Device, Browser, Country, Language;
+GROUP BY ProjectId, Date, ServiceName, Domain, Pathname, Referrer, Device, Browser, BotName, Country, Language;
 
 -- ============================================================================
 -- ANALYTICS: Session aggregates from browser pageview spans
@@ -141,6 +154,7 @@ CREATE TABLE IF NOT EXISTS otel_analytics_sessions
     `SessionId`    String                 CODEC(ZSTD(1)),
     `Device`       SimpleAggregateFunction(any, LowCardinality(String)),
     `Browser`      SimpleAggregateFunction(any, LowCardinality(String)),
+    `BotName`      SimpleAggregateFunction(any, LowCardinality(String)),
     `Country`      SimpleAggregateFunction(any, LowCardinality(String)),
     `FirstHit`     SimpleAggregateFunction(min, DateTime64(9)) CODEC(Delta(8), ZSTD(1)),
     `LatestHit`    SimpleAggregateFunction(max, DateTime64(9)) CODEC(Delta(8), ZSTD(1)),
@@ -195,6 +209,20 @@ SELECT
             ELSE 'Unknown'
         END
     ) AS Browser,
+    anySimpleState(
+        CASE
+            WHEN match(ua, 'gptbot|chatgpt|oai-searchbot|chatgpt-user') THEN 'ChatGPT'
+            WHEN match(ua, 'claudebot|claude-searchbot|claude-user|anthropic') THEN 'Claude'
+            WHEN match(ua, 'perplexitybot|perplexity-user|perplexity') THEN 'Perplexity'
+            WHEN match(ua, 'google-extended|google-agent|gemini') THEN 'Gemini'
+            WHEN match(ua, 'copilot') THEN 'Copilot'
+            WHEN match(ua, 'meta-externalagent|facebookexternalhit') THEN 'Meta'
+            WHEN match(ua, 'applebot') THEN 'Applebot'
+            WHEN match(ua, 'amazonbot') THEN 'Amazonbot'
+            WHEN match(ua, 'bot[^a-z]|crawl|spider|wget|curl|urllib|semrushbot|ahrefsbot|mj12bot|dotbot|bingbot|googlebot|yandex|baidu|bytespider|petalbot|twitterbot|linkedinbot|whatsapp|telegrambot|discordbot|slackbot|lighthouse|headless|phantom|puppeteer|python|java/|go-http|node-fetch|pingdom|uptimerobot|httrack|scrapy|feedfetcher|bitdiscovery') THEN 'other-bot'
+            ELSE ''
+        END
+    ) AS BotName,
     anySimpleState(Country) AS Country,
     minSimpleState(Timestamp) AS FirstHit,
     maxSimpleState(Timestamp) AS LatestHit,
