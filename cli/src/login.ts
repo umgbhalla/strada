@@ -135,19 +135,17 @@ async function loginAction(
       }),
     });
 
-    if (pollRes.ok) {
-      const result = await readJson<{ access_token?: string }>(pollRes);
-      const token = result.access_token;
-      if (token) {
-        spinner.stop("Approved!");
-        setScope("/", { sessionToken: token, baseUrl });
-        clack.log.success(`Logged in to ${cyan(baseUrl)}`);
-        clack.outro("Done");
-        return;
-      }
+    // Read the body exactly once — Response.body can only be consumed once.
+    const pollBody = await readJson<{ access_token?: string; error?: string }>(pollRes);
+
+    if (pollRes.ok && pollBody.access_token) {
+      spinner.stop("Approved!");
+      setScope("/", { sessionToken: pollBody.access_token, baseUrl });
+      clack.log.success(`Logged in to ${cyan(baseUrl)}`);
+      clack.outro("Done");
+      return;
     }
 
-    const pollBody: { error?: string } = await readJson<{ error?: string }>(pollRes).catch(() => ({}));
     if (pollBody.error === "expired_token") {
       spinner.stop("Code expired");
       clack.log.error("Device code expired. Run `strada login` again.");
