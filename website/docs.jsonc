@@ -39,6 +39,14 @@
             "pages": ["index", "docs/quickstart", "sdk/README"]
           },
           {
+            "group": "Monitoring",
+            "icon": "lucide:activity",
+            "pages": [
+              "docs/alerts",
+              "docs/health-checks"
+            ]
+          },
+          {
             "group": "Guides",
             "icon": "lucide:map",
             "pages": [

@@ -1,0 +1,240 @@
+---
+$schema: https://holocron.so/frontmatter.json
+title: Health Checks
+description: Monitor URLs on a schedule. Get alerted when endpoints go down, recover notifications when they come back, and auto-disable checks that fail for too long.
+icon: lucide:heart-pulse
+---
+
+# Health Checks
+
+Strada health checks fetch a URL on a schedule and alert you when it fails. Think of it as a simpler [Checkly](https://www.checklyhq.com/). No browser checks, no scripting, no multi-step flows. Just: fetch a URL, check the status code, alert on consecutive failures.
+
+```diagram
+  strada checks create                      Cloudflare Workflow
+  --url https://api.example.com/health       (every 5 min)
+  --name "API health"                             │
+         │                                        ▼
+          ▼                                 ┌──────────────┐
+  ┌──────────────┐                          │  fetch URL   │
+  │  D1 database  │◀─── config ─────────────│  measure ms  │
+  │  (alert_rule) │                         │  check 2xx   │
+  └──────────────┘                          └──────┬───────┘
+                                                   │
+                                    ┌──────────────┼──────────────┐
+                                    ▼              ▼              ▼
+                                ClickHouse      consecutive    email/webhook
+                                results table   failure check  alert sent
+```
+
+Health checks run as a **Cloudflare Workflow** with each tenant org as a separate durable step. If one org's database is slow, other orgs are not affected. Steps retry independently on failure.
+
+---
+
+## Creating a health check
+
+```bash
+strada checks create --url https://api.example.com/health --name "API health"
+```
+
+The check starts running within 5 minutes. By default it expects a **2xx status code**, checks every **5 minutes**, and alerts after **2 consecutive failures**.
+
+Alerts go to the same destinations as error alerts. If you have no destinations yet, create an alert rule with a destination first:
+
+```bash
+strada alerts create --name "Notifications" --channel email --to ops@example.com
+```
+
+### Options
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--url` | required | URL to fetch |
+| `--name` | required | Human-readable name for the check |
+| `--method` | `GET` | HTTP method (`GET`, `HEAD`, `POST`, `PUT`, `DELETE`, `OPTIONS`) |
+| `--interval` | `5` | Check interval in minutes (minimum 5) |
+| `--timeout` | `10000` | Request timeout in milliseconds |
+| `--failures` | `2` | Consecutive failures before alerting |
+| `--status-min` | `200` | Minimum acceptable status code |
+| `--status-max` | `299` | Maximum acceptable status code |
+| `--cooldown` | `60` | Minutes to wait before re-alerting the same check |
+| `--auto-disable-hours` | `24` | Auto-disable after N hours of continuous failure (0 to disable) |
+| `--project` | all | Scope the check to a specific project |
+
+### Example: strict health check
+
+```bash
+strada checks create \
+  --url https://api.example.com/health \
+  --name "API health" \
+  --timeout 5000 \
+  --failures 3 \
+  --interval 10 \
+  --cooldown 30
+```
+
+This checks every 10 minutes, allows up to 5 seconds for a response, alerts after 3 consecutive failures, and waits 30 minutes before re-alerting.
+
+---
+
+## Listing and managing checks
+
+```bash
+# List all health checks
+strada checks list
+
+# Delete a check (historical results remain in ClickHouse)
+strada checks delete 01KPVGTT9CJW4ZNEF414VHGRFD
+
+# Disable a check without deleting it
+strada checks disable 01KPVGTT9CJW4ZNEF414VHGRFD
+
+# Re-enable a disabled check
+strada checks enable 01KPVGTT9CJW4ZNEF414VHGRFD
+```
+
+---
+
+## How alerting works
+
+### Consecutive failure detection
+
+A single failed check does not trigger an alert. The check must fail **N times in a row** (configured by `--failures`, default 2). This avoids false alarms from network blips or brief deploys.
+
+```diagram
+  check 1: ✓ pass
+  check 2: ✗ fail    ← failure count: 1
+  check 3: ✗ fail    ← failure count: 2 → alert sent
+  check 4: ✗ fail    ← within cooldown, no re-alert
+  check 5: ✓ pass    ← recovery alert sent
+```
+
+### Recovery alerts
+
+When a check transitions from **failing to passing** after an alert was sent, Strada sends a **recovery notification** so you know the issue resolved. No action needed; recovery alerts are automatic.
+
+### Cooldown
+
+After an alert fires, Strada waits `--cooldown` minutes (default 60) before sending another alert for the same check. This prevents notification spam during extended outages.
+
+### Auto-disable
+
+If a check has been failing continuously for longer than `--auto-disable-hours` (default 24 hours), Strada **automatically disables it** and sends a final notification. This prevents filling your database with thousands of identical failure rows from a decommissioned service or misconfigured URL.
+
+Re-enable with:
+
+```bash
+strada checks enable <id>
+```
+
+---
+
+## What gets stored on failure
+
+When a check fails, Strada stores the **response body** (truncated to 16KB) and **all response headers** (except `set-cookie`). This means an agent or human debugging the outage can see exactly what the server returned.
+
+Successful checks store only the status code and latency. No body or headers.
+
+### Querying check results
+
+Health check results live in the `otel_health_checks` ClickHouse table. Query them with SQL:
+
+```bash
+# Recent failures for a specific URL
+strada query "
+  SELECT Timestamp, StatusCode, LatencyMs, ErrorMessage
+  FROM otel_health_checks
+  WHERE Success = 0
+  ORDER BY Timestamp DESC
+  LIMIT 20
+"
+
+# Availability percentage over the last 30 days
+strada query "
+  SELECT
+    countIf(Success = 1) * 100.0 / count() AS availability_pct
+  FROM otel_health_checks
+  WHERE Url = 'https://api.example.com/health'
+  AND Timestamp >= now() - INTERVAL 30 DAY
+  LIMIT 1
+"
+
+# Latency percentiles
+strada query "
+  SELECT
+    quantile(0.5)(LatencyMs) AS p50,
+    quantile(0.95)(LatencyMs) AS p95,
+    quantile(0.99)(LatencyMs) AS p99
+  FROM otel_health_checks
+  WHERE Url = 'https://api.example.com/health'
+  AND Timestamp >= now() - INTERVAL 24 HOUR
+  LIMIT 1
+"
+
+# Read the response body from the last failure
+strada query "
+  SELECT Timestamp, StatusCode, ResponseBody
+  FROM otel_health_checks
+  WHERE Success = 0
+  AND Url = 'https://api.example.com/health'
+  ORDER BY Timestamp DESC
+  LIMIT 1
+"
+```
+
+---
+
+## Common workflows
+
+### Monitor a production API
+
+```bash
+# Create the check
+strada checks create \
+  --url https://api.example.com/health \
+  --name "Production API"
+
+# Make sure you have alert destinations
+strada alerts add --channel email --to oncall@example.com
+strada alerts add --channel webhook --to https://hooks.slack.com/services/...
+```
+
+### Monitor multiple services
+
+```bash
+strada checks create --url https://api.example.com/health --name "API"
+strada checks create --url https://example.com --name "Marketing site"
+strada checks create --url https://app.example.com/health --name "Dashboard"
+strada checks create --url https://ws.example.com/health --name "WebSocket server" --timeout 3000
+```
+
+### Check a non-standard health endpoint
+
+Some services return 204, 301, or other non-2xx status codes from health endpoints:
+
+```bash
+# Accept 200-399 as healthy (includes redirects)
+strada checks create \
+  --url https://legacy.example.com/ping \
+  --name "Legacy service" \
+  --status-min 200 \
+  --status-max 399
+```
+
+### Disable auto-disable for critical checks
+
+For checks you never want automatically disabled (even if they fail for days), set `--auto-disable-hours 0`:
+
+```bash
+strada checks create \
+  --url https://payments.example.com/health \
+  --name "Payment gateway" \
+  --auto-disable-hours 0
+```
+
+---
+
+## Alert destinations
+
+Health checks share the same destination system as error alerts. One destination can receive both error alerts and health check alerts.
+
+See [Alerts and Destinations](/docs/alerts) for the full guide on setting up email, webhook, and Slack destinations.

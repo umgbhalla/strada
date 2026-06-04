@@ -1,0 +1,246 @@
+---
+$schema: https://holocron.so/frontmatter.json
+title: Alerts and Destinations
+description: Configure error alert rules and notification destinations. Multiple rules per org, project-scoped overrides, email and webhook delivery.
+icon: lucide:bell
+---
+
+# Alerts and Destinations
+
+Strada has two types of alert rules: **error alerts** (triggered by application exceptions) and **health checks** (triggered by URL monitoring failures). Both use the same **destination system** for notifications.
+
+```diagram
+  Error Alert Rules             Health Check Rules
+  (cron every 5 min)            (Cloudflare Workflow)
+        │                              │
+        └──────────┬───────────────────┘
+                   ▼
+          ┌────────────────┐
+          │  destinations   │
+          │  (org-scoped)   │
+          └───┬────┬────┬──┘
+              │    │    │
+              ▼    ▼    ▼
+           email  webhook  slack
+```
+
+---
+
+## Creating alert rules
+
+```bash
+# Basic: alert on any error
+strada alerts create --name "All errors"
+
+# With a destination (creates the destination and links it)
+strada alerts create --name "API errors" --channel email --to ops@example.com
+
+# Scoped to a project with custom threshold
+strada alerts create --name "Payments strict" --project payments --threshold 1 --cooldown 5
+
+# Relaxed rule for a noisy project
+strada alerts create --name "Frontend noise" --project frontend --threshold 20 --window 30
+```
+
+Multiple rules per org are supported. When a project has its own dedicated rule, the org-wide rule skips that project to avoid duplicate alerts.
+
+### Options
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--name` | required | Human-readable rule name |
+| `--project` | all projects | Scope to a specific project |
+| `--threshold` | `1` | Minimum errors of the same fingerprint to trigger |
+| `--window` | `5` | Time window in minutes |
+| `--cooldown` | `60` | Minutes to wait before re-alerting the same error group |
+| `--channel` | none | Optionally create a destination inline (`email`, `webhook`, `slack`) |
+| `--to` | none | Destination address (used with `--channel`) |
+
+---
+
+## Managing rules
+
+```bash
+# List all rules and destinations
+strada alerts list
+
+# Update a rule's settings
+strada alerts update <id> --threshold 5 --window 15
+
+# Delete a rule (destinations are preserved for other rules)
+strada alerts delete <id>
+
+# Send a test notification to all destinations
+strada alerts test
+```
+
+---
+
+## Project-scoped overrides
+
+When you have both an **org-wide rule** and a **project-scoped rule** for the same project, the project-scoped rule wins. The org-wide rule skips that project entirely.
+
+```bash
+# Org-wide default: alert on 1 error in 5 minutes
+strada alerts create --name "Default" --threshold 1
+
+# Override for frontend: only alert on 20+ errors in 30 minutes
+strada alerts create --name "Frontend relaxed" --project frontend --threshold 20 --window 30
+
+# Override for payments: alert immediately, re-alert every 5 minutes
+strada alerts create --name "Payments strict" --project payments --threshold 1 --cooldown 5
+```
+
+With this setup:
+- **payments** uses the "Payments strict" rule (threshold 1, cooldown 5m)
+- **frontend** uses the "Frontend relaxed" rule (threshold 20, window 30m)
+- **api**, **worker**, and any other project use the "Default" rule (threshold 1)
+
+---
+
+## Destinations
+
+Destinations are org-scoped delivery endpoints. They auto-link to **every alert rule** in the org, including health checks. Creating a destination through `strada alerts create --channel --to` makes it available to all current and future rules.
+
+### Adding destinations
+
+Destinations are created inline when creating an alert rule:
+
+```bash
+# Email destination
+strada alerts create --name "Email alerts" --channel email --to ops@example.com
+
+# Webhook destination (Slack, PagerDuty, n8n, etc.)
+strada alerts create --name "Slack alerts" --channel webhook \
+  --to https://hooks.slack.com/services/T.../B.../xxx
+```
+
+Both destinations now receive notifications from **all** rules in the org.
+
+### Listing destinations
+
+```bash
+strada destinations list
+```
+
+Or see them alongside rules:
+
+```bash
+strada alerts list
+```
+
+### Removing a destination
+
+```bash
+strada destinations remove <id>
+```
+
+Removes the destination from all rules. Get the ID from `strada destinations list`.
+
+### Testing destinations
+
+```bash
+strada destinations test
+# or equivalently:
+strada alerts test
+```
+
+Sends a test notification to every destination and shows ✓ or ✗ for each.
+
+---
+
+## How deduplication works
+
+Error alerts track cooldown **per fingerprint** in ClickHouse (`otel_issue_state` table). If the same error group triggers again within the cooldown window, the alert is suppressed. Different error groups alert independently.
+
+### Regression detection
+
+When you resolve an issue with `strada issues resolve`, Strada records which deployment was running at the time. If the same error appears again from a **different deployment**, it is treated as a **regression**: the issue is reopened and a new alert fires immediately, bypassing the cooldown.
+
+---
+
+## Webhook payload format
+
+### Error alerts
+
+```json
+{
+  "type": "error_alert",
+  "project": "my-app",
+  "org": "acme",
+  "fingerprintHash": "a1b2c3d4...",
+  "exceptionType": "TypeError",
+  "exceptionMessage": "Cannot read property 'foo' of null",
+  "errorCount": 12,
+  "windowMinutes": 5,
+  "firstSeen": "2026-01-15 14:30",
+  "serviceName": "api"
+}
+```
+
+### Health check alerts
+
+```json
+{
+  "type": "health_check_alert",
+  "check": {
+    "name": "API health",
+    "url": "https://api.example.com/health",
+    "method": "GET"
+  },
+  "result": {
+    "statusCode": 503,
+    "latencyMs": 2340,
+    "errorMessage": "Service Unavailable",
+    "consecutiveFailures": 3
+  },
+  "org": "acme"
+}
+```
+
+### Health check recovery
+
+```json
+{
+  "type": "health_check_recovery",
+  "check": {
+    "name": "API health",
+    "url": "https://api.example.com/health",
+    "method": "GET"
+  },
+  "result": {
+    "statusCode": 200,
+    "latencyMs": 45,
+    "errorMessage": "",
+    "consecutiveFailures": 0
+  },
+  "org": "acme"
+}
+```
+
+---
+
+## Routing webhooks to Slack
+
+Slack incoming webhooks work directly as webhook destinations. Create an incoming webhook in your Slack workspace, then add it:
+
+```bash
+strada alerts create --name "Slack" --channel webhook \
+  --to https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX
+```
+
+The JSON payload is posted directly. For formatted Slack messages with blocks and attachments, use a middleware service (n8n, Zapier, or a custom worker) between Strada and Slack.
+
+---
+
+## Email alerts
+
+Email alerts are sent from `alerts@updates.strada.sh` via Cloudflare Email Workers. The email includes:
+
+- Exception type and message (for error alerts) or check name and URL (for health checks)
+- Error count and time window, or consecutive failure count
+- Stacktrace (error alerts, truncated to 20 lines)
+- Status code and latency (health checks)
+- CLI command to investigate further
+
+Emails support dark mode across Gmail, Apple Mail, Outlook, and Spark.
