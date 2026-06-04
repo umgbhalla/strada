@@ -58,9 +58,8 @@ export function cronMatches(cron: string, date: Date): boolean {
   const hour = fieldMatches(parts[1]!, values[1]!, FIELD_MINS[1]!)
   const dom = fieldMatches(parts[2]!, values[2]!, FIELD_MINS[2]!)
   const month = fieldMatches(parts[3]!, values[3]!, FIELD_MINS[3]!)
-  // Normalize DOW 7 → 0 (both mean Sunday)
-  const dowValue = values[4]! === 7 ? 0 : values[4]!
-  const dow = fieldMatches(parts[4]!, dowValue, FIELD_MINS[4]!)
+  const dowValue = values[4]!
+  const dow = fieldMatches(parts[4]!, dowValue, FIELD_MINS[4]!, true)
 
   // Standard cron: when both DOM and DOW are restricted (not *), match if EITHER is true.
   // When only one is restricted, match both normally (AND).
@@ -71,7 +70,7 @@ export function cronMatches(cron: string, date: Date): boolean {
   return minute && hour && dayMatch && month
 }
 
-function fieldMatches(field: string, value: number, fieldMin: number): boolean {
+function fieldMatches(field: string, value: number, fieldMin: number, isDow = false): boolean {
   if (field === '*') return true
 
   return field.split(',').some((part) => {
@@ -80,31 +79,66 @@ function fieldMatches(field: string, value: number, fieldMin: number): boolean {
     if (isNaN(step) || step < 1) return false
 
     if (rangePart === '*') {
-      // */N with correct baseline for 1-based fields
       return (value - fieldMin) % step === 0
     }
 
     if (rangePart!.includes('-')) {
       const [startStr, endStr] = rangePart!.split('-')
-      const start = parseInt(startStr!, 10)
-      const end = parseInt(endStr!, 10)
+      let start = parseInt(startStr!, 10)
+      let end = parseInt(endStr!, 10)
       if (isNaN(start) || isNaN(end)) return false
+      // Normalize DOW 7 → 0 in range bounds
+      if (isDow) { start = start === 7 ? 0 : start; end = end === 7 ? 0 : end }
       if (value < start || value > end) return false
       return (value - start) % step === 0
     }
 
-    const exact = parseInt(rangePart!, 10)
+    let exact = parseInt(rangePart!, 10)
     if (isNaN(exact)) return false
+    // Normalize DOW 7 → 0 for exact match
+    if (isDow && exact === 7) exact = 0
     return exact === value
   })
 }
 
-/** Validate that a string is a well-formed 5-field cron expression. */
+/** Validate that a string is a well-formed 5-field cron expression with in-bounds values. */
 export function isValidCron(cron: string): boolean {
   const parts = cron.trim().split(/\s+/)
   if (parts.length !== 5) return false
-  // Each field must only contain digits, *, /, -, and commas
-  return parts.every((p) => /^[0-9*\/,\-]+$/.test(p))
+
+  const bounds = [
+    [0, 59],  // minute
+    [0, 23],  // hour
+    [1, 31],  // day-of-month
+    [1, 12],  // month
+    [0, 7],   // day-of-week (0 and 7 are both Sunday)
+  ]
+
+  return parts.every((field, i) => {
+    if (!/^[0-9*\/,\-]+$/.test(field)) return false
+    if (field === '*') return true
+    const [min, max] = bounds[i]!
+
+    const b = bounds[i]!
+    const fieldMin = b[0] as number
+    const fieldMax = b[1] as number
+    return field.split(',').every((part) => {
+      const [rangePart, stepStr] = part.split('/')
+      if (stepStr != null) {
+        const step = parseInt(stepStr, 10)
+        if (isNaN(step) || step < 1) return false
+      }
+      if (rangePart === '*') return true
+      if (rangePart!.includes('-')) {
+        const [s, e] = rangePart!.split('-')
+        const sv = parseInt(s!, 10)
+        const ev = parseInt(e!, 10)
+        return !isNaN(sv) && !isNaN(ev) && sv >= fieldMin && ev <= fieldMax && sv <= ev
+      }
+      const v = parseInt(rangePart!, 10)
+      return !isNaN(v) && v >= fieldMin && v <= fieldMax
+    })
+  })
 }
 
 const EXCLUDED_HEADERS = new Set(['set-cookie', 'set-cookie2'])
@@ -347,15 +381,17 @@ async function handleCheckAlerts(ctx: {
   if (currentResult.success && wasAlerting) {
     logger.info({ message: 'health check recovered', checkId: rule.id })
 
-    if (destinations.length > 0) {
-      await dispatchToDestinations(destinations, (dest) =>
-        sendHealthCheckNotification(dest, {
-          checkName, url, method, statusCode: currentResult.statusCode,
-          latencyMs: currentResult.latencyMs, errorMessage: '',
-          consecutiveFailures: 0, orgName, recovered: true,
-        }),
-      )
-    }
+    // Only reset state if recovery notification delivered (or no destinations).
+    // If delivery fails, keep alerting state so recovery is retried next tick.
+    const delivered = destinations.length === 0 || await dispatchToDestinations(destinations, (dest) =>
+      sendHealthCheckNotification(dest, {
+        checkName, url, method, statusCode: currentResult.statusCode,
+        latencyMs: currentResult.latencyMs, errorMessage: '',
+        consecutiveFailures: 0, orgName, recovered: true,
+      }),
+    )
+
+    if (!delivered) return
 
     await db.update(schema.alertRule)
       .set({ checkLastAlertStatus: 'ok', checkFirstFailedAt: null, updatedAt: now })

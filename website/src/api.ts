@@ -28,6 +28,7 @@ import {
   type DbConfig,
   type QueryResult,
 } from './query-backend.ts'
+import { isValidCron } from './health-check-workflow.ts'
 import {
   generateSearchFilter,
   generateFilterRequestSchema,
@@ -1216,7 +1217,10 @@ export const api = new Spiceflow({ tracer })
       path: '/api/v0/orgs/:orgId/alerts/test',
       async handler({ request, params }) {
         const session = await requireSession(request)
-        await requireOrgMember(session.userId, params.orgId)
+        const member = await requireOrgMember(session.userId, params.orgId)
+        if (member.role !== 'admin') {
+          throw json({ error: 'admin access required' }, { status: 403 })
+        }
 
         const db = getDb()
         const destinations = await db.query.alertDestination.findMany({
@@ -1310,10 +1314,9 @@ export const api = new Spiceflow({ tracer })
         name: z.string().min(1),
         url: z.string().url(),
         method: z.enum(['GET', 'HEAD', 'POST', 'PUT', 'DELETE', 'OPTIONS']).default('GET'),
-        schedule: z.string().regex(/^[0-9*\/,\-\s]+$/).refine(
-          (s) => s.trim().split(/\s+/).length === 5,
-          { message: 'schedule must be a 5-field UTC cron expression' },
-        ).default('*/5 * * * *'),
+        schedule: z.string().refine(isValidCron, {
+          message: 'schedule must be a valid 5-field UTC cron expression',
+        }).default('*/5 * * * *'),
         expectedStatusMin: z.number().int().min(100).max(599).default(200),
         expectedStatusMax: z.number().int().min(100).max(599).default(299),
         timeoutMs: z.number().int().min(1000).max(60000).default(10000),
@@ -1379,10 +1382,9 @@ export const api = new Spiceflow({ tracer })
         name: z.string().min(1).optional(),
         url: z.string().url().optional(),
         method: z.enum(['GET', 'HEAD', 'POST', 'PUT', 'DELETE', 'OPTIONS']).optional(),
-        schedule: z.string().regex(/^[0-9*\/,\-\s]+$/).refine(
-          (s) => s.trim().split(/\s+/).length === 5,
-          { message: 'schedule must be a 5-field UTC cron expression' },
-        ).optional(),
+        schedule: z.string().refine(isValidCron, {
+          message: 'schedule must be a valid 5-field UTC cron expression',
+        }).optional(),
         expectedStatusMin: z.number().int().min(100).max(599).optional(),
         expectedStatusMax: z.number().int().min(100).max(599).optional(),
         timeoutMs: z.number().int().min(1000).max(60000).optional(),
