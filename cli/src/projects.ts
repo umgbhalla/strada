@@ -126,7 +126,7 @@ projectsCli
     dedent`
       Create a new project and generate its first org-wide ingest token.
 
-      The slug becomes part of the ingest hostname: {projectId}-ingest.strada.sh.
+      The generated project ID becomes the ingest hostname: {projectId}-ingest.strada.sh.
       The token printed at creation is shown only once. Save it as STRADA_TOKEN
       for server-side SDKs. Browser SDKs do not need a token.
 
@@ -199,27 +199,5 @@ projectsCli
     output.log(`Project ${id} deleted.`);
   });
 
-projectsCli
-  .command(
-    "query <sql>",
-    dedent`
-      Run a ClickHouse SQL query against a project's database.
-
-      Returns raw JSON. For formatted output use the top-level 'strada query'
-      command instead, which renders tables and supports FORMAT clauses.
-    `,
-  )
-  .option("-p, --project [slug]", "Project slug override (defaults to folder setup)")
-  .option("--org [name-or-id]", "Organization override (defaults to folder setup)")
-  .action(async (sql, options, { console: output, process: proc }) => {
-    const { safeFetch } = getApiClient();
-    const { project } = await resolveProject({ project: options.project || undefined, org: options.org || undefined });
-
-    const res = await safeFetch("/api/v0/projects/:projectId/query", {
-      method: "POST",
-      params: { projectId: project.id },
-      body: { sql },
-    });
-    if (res instanceof Error) throw res;
-    output.log(JSON.stringify(res, null, 2));
-  });
+// Legacy query command removed. Use the top-level `strada query` from query.ts
+// which renders tables, supports FORMAT clauses, and has better help output.

@@ -430,8 +430,9 @@ issuesCli
     dedent`
       Mark an issue as resolved.
 
-      Sets the issue status to 'resolved' in otel_issue_state. If the same
-      error recurs, it will appear as a new open issue in 'strada issues list'.
+      Sets the issue status to 'resolved' in otel_issue_state. Future events
+      with the same fingerprint keep the same issue group; reopen it with
+      'strada issues unresolve <fingerprint>' if it should be tracked again.
     `,
   )
   .option("-p, --project [slug]", "Project slug override (defaults to folder setup)")
@@ -454,10 +455,10 @@ issuesCli
   .command(
     "issues mute <fingerprint>",
     dedent`
-      Mute an issue to suppress it from the default listing.
+      Mark an issue as muted.
 
-      Muted issues still collect error events but are hidden from the default
-      'strada issues list' output. Useful for known noise you plan to fix later.
+      Muted issues still collect error events and show their muted status in
+      'strada issues list'. Use this for known noise you want to triage separately.
     `,
   )
   .option("-p, --project [slug]", "Project slug override (defaults to folder setup)")
