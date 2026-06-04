@@ -18,6 +18,8 @@ import { logsCli } from "./logs.ts";
 import { servicesCli } from "./services.ts";
 import { tracesCli } from "./traces.ts";
 import { tokensCli } from "./tokens.ts";
+import { checksCli } from "./checks.ts";
+import { destinationsCli } from "./destinations.ts";
 
 export const cli = goke("strada")
   .use(databaseCli)
@@ -28,6 +30,8 @@ export const cli = goke("strada")
   .use(analyticsCli)
   .use(queryCli)
   .use(alertsCli)
+  .use(checksCli)
+  .use(destinationsCli)
   .use(logsCli)
   .use(servicesCli)
   .use(tracesCli)
