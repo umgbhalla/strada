@@ -112,9 +112,14 @@ issuesCli
       'strada issues view <fingerprint>' to see the full stack trace and
       recent events.
 
+      By default only 'open' issues are shown. Use --status to filter by
+      triage state: open, resolved, muted, ignored, or all.
+
       Examples:
         strada issues list -p my-app --since 24h
         strada issues list -p my-app -s api-server --unhandled
+        strada issues list -p my-app --status all
+        strada issues list -p my-app --status resolved
         strada issues list -p frontend -p api --since 7d
     `,
   )
@@ -123,12 +128,25 @@ issuesCli
   .option("-s, --service [name]", "Filter by service name")
   .option("--since [duration]", "Time range, e.g. 1h, 24h, 7d (default: 24h)")
   .option("-n, --limit [count]", "Max number of issue groups (default: 20)")
+  .option("--status [status]", "Filter by triage status: open, resolved, muted, ignored, all (default: open)")
   .option("--unhandled", "Show only unhandled errors")
   .action(async (options, { console: output, process: proc }) => {
     const { slugs, projects } = await resolveProjects({ project: options.project, org: options.org || undefined });
 
     const since = parseDuration(options.since || "24h");
     const limit = Number(options.limit) || 20;
+    const statusFilter = (options.status || "open").toLowerCase();
+
+    const validStatuses = ["open", "resolved", "muted", "ignored", "all"];
+    if (!validStatuses.includes(statusFilter)) {
+      output.log(`Invalid --status: ${options.status}`);
+      output.log(dim(`Valid values: ${validStatuses.join(", ")}`));
+      return proc.exit(1);
+    }
+
+    // Over-fetch when filtering by status so post-filtering doesn't leave
+    // us with too few results. "all" needs no over-fetch.
+    const fetchLimit = statusFilter === "all" ? limit : limit * 3;
 
     // Build WHERE clauses
     const conditions = [`Timestamp >= now() - INTERVAL ${since}`];
@@ -153,7 +171,7 @@ issuesCli
       WHERE ${conditions.join("\n  AND ")}
       GROUP BY FingerprintHash
       ORDER BY event_count DESC
-      LIMIT ${limit}
+      LIMIT ${fetchLimit}
     `.trim();
 
     // Query all projects in parallel
@@ -170,9 +188,27 @@ issuesCli
       for (const [k, v] of m) issueMetadata.set(k, v);
     }
 
-    if (allRows.length === 0) {
+    // Resolve status for each row and filter by --status
+    const rowsWithStatus = allRows.map((r) => {
+      const fingerprint = str(r, "FingerprintHash");
+      const meta = issueMetadata.get(fingerprint);
+      return { row: r, status: meta?.status || "open" };
+    });
+
+    const filteredRows = statusFilter === "all"
+      ? rowsWithStatus
+      : rowsWithStatus.filter((r) => r.status === statusFilter);
+
+    // Truncate to the requested limit after filtering
+    const displayRows = filteredRows.slice(0, limit);
+
+    if (displayRows.length === 0) {
       const slugLabel = slugs.join(", ");
-      output.log(dim(`No issues found in ${cyan(slugLabel)} (last ${options.since || "24h"})`));
+      const statusHint = statusFilter === "all" ? "" : ` with status '${statusFilter}'`;
+      output.log(dim(`No issues found in ${cyan(slugLabel)}${statusHint} (last ${options.since || "24h"})`));
+      if (statusFilter !== "all" && allRows.length > 0) {
+        output.log(dim(`  Try --status all to include resolved and muted issues`));
+      }
       return;
     }
 
@@ -182,6 +218,7 @@ issuesCli
     output.log("");
     output.log(bold(`Issues in ${cyan(slugLabel)}`) + dim(` (last ${sinceLabel})`));
     if (options.service) output.log(dim(`  service: ${options.service}`));
+    if (statusFilter !== "open") output.log(dim(`  status: ${statusFilter}`));
     output.log("");
 
     // Format rows for table
@@ -192,10 +229,7 @@ issuesCli
       ignored: dim,
     };
 
-    const tableRows = allRows.map((r) => {
-      const fingerprint = str(r, "FingerprintHash");
-      const meta = issueMetadata.get(fingerprint);
-      const status = meta?.status || "open";
+    const tableRows = displayRows.map(({ row: r, status }) => {
       const count = Number(r.event_count ?? 0);
       const unhandled = Number(r.unhandled_count ?? 0);
       const level = str(r, "last_level") || "error";
@@ -229,9 +263,9 @@ issuesCli
     });
 
     // Summary line
-    const totalEvents = allRows.reduce((sum, r) => sum + Number(r.event_count ?? 0), 0);
+    const totalEvents = displayRows.reduce((sum, { row: r }) => sum + Number(r.event_count ?? 0), 0);
     output.log("");
-    output.log(dim(`  ${allRows.length} issues, ${formatCount(totalEvents)} total events`));
+    output.log(dim(`  ${displayRows.length} issues, ${formatCount(totalEvents)} total events`));
     output.log("");
   });
 
@@ -430,9 +464,9 @@ issuesCli
     dedent`
       Mark an issue as resolved.
 
-      Sets the issue status to 'resolved' in otel_issue_state. Future events
-      with the same fingerprint keep the same issue group; reopen it with
-      'strada issues unresolve <fingerprint>' if it should be tracked again.
+      Sets the issue status to 'resolved' in otel_issue_state. Resolved issues
+      are hidden from the default 'strada issues list' output. Use --status all
+      or --status resolved to see them. Reopen with 'strada issues unresolve'.
     `,
   )
   .option("-p, --project [slug]", "Project slug override (defaults to folder setup)")
@@ -457,8 +491,9 @@ issuesCli
     dedent`
       Mark an issue as muted.
 
-      Muted issues still collect error events and show their muted status in
-      'strada issues list'. Use this for known noise you want to triage separately.
+      Muted issues still collect error events but are hidden from the default
+      'strada issues list' output. Use --status muted or --status all to see them.
+      Useful for known noise you want to triage separately.
     `,
   )
   .option("-p, --project [slug]", "Project slug override (defaults to folder setup)")

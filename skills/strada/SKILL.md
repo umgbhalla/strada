@@ -156,6 +156,8 @@ strada issues view <fingerprint> -p my-app --events 3
 
 `issues view` gives you the exception type, message, full stack trace with line numbers, mechanism (handled/unhandled), affected services, releases, and recent event timestamps. This is usually enough to identify the root cause without any SQL.
 
+By default `issues list` only shows **open** issues. Resolved and muted issues are hidden. Use `--status all` to see everything, or `--status resolved` / `--status muted` to filter by a specific triage state.
+
 If you need more context, use the TraceId from the events table to inspect the full request flow:
 
 ```bash
