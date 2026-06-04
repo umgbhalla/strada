@@ -306,11 +306,14 @@ export const orgToken = s.sqliteTable(
 //   - error_threshold: fires when >= N errors of the same fingerprint
 //     occur within a time window. The cron in alert-check.ts queries
 //     ClickHouse otel_errors every 5 minutes.
-//   - health_check (future): fires when a URL fails consecutive checks.
-//     check_* fields will be added to this table later. Check results
-//     go to a ClickHouse otel_health_checks table (not D1). Consecutive
-//     failure detection is derived at query time from that table. See
-//     plans/health-checks-status-pages.md for the full plan.
+//   - health_check: fires when a URL fails consecutive checks.
+//     check_* fields define the URL, method, timeout, expected status range,
+//     and failure threshold. Check results go to ClickHouse otel_health_checks.
+//     Mutable state (LastCheckedAt, LastAlertStatus) lives in ClickHouse
+//     otel_health_checks_config (ReplacingMergeTree). Consecutive failure
+//     detection is derived at query time from otel_health_checks results.
+//     A Cloudflare Workflow (HealthCheckWorkflow) runs the checks, with
+//     each tenant org as a separate durable step.
 //
 // DESTINATIONS define where alerts are sent. They are org-scoped so
 // one destination (e.g. a Slack webhook for #incidents) can be reused
@@ -358,10 +361,18 @@ export const alertRule = s.sqliteTable(
     errorThreshold: s.integer("error_threshold"),
     errorWindowMinutes: s.integer("error_window_minutes"),
 
-    // ── health_check fields (future, not yet added) ──
-    // check_url, check_interval_minutes, check_expected_status_min,
-    // check_expected_status_max, check_max_latency_ms,
-    // check_failure_threshold, check_regions
+    // ── health_check fields (null when type != 'health_check') ──
+    // The health check definition lives here for D1 → workflow dispatch.
+    // Check results and mutable state (LastCheckedAt, LastAlertStatus, etc.)
+    // live in ClickHouse otel_health_checks_config (ReplacingMergeTree).
+    checkUrl: s.text("check_url"),
+    checkMethod: s.text("check_method").default("GET"),
+    checkIntervalMinutes: s.integer("check_interval_minutes").default(5),
+    checkExpectedStatusMin: s.integer("check_expected_status_min").default(200),
+    checkExpectedStatusMax: s.integer("check_expected_status_max").default(299),
+    checkTimeoutMs: s.integer("check_timeout_ms").default(10000),
+    checkFailureThreshold: s.integer("check_failure_threshold").default(2),
+    checkAutoDisableAfterHours: s.integer("check_auto_disable_after_hours").default(24),
 
     createdAt: epochMs("created_at")
       .notNull()

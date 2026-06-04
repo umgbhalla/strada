@@ -1,0 +1,27 @@
+TOKEN OTEL_TINYBIRD_TOKEN APPEND
+TOKEN STRADA_READ_TOKEN READ
+
+DESCRIPTION >
+    Health check results. One row per check execution (success or failure).
+    ResponseBody and ResponseHeaders are only populated on failure to avoid
+    storing noise from successful 200 responses. ResponseBody is truncated
+    to 16KB by the worker before writing.
+
+SCHEMA >
+    `ProjectId` LowCardinality(String) `json:$.ProjectId` CODEC(ZSTD(1)),
+    `CheckId` String `json:$.CheckId` CODEC(ZSTD(1)),
+    `Url` String `json:$.Url` CODEC(ZSTD(1)),
+    `Method` LowCardinality(String) `json:$.Method` CODEC(ZSTD(1)),
+    `StatusCode` UInt16 `json:$.StatusCode` CODEC(ZSTD(1)),
+    `LatencyMs` UInt32 `json:$.LatencyMs` CODEC(ZSTD(1)),
+    `Success` UInt8 `json:$.Success` CODEC(ZSTD(1)),
+    `ErrorMessage` String `json:$.ErrorMessage` CODEC(ZSTD(1)),
+    `ResponseBody` String `json:$.ResponseBody` CODEC(ZSTD(1)),
+    `ResponseHeaders` Map(String, String) `json:$.ResponseHeaders` CODEC(ZSTD(1)),
+    `Timestamp` DateTime64(3) `json:$.Timestamp` CODEC(Delta(8), ZSTD(1))
+
+ENGINE "MergeTree"
+ENGINE_PARTITION_KEY "toDate(Timestamp)"
+ENGINE_SORTING_KEY "ProjectId, CheckId, Timestamp"
+ENGINE_TTL "toDate(Timestamp) + toIntervalDay(90)"
+ENGINE_SETTINGS index_granularity=8192
