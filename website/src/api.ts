@@ -1262,9 +1262,9 @@ export const api = new Spiceflow({ tracer })
       },
     })
     // ── Health check management ───────────────────────────────────────
-    // Health check rules are a type of alert_rule with type = 'health_check'.
-    // Creating a health check also writes the initial config row to ClickHouse
-    // (otel_health_checks_config) so the workflow can read it.
+    // Health check rules are alert_rule rows with type = 'health_check'.
+    // Config and mutable state live in D1. Check results are append-only
+    // in ClickHouse (otel_health_checks).
     .route({
       method: 'GET',
       path: '/api/v0/orgs/:orgId/checks',
@@ -1413,7 +1413,19 @@ export const api = new Spiceflow({ tracer })
         if (body.failureThreshold != null) updates.checkFailureThreshold = body.failureThreshold
         if (body.autoDisableAfterHours != null) updates.checkAutoDisableAfterHours = body.autoDisableAfterHours
         if (body.cooldownMinutes != null) updates.cooldownMinutes = body.cooldownMinutes
-        if (body.enabled != null) updates.enabled = body.enabled
+
+        // Handle enable/disable with state reset
+        if (body.enabled === false) {
+          updates.enabled = false
+          updates.checkDisabledReason = 'manual'
+        }
+        if (body.enabled === true) {
+          updates.enabled = true
+          updates.checkDisabledReason = ''
+          updates.checkFirstFailedAt = null
+          updates.checkLastAlertStatus = ''
+          updates.lastAlertedAt = null
+        }
 
         await db.update(schema.alertRule)
           .set(updates)

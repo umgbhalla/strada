@@ -1,12 +1,13 @@
 // Health check workflow. Runs as a Cloudflare Workflow, triggered by the
 // website cron every 5 minutes. Each org gets its own parallel durable step.
 //
-// Workflow params contain ONLY IDs and check config (URL, method, thresholds).
-// No credentials, no webhook URLs, no tokens. The workflow resolves
-// destinations, DB config, and state from D1 inside each step.
+// Workflow params contain ONLY check IDs and org IDs. All config, state,
+// destinations, and DB credentials are resolved from D1 inside each step.
+// This ensures fresh config even for queued workflows and prevents
+// sensitive data (webhook URLs, DB tokens) from persisting in workflow state.
 //
-// All mutable state (lastCheckedAt, lastAlertStatus, firstFailedAt, etc.)
-// lives in D1 on the alert_rule table. No ClickHouse config table.
+// All mutable state lives in D1 on the alert_rule table. ClickHouse only
+// stores append-only check results (otel_health_checks).
 
 import { WorkflowEntrypoint } from 'cloudflare:workers'
 import type { WorkflowEvent, WorkflowStep } from 'cloudflare:workers'
@@ -30,33 +31,18 @@ const logger = getLogger('health-check-workflow')
 const EXCLUDED_HEADERS = new Set(['set-cookie', 'set-cookie2'])
 const MAX_RESPONSE_BODY = 16_384
 
-// ── Workflow params (lightweight, no credentials) ─────────────────
+// ── Workflow params (minimal, no config or credentials) ───────────
 
-export interface CheckPayload {
+export interface CheckRef {
   checkId: string
   orgId: string
-  orgName: string
-  projectId: string
-  name: string
-  url: string
-  method: string
-  intervalMinutes: number
-  expectedStatusMin: number
-  expectedStatusMax: number
-  timeoutMs: number
-  failureThreshold: number
-  autoDisableAfterHours: number
-  cooldownMinutes: number
 }
 
 export interface HealthCheckWorkflowParams {
-  checks: CheckPayload[]
+  checks: CheckRef[]
 }
 
 interface CheckResult {
-  checkId: string
-  url: string
-  method: string
   statusCode: number
   latencyMs: number
   success: boolean
@@ -69,7 +55,7 @@ export class HealthCheckWorkflow extends WorkflowEntrypoint {
   override async run(event: WorkflowEvent<HealthCheckWorkflowParams>, step: WorkflowStep) {
     const { checks } = event.payload
 
-    const orgMap = new Map<string, CheckPayload[]>()
+    const orgMap = new Map<string, CheckRef[]>()
     for (const check of checks) {
       const existing = orgMap.get(check.orgId) ?? []
       existing.push(check)
@@ -88,104 +74,102 @@ export class HealthCheckWorkflow extends WorkflowEntrypoint {
   }
 }
 
-async function processOrgChecks(orgId: string, checks: CheckPayload[]): Promise<void> {
+async function processOrgChecks(orgId: string, checkRefs: CheckRef[]): Promise<void> {
   const db = getDb()
 
-  // Resolve DB config from D1
+  // Resolve DB config
   const dbConfig = await db.query.database.findFirst({ where: { orgId } })
   if (!dbConfig) {
     logger.warn({ message: 'no database config for org', orgId })
     return
   }
 
-  // Resolve destinations per check from D1
-  const checkDestinations = new Map<string, Array<{ channel: string; destination: string }>>()
-  for (const check of checks) {
-    const rule = await db.query.alertRule.findFirst({
-      where: { id: check.checkId },
-      with: { destinations: true },
-    })
-    checkDestinations.set(
-      check.checkId,
-      (rule?.destinations ?? []).map((d) => ({ channel: d.channel, destination: d.destination })),
-    )
-  }
+  // Load full rules from D1 (config + state + destinations) - all in one query per check
+  const rules = await Promise.all(
+    checkRefs.map((ref) =>
+      db.query.alertRule.findFirst({
+        where: { id: ref.checkId, type: 'health_check', enabled: true },
+        with: { destinations: true, org: true, project: true },
+      }),
+    ),
+  )
 
   // Resolve project JWTs
   const projectCache = new Map<string, ProjectJwtInfo>()
-  for (const check of checks) {
-    if (!projectCache.has(check.projectId)) {
-      const project = await db.query.project.findFirst({ where: { id: check.projectId } })
+
+  // Filter to due checks
+  type LoadedRule = NonNullable<typeof rules[number]>
+  const dueChecks: Array<{ rule: LoadedRule; project: ProjectJwtInfo }> = []
+
+  for (const rule of rules) {
+    if (!rule || !rule.checkUrl) continue
+
+    // Resolve project for ClickHouse scoping
+    let projectId = rule.projectId
+    if (!projectId) {
+      const firstProject = await db.query.project.findFirst({ where: { orgId } })
+      if (!firstProject) continue
+      projectId = firstProject.id
+    }
+
+    if (!projectCache.has(projectId)) {
+      const project = await db.query.project.findFirst({ where: { id: projectId } })
       if (project) {
-        projectCache.set(check.projectId, {
+        projectCache.set(projectId, {
           id: project.id,
           tinybirdJwt: project.tinybirdJwt,
           tinybirdJwtDatasources: project.tinybirdJwtDatasources,
         })
       }
     }
-  }
 
-  // Filter checks that are due (respect intervalMinutes).
-  // Read state from D1 for each check.
-  const dueChecks: Array<{ check: CheckPayload; project: ProjectJwtInfo; rule: typeof schema.alertRule.$inferSelect }> = []
-  for (const check of checks) {
-    const project = projectCache.get(check.projectId)
-    if (!project) {
-      logger.warn({ message: 'project not found', checkId: check.checkId, projectId: check.projectId })
-      continue
-    }
-
-    // Read current state from D1
-    const rule = await db.query.alertRule.findFirst({ where: { id: check.checkId } })
-    if (!rule || !rule.enabled) continue
+    const project = projectCache.get(projectId)
+    if (!project) continue
 
     // Check if due based on intervalMinutes
-    if (check.intervalMinutes > 5 && rule.checkLastCheckedAt) {
-      const intervalMs = check.intervalMinutes * 60_000
-      if (Date.now() - rule.checkLastCheckedAt < intervalMs) {
-        continue // not due yet
+    const intervalMinutes = rule.checkIntervalMinutes ?? 5
+    if (intervalMinutes > 5 && rule.checkLastCheckedAt) {
+      if (Date.now() - rule.checkLastCheckedAt < intervalMinutes * 60_000) {
+        continue
       }
     }
 
-    dueChecks.push({ check, project, rule })
+    dueChecks.push({ rule, project })
   }
 
   if (dueChecks.length === 0) return
 
   // Run all due checks in parallel
   const results = await Promise.allSettled(
-    dueChecks.map(({ check }) => runCheck(check)),
+    dueChecks.map(({ rule }) => runCheck(rule)),
   )
 
-  // Process results: write to ClickHouse, handle alerts, update D1 state
   const nowIso = new Date().toISOString()
   const now = Date.now()
 
   for (let i = 0; i < results.length; i++) {
     const settled = results[i]!
-    const { check, project, rule } = dueChecks[i]!
-    const destinations = checkDestinations.get(check.checkId) ?? []
+    const { rule, project } = dueChecks[i]!
     let result: CheckResult
 
     if (settled.status === 'fulfilled') {
       result = settled.value
     } else {
-      logger.error({ message: 'check execution failed', checkId: check.checkId, error: String(settled.reason) })
+      logger.error({ message: 'check execution failed', checkId: rule.id, error: String(settled.reason) })
       result = {
-        checkId: check.checkId, url: check.url, method: check.method,
         statusCode: 0, latencyMs: 0, success: false,
         errorMessage: String(settled.reason), responseBody: '', responseHeaders: {},
       }
     }
 
     // Write result to ClickHouse
+    const projectId = rule.projectId ?? project.id
     try {
       await insertBackendRow({
         dbConfig, table: 'otel_health_checks',
         row: {
-          ProjectId: check.projectId, CheckId: result.checkId,
-          Url: result.url, Method: result.method,
+          ProjectId: projectId, CheckId: rule.id,
+          Url: rule.checkUrl, Method: rule.checkMethod ?? 'GET',
           StatusCode: result.statusCode, LatencyMs: result.latencyMs,
           Success: result.success ? 1 : 0, ErrorMessage: result.errorMessage,
           ResponseBody: result.responseBody, ResponseHeaders: result.responseHeaders,
@@ -193,19 +177,26 @@ async function processOrgChecks(orgId: string, checks: CheckPayload[]): Promise<
         },
       })
     } catch (err) {
-      logger.error({ message: 'failed to write check result', checkId: result.checkId, error: String(err) })
+      logger.error({ message: 'failed to write check result', checkId: rule.id, error: String(err) })
     }
 
     // Handle alerts and update D1 state
+    const destinations = (rule.destinations ?? []).map((d) => ({ channel: d.channel, destination: d.destination }))
     try {
-      await handleCheckAlerts({ dbConfig, project, check, rule, destinations, currentResult: result, now })
+      await handleCheckAlerts({ dbConfig, project, rule, destinations, currentResult: result, now })
     } catch (err) {
-      logger.error({ message: 'alert handling failed', checkId: check.checkId, error: String(err) })
+      logger.error({ message: 'alert handling failed', checkId: rule.id, error: String(err) })
     }
   }
 }
 
-async function runCheck(check: CheckPayload): Promise<CheckResult> {
+async function runCheck(rule: { checkUrl: string | null; checkMethod: string | null; checkTimeoutMs: number | null; checkExpectedStatusMin: number | null; checkExpectedStatusMax: number | null }): Promise<CheckResult> {
+  const url = rule.checkUrl!
+  const method = rule.checkMethod ?? 'GET'
+  const timeoutMs = rule.checkTimeoutMs ?? 10000
+  const expectedMin = rule.checkExpectedStatusMin ?? 200
+  const expectedMax = rule.checkExpectedStatusMax ?? 299
+
   const start = Date.now()
   let statusCode = 0
   let responseBody = ''
@@ -214,15 +205,15 @@ async function runCheck(check: CheckPayload): Promise<CheckResult> {
   let success = false
 
   try {
-    const res = await fetch(check.url, {
-      method: check.method,
-      signal: AbortSignal.timeout(check.timeoutMs),
+    const res = await fetch(url, {
+      method,
+      signal: AbortSignal.timeout(timeoutMs),
       redirect: 'follow',
       headers: { 'User-Agent': 'Strada-Health-Check/1.0' },
     })
 
     statusCode = res.status
-    success = statusCode >= check.expectedStatusMin && statusCode <= check.expectedStatusMax
+    success = statusCode >= expectedMin && statusCode <= expectedMax
 
     if (!success) {
       try {
@@ -240,14 +231,13 @@ async function runCheck(check: CheckPayload): Promise<CheckResult> {
   } catch (err: unknown) {
     const error = err as Error
     if (error.name === 'AbortError' || error.name === 'TimeoutError') {
-      errorMessage = `Timeout after ${check.timeoutMs}ms`
+      errorMessage = `Timeout after ${timeoutMs}ms`
     } else {
       errorMessage = String(error.message || error)
     }
   }
 
   return {
-    checkId: check.checkId, url: check.url, method: check.method,
     statusCode, latencyMs: Date.now() - start, success,
     errorMessage, responseBody, responseHeaders,
   }
@@ -256,62 +246,90 @@ async function runCheck(check: CheckPayload): Promise<CheckResult> {
 async function handleCheckAlerts(ctx: {
   dbConfig: DbConfig
   project: ProjectJwtInfo
-  check: CheckPayload
-  rule: typeof schema.alertRule.$inferSelect
+  rule: typeof schema.alertRule.$inferSelect & { org: { name: string } | null }
   destinations: Array<{ channel: string; destination: string }>
   currentResult: CheckResult
   now: number
 }): Promise<void> {
-  const { dbConfig, project, check, rule, destinations, currentResult, now } = ctx
+  const { dbConfig, project, rule, destinations, currentResult, now } = ctx
   const db = getDb()
+  const orgName = rule.org?.name ?? 'Unknown'
+  const checkName = rule.name
+  const url = rule.checkUrl ?? ''
+  const method = rule.checkMethod ?? 'GET'
+  const failureThreshold = rule.checkFailureThreshold ?? 2
+  const cooldownMinutes = rule.cooldownMinutes ?? 60
+  const autoDisableAfterHours = rule.checkAutoDisableAfterHours ?? 24
 
-  // Query last N results from ClickHouse for consecutive failure detection
-  const lastResults = await queryLastResults(dbConfig, project, check.checkId, check.failureThreshold)
-  const allFailed = lastResults.length >= check.failureThreshold && lastResults.every((r) => !r.success)
+  // Query last N results from ClickHouse
+  const lastResults = await queryLastResults(dbConfig, project, rule.id, failureThreshold)
+  const allFailed = lastResults.length >= failureThreshold && lastResults.every((r) => !r.success)
   const wasAlerting = rule.checkLastAlertStatus === 'alerting'
 
-  // ── Recovery: was alerting, now passing ──
+  // ── Recovery ──
   if (currentResult.success && wasAlerting) {
-    logger.info({ message: 'health check recovered', checkId: check.checkId, url: check.url })
+    logger.info({ message: 'health check recovered', checkId: rule.id })
 
     if (destinations.length > 0) {
       await dispatchToDestinations(destinations, (dest) =>
         sendHealthCheckNotification(dest, {
-          checkName: check.name, url: check.url, method: check.method,
-          statusCode: currentResult.statusCode, latencyMs: currentResult.latencyMs,
-          errorMessage: '', consecutiveFailures: 0, orgName: check.orgName, recovered: true,
+          checkName, url, method, statusCode: currentResult.statusCode,
+          latencyMs: currentResult.latencyMs, errorMessage: '',
+          consecutiveFailures: 0, orgName, recovered: true,
         }),
       )
     }
 
     await db.update(schema.alertRule)
-      .set({
-        checkLastAlertStatus: 'ok',
-        checkFirstFailedAt: null,
-        checkLastCheckedAt: now,
-        updatedAt: now,
-      })
-      .where(orm.eq(schema.alertRule.id, check.checkId))
+      .set({ checkLastAlertStatus: 'ok', checkFirstFailedAt: null, checkLastCheckedAt: now, updatedAt: now })
+      .where(orm.eq(schema.alertRule.id, rule.id))
       .limit(1)
     return
   }
 
-  // ── Alert: threshold met, check cooldown ──
+  // ── Auto-disable (checked BEFORE re-alert so cooldown can't starve it) ──
+  if (!currentResult.success && allFailed && autoDisableAfterHours > 0 && rule.checkFirstFailedAt) {
+    const hoursDown = (now - rule.checkFirstFailedAt) / (1000 * 60 * 60)
+    if (hoursDown >= autoDisableAfterHours) {
+      logger.info({ message: 'auto-disabling health check', checkId: rule.id, hoursDown })
+
+      if (destinations.length > 0) {
+        await dispatchToDestinations(destinations, (dest) =>
+          sendHealthCheckNotification(dest, {
+            checkName, url, method, statusCode: currentResult.statusCode,
+            latencyMs: currentResult.latencyMs,
+            errorMessage: `Auto-disabled after ${Math.round(hoursDown)} hours of continuous failure`,
+            consecutiveFailures: lastResults.length, orgName, recovered: false,
+          }),
+        )
+      }
+
+      await db.update(schema.alertRule)
+        .set({
+          enabled: false, checkDisabledReason: 'auto', checkLastAlertStatus: 'alerting',
+          checkLastCheckedAt: now, updatedAt: now,
+        })
+        .where(orm.eq(schema.alertRule.id, rule.id))
+        .limit(1)
+      return
+    }
+  }
+
+  // ── Alert / re-alert ──
   if (allFailed) {
-    const cooldownMs = check.cooldownMinutes * 60_000
+    const cooldownMs = cooldownMinutes * 60_000
     const lastAlertedMs = rule.lastAlertedAt ?? 0
     const cooldownElapsed = !rule.lastAlertedAt || (now - lastAlertedMs >= cooldownMs)
     const shouldAlert = (!wasAlerting || cooldownElapsed) && destinations.length > 0
 
     if (shouldAlert) {
-      logger.info({ message: wasAlerting ? 'health check re-alert' : 'health check alert', checkId: check.checkId, consecutiveFailures: lastResults.length })
+      logger.info({ message: wasAlerting ? 'health check re-alert' : 'health check alert', checkId: rule.id, consecutiveFailures: lastResults.length })
 
       const delivered = await dispatchToDestinations(destinations, (dest) =>
         sendHealthCheckNotification(dest, {
-          checkName: check.name, url: check.url, method: check.method,
-          statusCode: currentResult.statusCode, latencyMs: currentResult.latencyMs,
-          errorMessage: currentResult.errorMessage, consecutiveFailures: lastResults.length,
-          orgName: check.orgName, recovered: false,
+          checkName, url, method, statusCode: currentResult.statusCode,
+          latencyMs: currentResult.latencyMs, errorMessage: currentResult.errorMessage,
+          consecutiveFailures: lastResults.length, orgName, recovered: false,
         }),
       )
 
@@ -320,51 +338,16 @@ async function handleCheckAlerts(ctx: {
           checkLastAlertStatus: 'alerting',
           checkFirstFailedAt: rule.checkFirstFailedAt ?? now,
           ...(delivered ? { lastAlertedAt: now } : {}),
-          checkLastCheckedAt: now,
-          updatedAt: now,
+          checkLastCheckedAt: now, updatedAt: now,
         })
-        .where(orm.eq(schema.alertRule.id, check.checkId))
-        .limit(1)
-      return
-    }
-  }
-
-  // ── Auto-disable (only when failing AND threshold met) ──
-  if (!currentResult.success && allFailed && check.autoDisableAfterHours > 0 && rule.checkFirstFailedAt) {
-    const hoursDown = (now - rule.checkFirstFailedAt) / (1000 * 60 * 60)
-    if (hoursDown >= check.autoDisableAfterHours) {
-      logger.info({ message: 'auto-disabling health check', checkId: check.checkId, hoursDown })
-
-      if (destinations.length > 0) {
-        await dispatchToDestinations(destinations, (dest) =>
-          sendHealthCheckNotification(dest, {
-            checkName: check.name, url: check.url, method: check.method,
-            statusCode: currentResult.statusCode, latencyMs: currentResult.latencyMs,
-            errorMessage: `Auto-disabled after ${Math.round(hoursDown)} hours of continuous failure`,
-            consecutiveFailures: lastResults.length, orgName: check.orgName, recovered: false,
-          }),
-        )
-      }
-
-      await db.update(schema.alertRule)
-        .set({
-          enabled: false,
-          checkDisabledReason: 'auto',
-          checkLastAlertStatus: 'alerting',
-          checkLastCheckedAt: now,
-          updatedAt: now,
-        })
-        .where(orm.eq(schema.alertRule.id, check.checkId))
+        .where(orm.eq(schema.alertRule.id, rule.id))
         .limit(1)
       return
     }
   }
 
   // ── Regular state update ──
-  const stateUpdate: Record<string, unknown> = {
-    checkLastCheckedAt: now,
-    updatedAt: now,
-  }
+  const stateUpdate: Record<string, unknown> = { checkLastCheckedAt: now, updatedAt: now }
   if (!currentResult.success && !rule.checkFirstFailedAt) {
     stateUpdate.checkFirstFailedAt = now
   }
@@ -375,11 +358,11 @@ async function handleCheckAlerts(ctx: {
 
   await db.update(schema.alertRule)
     .set(stateUpdate)
-    .where(orm.eq(schema.alertRule.id, check.checkId))
+    .where(orm.eq(schema.alertRule.id, rule.id))
     .limit(1)
 }
 
-// ── ClickHouse query (only for check results, not config) ────────
+// ── ClickHouse query (only for check results) ────────────────────
 
 async function queryLastResults(
   dbConfig: DbConfig, project: ProjectJwtInfo, checkId: string, limit: number,

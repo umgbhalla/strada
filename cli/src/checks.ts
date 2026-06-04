@@ -2,9 +2,8 @@
 // of URL health checks. Health checks are a type of alert rule that fetch
 // a URL on a schedule and alert when it fails consecutively.
 //
-// Check configs are stored in D1 (alert_rule with type = 'health_check')
-// and mirrored to ClickHouse (otel_health_checks_config). Check results
-// are append-only in ClickHouse (otel_health_checks).
+// Config and runtime state live in D1 (alert_rule with type = 'health_check').
+// Check results are append-only in ClickHouse (otel_health_checks).
 //
 // A Cloudflare Workflow runs the actual HTTP fetches every 5 minutes,
 // with each tenant org as a separate durable step.
