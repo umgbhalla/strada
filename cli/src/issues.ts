@@ -144,11 +144,7 @@ issuesCli
       return proc.exit(1);
     }
 
-    // Over-fetch when filtering by status so post-filtering doesn't leave
-    // us with too few results. "all" needs no over-fetch.
-    const fetchLimit = statusFilter === "all" ? limit : limit * 3;
-
-    // Build WHERE clauses
+    // Build WHERE clauses for the errors subquery
     const conditions = [`Timestamp >= now() - INTERVAL ${since}`];
     if (options.service) {
       conditions.push(`ServiceName = '${options.service}'`);
@@ -157,57 +153,67 @@ issuesCli
       conditions.push(`MechanismHandled = false`);
     }
 
+    // Status filtering happens in ClickHouse via LEFT JOIN with
+    // otel_issue_state. Issues without a row default to 'open'.
+    // This ensures LIMIT applies after status filtering, so we always
+    // get exactly N matching issues if they exist.
+    const statusCondition = statusFilter === "all"
+      ? ""
+      : `\nWHERE issue_status = '${statusFilter}'`;
+
     const sql = dedent`
       SELECT
-          FingerprintHash,
-          anyLast(ExceptionType) AS last_type,
-          anyLast(ExceptionMessage) AS last_message,
-          anyLast(Level) AS last_level,
-          count() AS event_count,
-          min(Timestamp) AS first_seen,
-          max(Timestamp) AS last_seen,
-          countIf(MechanismHandled = false) AS unhandled_count
-      FROM otel_errors
-      WHERE ${conditions.join("\n  AND ")}
-      GROUP BY FingerprintHash
-      ORDER BY event_count DESC
-      LIMIT ${fetchLimit}
+          errors.FingerprintHash,
+          errors.last_type,
+          errors.last_message,
+          errors.last_level,
+          errors.event_count,
+          errors.first_seen,
+          errors.last_seen,
+          errors.unhandled_count,
+          ifNull(nullIf(issue_state.issue_status, ''), 'open') AS issue_status
+      FROM (
+          SELECT
+              FingerprintHash,
+              anyLast(ExceptionType) AS last_type,
+              anyLast(ExceptionMessage) AS last_message,
+              anyLast(Level) AS last_level,
+              count() AS event_count,
+              min(Timestamp) AS first_seen,
+              max(Timestamp) AS last_seen,
+              countIf(MechanismHandled = false) AS unhandled_count
+          FROM otel_errors
+          WHERE ${conditions.join("\n      AND ")}
+          GROUP BY FingerprintHash
+      ) AS errors
+      LEFT JOIN (
+          SELECT
+              FingerprintHash,
+              argMax(Status, Version) AS issue_status
+          FROM otel_issue_state
+          GROUP BY FingerprintHash
+      ) AS issue_state ON errors.FingerprintHash = issue_state.FingerprintHash${statusCondition}
+      ORDER BY errors.event_count DESC
+      LIMIT ${limit}
     `.trim();
 
     // Query all projects in parallel
     const results = await Promise.all(projects.map((p) => queryProject(p.id, sql)));
     const allRows = results.flatMap((data) => data.data ?? []);
 
-    // Extract fingerprints from results, then fetch their issue metadata
-    const fingerprints = allRows.map((r) => str(r, "FingerprintHash")).filter(Boolean);
-    const metadataMaps = await Promise.all(
-      projects.map((p) => fetchIssueMetadata(p.id, fingerprints, output)),
-    );
-    const issueMetadata = new Map<string, IssueMetadata>();
-    for (const m of metadataMaps) {
-      for (const [k, v] of m) issueMetadata.set(k, v);
+    // Global sort for multi-project results (each project returns its own
+    // top-N sorted by event_count, but we need a global ranking)
+    if (projects.length > 1) {
+      allRows.sort((a, b) => Number(b.event_count ?? 0) - Number(a.event_count ?? 0));
     }
-
-    // Resolve status for each row and filter by --status
-    const rowsWithStatus = allRows.map((r) => {
-      const fingerprint = str(r, "FingerprintHash");
-      const meta = issueMetadata.get(fingerprint);
-      return { row: r, status: meta?.status || "open" };
-    });
-
-    const filteredRows = statusFilter === "all"
-      ? rowsWithStatus
-      : rowsWithStatus.filter((r) => r.status === statusFilter);
-
-    // Truncate to the requested limit after filtering
-    const displayRows = filteredRows.slice(0, limit);
+    const displayRows = allRows.slice(0, limit);
 
     if (displayRows.length === 0) {
       const slugLabel = slugs.join(", ");
       const statusHint = statusFilter === "all" ? "" : ` with status '${statusFilter}'`;
       output.log(dim(`No issues found in ${cyan(slugLabel)}${statusHint} (last ${options.since || "24h"})`));
-      if (statusFilter !== "all" && allRows.length > 0) {
-        output.log(dim(`  Try --status all to include resolved and muted issues`));
+      if (statusFilter !== "all") {
+        output.log(dim(`  Try --status all to include resolved, muted, and ignored issues`));
       }
       return;
     }
@@ -229,7 +235,8 @@ issuesCli
       ignored: dim,
     };
 
-    const tableRows = displayRows.map(({ row: r, status }) => {
+    const tableRows = displayRows.map((r) => {
+      const status = str(r, "issue_status") || "open";
       const count = Number(r.event_count ?? 0);
       const unhandled = Number(r.unhandled_count ?? 0);
       const level = str(r, "last_level") || "error";
@@ -263,7 +270,7 @@ issuesCli
     });
 
     // Summary line
-    const totalEvents = displayRows.reduce((sum, { row: r }) => sum + Number(r.event_count ?? 0), 0);
+    const totalEvents = displayRows.reduce((sum, r) => sum + Number(r.event_count ?? 0), 0);
     output.log("");
     output.log(dim(`  ${displayRows.length} issues, ${formatCount(totalEvents)} total events`));
     output.log("");
