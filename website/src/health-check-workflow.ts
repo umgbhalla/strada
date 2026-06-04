@@ -32,9 +32,17 @@ const logger = getLogger('health-check-workflow')
 // Evaluates whether a UTC Date matches a standard 5-field cron expression.
 // Fields: minute hour day-of-month month day-of-week
 // Supports: * (any), */N (step), N-M (range), N,M (list), and combinations.
-// Day-of-week: 0=Sunday, 1=Monday, ..., 6=Saturday (standard cron).
+// Day-of-week: 0 and 7 are both Sunday (standard cron convention).
+//
+// DOM/DOW OR semantics: when both day-of-month and day-of-week are
+// restricted (not *), standard cron matches if EITHER field matches.
+// When only one is restricted, it's a simple AND with the other fields.
 
-function cronMatches(cron: string, date: Date): boolean {
+// Field definitions with min values for correct step baseline on 1-based fields.
+// */2 on day-of-month should match 1,3,5... not 2,4,6... because DOM starts at 1.
+const FIELD_MINS = [0, 0, 1, 1, 0] // minute, hour, dom, month, dow
+
+export function cronMatches(cron: string, date: Date): boolean {
   const parts = cron.trim().split(/\s+/)
   if (parts.length !== 5) return false
 
@@ -46,33 +54,57 @@ function cronMatches(cron: string, date: Date): boolean {
     date.getUTCDay(),
   ]
 
-  return parts.every((field, i) => fieldMatches(field, values[i]!))
+  const minute = fieldMatches(parts[0]!, values[0]!, FIELD_MINS[0]!)
+  const hour = fieldMatches(parts[1]!, values[1]!, FIELD_MINS[1]!)
+  const dom = fieldMatches(parts[2]!, values[2]!, FIELD_MINS[2]!)
+  const month = fieldMatches(parts[3]!, values[3]!, FIELD_MINS[3]!)
+  // Normalize DOW 7 → 0 (both mean Sunday)
+  const dowValue = values[4]! === 7 ? 0 : values[4]!
+  const dow = fieldMatches(parts[4]!, dowValue, FIELD_MINS[4]!)
+
+  // Standard cron: when both DOM and DOW are restricted (not *), match if EITHER is true.
+  // When only one is restricted, match both normally (AND).
+  const domRestricted = parts[2] !== '*'
+  const dowRestricted = parts[4] !== '*'
+  const dayMatch = (domRestricted && dowRestricted) ? (dom || dow) : (dom && dow)
+
+  return minute && hour && dayMatch && month
 }
 
-function fieldMatches(field: string, value: number): boolean {
+function fieldMatches(field: string, value: number, fieldMin: number): boolean {
   if (field === '*') return true
 
   return field.split(',').some((part) => {
-    // Handle step: */N or N-M/S
     const [rangePart, stepStr] = part.split('/')
     const step = stepStr ? parseInt(stepStr, 10) : 1
+    if (isNaN(step) || step < 1) return false
 
     if (rangePart === '*') {
-      return value % step === 0
+      // */N with correct baseline for 1-based fields
+      return (value - fieldMin) % step === 0
     }
 
-    // Handle range: N-M
     if (rangePart!.includes('-')) {
       const [startStr, endStr] = rangePart!.split('-')
       const start = parseInt(startStr!, 10)
       const end = parseInt(endStr!, 10)
+      if (isNaN(start) || isNaN(end)) return false
       if (value < start || value > end) return false
       return (value - start) % step === 0
     }
 
-    // Exact value
-    return parseInt(rangePart!, 10) === value
+    const exact = parseInt(rangePart!, 10)
+    if (isNaN(exact)) return false
+    return exact === value
   })
+}
+
+/** Validate that a string is a well-formed 5-field cron expression. */
+export function isValidCron(cron: string): boolean {
+  const parts = cron.trim().split(/\s+/)
+  if (parts.length !== 5) return false
+  // Each field must only contain digits, *, /, -, and commas
+  return parts.every((p) => /^[0-9*\/,\-]+$/.test(p))
 }
 
 const EXCLUDED_HEADERS = new Set(['set-cookie', 'set-cookie2'])
