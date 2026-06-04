@@ -189,7 +189,76 @@ function TestAlertEmail({ orgName }: { orgName: string }) {
   )
 }
 
+// ── Health check alert email ───────────────────────────────────
+
+export interface HealthCheckAlertData {
+  checkName: string
+  url: string
+  method: string
+  statusCode: number
+  latencyMs: number
+  errorMessage: string
+  consecutiveFailures: number
+  orgName: string
+  recovered?: boolean
+}
+
+function HealthCheckAlertEmail({ data }: { data: HealthCheckAlertData }) {
+  const statusLabel = data.recovered ? 'Recovered' : 'Down'
+  const statusColor = data.recovered ? '#16a34a' : '#dc2626'
+
+  return (
+    <EmailShell>
+      <h2 style={{ fontWeight: 600, margin: '0 0 8px 0' }}>
+        <span style={{ color: statusColor }}>{statusLabel}</span>: {data.checkName}
+      </h2>
+      <p style={{ margin: '12px 0' }}>
+        <Code>{data.method}</Code> <Code>{data.url}</Code>
+      </p>
+
+      <Hr />
+
+      {data.recovered ? (
+        <p style={{ margin: '12px 0' }}>
+          Health check is passing again.
+        </p>
+      ) : (
+        <p style={{ margin: '12px 0' }}>
+          <strong>{data.consecutiveFailures}</strong> consecutive failures
+        </p>
+      )}
+
+      <ul style={{ margin: '8px 0', paddingLeft: 20, lineHeight: 1.8 }}>
+        <li><strong>Status code:</strong> {data.statusCode || 'N/A'}</li>
+        <li><strong>Latency:</strong> {data.latencyMs}ms</li>
+        <li><strong>Org:</strong> {data.orgName}</li>
+        {data.errorMessage && <li><strong>Error:</strong> {data.errorMessage}</li>}
+      </ul>
+
+      <Hr />
+
+      <p style={{ margin: '12px 0' }}>View check status:</p>
+      <p style={{ margin: '8px 0' }}>
+        <code className="strada-code" style={{ fontFamily: mono, fontSize: 13 }}>
+          strada checks status
+        </code>
+      </p>
+
+      <Footer orgName={data.orgName} />
+    </EmailShell>
+  )
+}
+
 // ── Public API ─────────────────────────────────────────────────
+
+export function buildHealthCheckAlertSubject(data: HealthCheckAlertData): string {
+  const status = data.recovered ? 'Recovered' : 'Down'
+  return `[${data.orgName}] ${status}: ${data.checkName} (${truncate(data.url, 50)})`
+}
+
+export async function buildHealthCheckAlertEmailHtml(data: HealthCheckAlertData): Promise<string> {
+  return '<!DOCTYPE html>' + await renderToStaticMarkup(<HealthCheckAlertEmail data={data} />)
+}
 
 export function buildAlertSubject(data: ErrorAlertData): string {
   const type = data.exceptionType || 'Error'

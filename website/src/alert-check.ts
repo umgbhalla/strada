@@ -11,10 +11,9 @@
 
 import * as orm from 'drizzle-orm'
 import * as schema from 'db/src/schema.ts'
-import { env } from 'cloudflare:workers'
 import { getLogger, flush } from '@strada.sh/sdk'
 import { getDb } from './db.ts'
-import { buildAlertSubject, buildAlertEmailHtml } from './alert-email.tsx'
+import { sendErrorNotification, dispatchToDestinations } from './alert-notify.ts'
 import {
   executeBackendQuery,
   insertBackendRow,
@@ -43,26 +42,50 @@ interface ProjectWithJwt extends ProjectJwtInfo {
 export async function checkAlerts(): Promise<void> {
   const db = getDb()
 
-  // 1. Load only error_threshold rules with destinations (via junction) and org name
+  // 1. Load all enabled error_threshold rules with destinations
   const rules = await db.query.alertRule.findMany({
     where: { type: 'error_threshold', enabled: true },
     with: { destinations: true, org: true },
   })
 
-  // logger.info({ message: `found ${rules.length} error_threshold rules`, rulesCount: rules.length })
-
   if (rules.length === 0) return
 
+  // 2. Group rules by orgId for dedup: project-scoped rules override org-wide ones.
+  // Build the dedicated project set from ALL enabled project-scoped rules first
+  // (including those with no destinations), so an org-wide rule never duplicates
+  // alerts for a project that has its own rule even if that rule has no destinations.
+  const allOrgRulesMap = new Map<string, typeof rules>()
+  for (const rule of rules) {
+    const existing = allOrgRulesMap.get(rule.orgId) ?? []
+    existing.push(rule)
+    allOrgRulesMap.set(rule.orgId, existing)
+  }
+
+  // Then filter to actionable rules (have destinations)
+  const orgRulesMap = new Map<string, typeof rules>()
   for (const rule of rules) {
     if (!rule.destinations || rule.destinations.length === 0) {
-      logger.info({ message: `rule has no destinations, skipping`, ruleId: rule.id })
+      logger.info({ message: 'rule has no destinations, skipping', ruleId: rule.id })
       continue
     }
+    const existing = orgRulesMap.get(rule.orgId) ?? []
+    existing.push(rule)
+    orgRulesMap.set(rule.orgId, existing)
+  }
 
-    try {
-      await checkOrgAlerts(rule)
-    } catch (err) {
-      logger.error({ message: `alert check failed for org`, orgId: rule.orgId, error: String(err) })
+  for (const [orgId, orgRules] of orgRulesMap) {
+    // Build the set from ALL enabled project-scoped rules (not just ones with destinations)
+    const allRulesForOrg = allOrgRulesMap.get(orgId) ?? []
+    const dedicatedProjectIds = new Set(
+      allRulesForOrg.filter((r) => r.projectId).map((r) => r.projectId!),
+    )
+
+    for (const rule of orgRules) {
+      try {
+        await checkOrgAlerts(rule, dedicatedProjectIds)
+      } catch (err) {
+        logger.error({ message: 'alert check failed for org', orgId, error: String(err) })
+      }
     }
   }
 
@@ -72,16 +95,19 @@ export async function checkAlerts(): Promise<void> {
   await flush()
 }
 
-async function checkOrgAlerts(rule: {
-  id: string
-  orgId: string
-  projectId: string | null
-  errorThreshold: number | null
-  errorWindowMinutes: number | null
-  cooldownMinutes: number
-  destinations: Array<{ channel: string; destination: string }>
-  org: { id: string; name: string } | null
-}): Promise<void> {
+async function checkOrgAlerts(
+  rule: {
+    id: string
+    orgId: string
+    projectId: string | null
+    errorThreshold: number | null
+    errorWindowMinutes: number | null
+    cooldownMinutes: number
+    destinations: Array<{ channel: string; destination: string }>
+    org: { id: string; name: string } | null
+  },
+  dedicatedProjectIds: Set<string>,
+): Promise<void> {
   const db = getDb()
 
   // Load database config for this org
@@ -89,19 +115,25 @@ async function checkOrgAlerts(rule: {
     where: { orgId: rule.orgId },
   })
   if (!dbConfig) {
-    logger.warn({ message: `no database config for org`, orgId: rule.orgId })
+    logger.warn({ message: 'no database config for org', orgId: rule.orgId })
     return
   }
 
-  // Load projects scoped by the rule. Null projectId means all projects.
-  const projects = rule.projectId
+  // Load projects scoped by the rule. For org-wide rules (projectId = null),
+  // skip projects that have a dedicated project-scoped rule to avoid
+  // duplicate alerts.
+  let projects = rule.projectId
     ? await db.query.project.findMany({ where: { id: rule.projectId, orgId: rule.orgId } })
     : await db.query.project.findMany({ where: { orgId: rule.orgId } })
+
+  if (!rule.projectId) {
+    projects = projects.filter((p) => !dedicatedProjectIds.has(p.id))
+  }
+
   if (projects.length === 0) {
-    logger.warn({ message: `no projects for org`, orgId: rule.orgId, ruleProjectId: rule.projectId })
     return
   }
-  logger.info({ message: `checking org`, orgId: rule.orgId, projectCount: projects.length, ruleProjectId: rule.projectId, backend: dbConfig.backend })
+  logger.info({ message: 'checking org', orgId: rule.orgId, projectCount: projects.length, ruleProjectId: rule.projectId, backend: dbConfig.backend })
 
   const orgName = rule.org?.name || 'Unknown'
   const threshold = rule.errorThreshold ?? 1
@@ -222,17 +254,10 @@ async function checkProjectAlerts(ctx: {
       usersImpacted: error.usersImpacted,
     }
 
-    const results = await Promise.allSettled(
-      rule.destinations.map((dest) => sendNotification(dest, alertData)),
+    const anyDelivered = await dispatchToDestinations(
+      rule.destinations,
+      (dest) => sendErrorNotification(dest, alertData),
     )
-    let anyDelivered = false
-    for (const result of results) {
-      if (result.status === 'rejected') {
-        logger.error({ message: 'sendNotification rejected', error: String(result.reason) })
-      } else if (result.value) {
-        anyDelivered = true
-      }
-    }
 
     // Only update LastAlertedAt if at least one destination delivered.
     // Without this, unsupported channels (e.g. slack before it's implemented)
@@ -378,59 +403,6 @@ async function writeLastAlertedAt(ctx: {
       UpdatedAt: nowIso,
     },
   })
-}
-
-/** Returns true if the notification was delivered, false on failure or unsupported channel. */
-async function sendNotification(
-  dest: { channel: string; destination: string },
-  data: Parameters<typeof buildAlertEmailHtml>[0],
-): Promise<boolean> {
-  if (dest.channel === 'email') {
-    const subject = buildAlertSubject(data)
-    const html = await buildAlertEmailHtml(data)
-
-    try {
-      logger.info({ message: 'sending alert email', to: dest.destination, subject })
-      await env.EMAIL.send({
-        from: { email: 'alerts@updates.strada.sh', name: 'Strada' },
-        to: dest.destination,
-        subject,
-        html,
-      })
-      logger.info({ message: 'alert email sent', to: dest.destination })
-      return true
-    } catch (err) {
-      logger.error({ message: 'failed to send alert email', to: dest.destination, error: String(err) })
-      return false
-    }
-  } else if (dest.channel === 'webhook') {
-    try {
-      logger.info({ message: 'sending webhook', destination: dest.destination })
-      await fetch(dest.destination, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type: 'error_alert',
-          project: data.projectSlug,
-          org: data.orgName,
-          fingerprintHash: data.fingerprintHash,
-          exceptionType: data.exceptionType,
-          exceptionMessage: data.exceptionMessage,
-          errorCount: data.errorCount,
-          windowMinutes: data.windowMinutes,
-          firstSeen: data.firstSeen,
-          serviceName: data.serviceName,
-        }),
-      })
-      return true
-    } catch (err) {
-      logger.error({ message: 'failed to send webhook', destination: dest.destination, error: String(err) })
-      return false
-    }
-  } else {
-    logger.warn({ message: `unsupported alert channel, skipping`, channel: dest.channel, destination: dest.destination })
-    return false
-  }
 }
 
 // ── Deployment regression helpers ──────────────────────────────────
