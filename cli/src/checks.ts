@@ -36,7 +36,7 @@ checksCli
       Re-enable with 'strada checks enable <id>'.
 
       Alerts go to the same destinations as error alerts. If no destinations
-      are configured, add one first with 'strada alerts add'.
+      are configured, add one first with 'strada alerts create'.
     `,
   )
   .option("--url <url>", z.string().describe("URL to check (required)"))

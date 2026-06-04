@@ -49,6 +49,7 @@ export interface CheckPayload {
   timeoutMs: number
   failureThreshold: number
   autoDisableAfterHours: number
+  cooldownMinutes: number
   destinations: Array<{ channel: string; destination: string }>
 }
 
@@ -88,18 +89,20 @@ export class HealthCheckWorkflow extends WorkflowEntrypoint {
       orgMap.set(check.orgId, existing)
     }
 
-    for (const [orgId, orgChecks] of orgMap) {
-      await step.do(
-        `org-${orgId}`,
-        {
-          retries: { limit: 1, delay: '10 seconds' },
-          timeout: '5 minutes',
-        },
-        async () => {
-          await processOrgChecks(orgId, orgChecks)
-        },
-      )
-    }
+    await Promise.all(
+      [...orgMap.entries()].map(([orgId, orgChecks]) =>
+        step.do(
+          `org-${orgId}`,
+          {
+            retries: { limit: 1, delay: '10 seconds' },
+            timeout: '5 minutes',
+          },
+          async () => {
+            await processOrgChecks(orgId, orgChecks)
+          },
+        ),
+      ),
+    )
   }
 }
 
@@ -303,26 +306,35 @@ async function handleCheckAlerts(ctx: {
     return
   }
 
-  if (allFailed && !wasAlerting) {
-    // ── New alert ──
-    logger.info({ message: 'health check alert', checkId: check.checkId, url: check.url, consecutiveFailures: lastResults.length })
+  if (allFailed) {
+    // Check if we should alert: either first time (not alerting yet) or
+    // cooldown has elapsed since the last alert was sent.
+    const cooldownMs = check.cooldownMinutes * 60_000
+    const lastAlertedMs = configState?.lastAlertedAt ? new Date(configState.lastAlertedAt).getTime() : 0
+    const cooldownElapsed = !configState?.lastAlertedAt || (now - lastAlertedMs >= cooldownMs)
+    const shouldAlert = !wasAlerting || cooldownElapsed
 
-    const delivered = await dispatchToDestinations(check.destinations, (dest) =>
-      sendHealthCheckNotification(dest, {
-        checkName: check.name, url: check.url, method: check.method,
-        statusCode: currentResult.statusCode, latencyMs: currentResult.latencyMs,
-        errorMessage: currentResult.errorMessage, consecutiveFailures: lastResults.length,
-        orgName: check.orgName, recovered: false,
-      }),
-    )
+    if (shouldAlert) {
+      const isRepeat = wasAlerting
+      logger.info({ message: isRepeat ? 'health check re-alert (cooldown elapsed)' : 'health check alert', checkId: check.checkId, url: check.url, consecutiveFailures: lastResults.length })
 
-    if (delivered) {
-      await updateCheckConfig(dbConfig, project, check, {
-        LastAlertStatus: 'alerting', FirstFailedAt: configState?.firstFailedAt || nowIso,
-        LastCheckedAt: nowIso, Version: now,
-      })
+      const delivered = await dispatchToDestinations(check.destinations, (dest) =>
+        sendHealthCheckNotification(dest, {
+          checkName: check.name, url: check.url, method: check.method,
+          statusCode: currentResult.statusCode, latencyMs: currentResult.latencyMs,
+          errorMessage: currentResult.errorMessage, consecutiveFailures: lastResults.length,
+          orgName: check.orgName, recovered: false,
+        }),
+      )
+
+      if (delivered) {
+        await updateCheckConfig(dbConfig, project, check, {
+          LastAlertStatus: 'alerting', FirstFailedAt: configState?.firstFailedAt || nowIso,
+          LastAlertedAt: nowIso, LastCheckedAt: nowIso, Version: now,
+        })
+      }
+      return
     }
-    return
   }
 
   // ── Auto-disable ──
@@ -378,6 +390,7 @@ interface CheckConfigState {
   lastAlertStatus: string
   firstFailedAt: string | null
   lastCheckedAt: string | null
+  lastAlertedAt: string | null
   enabled: number
 }
 
@@ -389,6 +402,7 @@ async function queryCheckConfig(
     '    argMax(LastAlertStatus, Version) AS LastAlertStatus,',
     '    argMax(FirstFailedAt, Version) AS FirstFailedAt,',
     '    argMax(LastCheckedAt, Version) AS LastCheckedAt,',
+    '    argMax(LastAlertedAt, Version) AS LastAlertedAt,',
     '    argMax(Enabled, Version) AS Enabled',
     'FROM otel_health_checks_config',
     `WHERE CheckId = '${checkId}'`,
@@ -405,6 +419,7 @@ async function queryCheckConfig(
       lastAlertStatus: String(row.LastAlertStatus ?? ''),
       firstFailedAt: row.FirstFailedAt ? String(row.FirstFailedAt) : null,
       lastCheckedAt: row.LastCheckedAt ? String(row.LastCheckedAt) : null,
+      lastAlertedAt: row.LastAlertedAt ? String(row.LastAlertedAt) : null,
       enabled: Number(row.Enabled ?? 1),
     }
   } catch (err) {
@@ -456,6 +471,7 @@ async function updateCheckConfig(
     DisabledReason: current?.DisabledReason ?? '',
     LastCheckedAt: current?.LastCheckedAt ?? null,
     LastAlertStatus: current?.LastAlertStatus ?? '',
+    LastAlertedAt: current?.LastAlertedAt ?? null,
     FirstFailedAt: current?.FirstFailedAt ?? null,
     Version: Date.now(),
     UpdatedAt: new Date().toISOString(),
@@ -487,6 +503,7 @@ async function queryFullCheckConfig(
     '    argMax(DisabledReason, Version) AS DisabledReason,',
     '    argMax(LastCheckedAt, Version) AS LastCheckedAt,',
     '    argMax(LastAlertStatus, Version) AS LastAlertStatus,',
+    '    argMax(LastAlertedAt, Version) AS LastAlertedAt,',
     '    argMax(FirstFailedAt, Version) AS FirstFailedAt',
     'FROM otel_health_checks_config',
     `WHERE CheckId = '${checkId}'`,

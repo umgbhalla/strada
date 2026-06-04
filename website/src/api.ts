@@ -1321,19 +1321,20 @@ export const api = new Spiceflow({ tracer })
       }),
       async handler({ request, params }) {
         const session = await requireSession(request)
-        await requireOrgMember(session.userId, params.orgId)
+        const member = await requireOrgMember(session.userId, params.orgId)
+        if (member.role !== 'admin') {
+          throw json({ error: 'admin access required' }, { status: 403 })
+        }
 
         const db = getDb()
         const body = await request.json()
 
-        // Validate projectId belongs to this org when provided
-        if (body.projectId != null) {
-          const proj = await db.query.project.findFirst({
-            where: { id: body.projectId, orgId: params.orgId },
-          })
-          if (!proj) {
-            throw json({ error: 'project not found in this org' }, { status: 404 })
-          }
+        // Require at least one project in the org for ClickHouse scoping
+        const projectRow = body.projectId
+          ? await db.query.project.findFirst({ where: { id: body.projectId, orgId: params.orgId } })
+          : await db.query.project.findFirst({ where: { orgId: params.orgId } })
+        if (!projectRow) {
+          throw json({ error: body.projectId ? 'project not found in this org' : 'create a project before creating health checks' }, { status: 400 })
         }
 
         // Create the health_check alert rule
@@ -1430,7 +1431,10 @@ export const api = new Spiceflow({ tracer })
       }),
       async handler({ request, params }) {
         const session = await requireSession(request)
-        await requireOrgMember(session.userId, params.orgId)
+        const member = await requireOrgMember(session.userId, params.orgId)
+        if (member.role !== 'admin') {
+          throw json({ error: 'admin access required' }, { status: 403 })
+        }
 
         const db = getDb()
         const body = await request.json()
@@ -1460,6 +1464,47 @@ export const api = new Spiceflow({ tracer })
           .where(orm.eq(schema.alertRule.id, params.checkId))
           .limit(1)
 
+        // Mirror config changes to ClickHouse so the workflow reads fresh values
+        const dbConfigRow = await db.query.database.findFirst({ where: { orgId: params.orgId } })
+        if (dbConfigRow) {
+          const updatedRule = await db.query.alertRule.findFirst({
+            where: { id: params.checkId },
+          })
+          if (updatedRule) {
+            const projectRow = updatedRule.projectId
+              ? await db.query.project.findFirst({ where: { id: updatedRule.projectId } })
+              : await db.query.project.findFirst({ where: { orgId: params.orgId } })
+            if (projectRow) {
+              try {
+                const now = Date.now()
+                await insertBackendRow({
+                  dbConfig: dbConfigRow,
+                  table: 'otel_health_checks_config',
+                  row: {
+                    ProjectId: projectRow.id,
+                    CheckId: params.checkId,
+                    Name: updatedRule.name,
+                    Url: updatedRule.checkUrl ?? '',
+                    Method: updatedRule.checkMethod ?? 'GET',
+                    IntervalMinutes: updatedRule.checkIntervalMinutes ?? 5,
+                    ExpectedStatusMin: updatedRule.checkExpectedStatusMin ?? 200,
+                    ExpectedStatusMax: updatedRule.checkExpectedStatusMax ?? 299,
+                    TimeoutMs: updatedRule.checkTimeoutMs ?? 10000,
+                    FailureThreshold: updatedRule.checkFailureThreshold ?? 2,
+                    AutoDisableAfterHours: updatedRule.checkAutoDisableAfterHours ?? 24,
+                    Enabled: updatedRule.enabled ? 1 : 0,
+                    DisabledReason: updatedRule.enabled ? '' : 'manual',
+                    Version: now,
+                    UpdatedAt: new Date(now).toISOString(),
+                  },
+                })
+              } catch (err) {
+                logger.error({ message: 'failed to mirror health check update to ClickHouse', error: String(err) })
+              }
+            }
+          }
+        }
+
         return { ok: true }
       },
     })
@@ -1468,7 +1513,10 @@ export const api = new Spiceflow({ tracer })
       path: '/api/v0/orgs/:orgId/checks/:checkId',
       async handler({ request, params }) {
         const session = await requireSession(request)
-        await requireOrgMember(session.userId, params.orgId)
+        const member = await requireOrgMember(session.userId, params.orgId)
+        if (member.role !== 'admin') {
+          throw json({ error: 'admin access required' }, { status: 403 })
+        }
 
         const db = getDb()
 

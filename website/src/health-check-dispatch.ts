@@ -60,6 +60,7 @@ export async function dispatchHealthChecks(): Promise<void> {
       timeoutMs: rule.checkTimeoutMs ?? 10000,
       failureThreshold: rule.checkFailureThreshold ?? 2,
       autoDisableAfterHours: rule.checkAutoDisableAfterHours ?? 24,
+      cooldownMinutes: rule.cooldownMinutes ?? 60,
       destinations: rule.destinations.map((d) => ({
         channel: d.channel,
         destination: d.destination,

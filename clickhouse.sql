@@ -594,6 +594,7 @@ CREATE TABLE IF NOT EXISTS otel_health_checks_config
     `DisabledReason`         LowCardinality(String) CODEC(ZSTD(1)),
     `LastCheckedAt`          Nullable(DateTime64(3)) CODEC(ZSTD(1)),
     `LastAlertStatus`        LowCardinality(String) CODEC(ZSTD(1)),
+    `LastAlertedAt`          Nullable(DateTime64(3)) CODEC(ZSTD(1)),
     `FirstFailedAt`          Nullable(DateTime64(3)) CODEC(ZSTD(1)),
     `Version`                UInt64                 CODEC(ZSTD(1)),
     `UpdatedAt`              DateTime64(3)          CODEC(ZSTD(1))

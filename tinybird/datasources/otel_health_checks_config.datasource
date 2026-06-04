@@ -25,6 +25,7 @@ SCHEMA >
     `DisabledReason` LowCardinality(String) `json:$.DisabledReason` CODEC(ZSTD(1)),
     `LastCheckedAt` Nullable(DateTime64(3)) `json:$.LastCheckedAt` CODEC(ZSTD(1)),
     `LastAlertStatus` LowCardinality(String) `json:$.LastAlertStatus` CODEC(ZSTD(1)),
+    `LastAlertedAt` Nullable(DateTime64(3)) `json:$.LastAlertedAt` CODEC(ZSTD(1)),
     `FirstFailedAt` Nullable(DateTime64(3)) `json:$.FirstFailedAt` CODEC(ZSTD(1)),
     `Version` UInt64 `json:$.Version` CODEC(ZSTD(1)),
     `UpdatedAt` DateTime64(3) `json:$.UpdatedAt` CODEC(ZSTD(1))
