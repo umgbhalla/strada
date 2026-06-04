@@ -1,0 +1,41 @@
+---
+$schema: https://holocron.so/frontmatter.json
+title: "Alerts Create"
+description: "Create an error alert rule."
+icon: lucide:bell
+---
+# alerts create
+
+Create an error alert rule.
+
+Alert when errors of the same fingerprint exceed a threshold within
+a time window. Multiple rules per org are supported. Project-scoped
+rules override org-wide rules for the same project.
+
+Optionally pass --channel and --to to create a destination inline.
+All existing org destinations are auto-linked to the new rule.
+
+## Usage
+
+```sh
+strada alerts create
+```
+
+## Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--name <name>` | - | Rule name (required) |
+| `--project <slug>` | - | Scope to a project (omit for all projects) |
+| `--threshold <count>` | - | Min errors to trigger (default: 1) |
+| `--window <minutes>` | - | Time window in minutes (default: 5) |
+| `--cooldown <minutes>` | - | Re-alert cooldown in minutes (default: 60) |
+| `--channel <type>` | - | Create a destination inline |
+| `--to <destination>` | - | Email address or webhook URL |
+
+## Global Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-h, --help` | - | Display this message |
+| `-v, --version` | - | Display version number |

@@ -1,0 +1,32 @@
+---
+$schema: https://holocron.so/frontmatter.json
+title: "Database Upgrade"
+description: "Upgrade the Tinybird schema to the latest version."
+icon: lucide:database
+---
+# database upgrade
+
+Upgrade the Tinybird schema to the latest version.
+
+Requires `strada login` first. Uses the Tinybird workspace already saved
+in Strada for the current org. Applies any new datasource or materialized
+view changes from the latest CLI version.
+
+## Usage
+
+```sh
+strada database upgrade
+```
+
+## Global Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-h, --help` | - | Display this message |
+| `-v, --version` | - | Display version number |
+
+## Examples
+
+```sh
+strada database upgrade
+```

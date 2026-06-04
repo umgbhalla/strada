@@ -1,0 +1,34 @@
+---
+$schema: https://holocron.so/frontmatter.json
+title: "Setup"
+description: "Save the default organization and project for the current folder."
+icon: lucide:settings
+---
+# setup
+
+Save the default organization and project for the current folder.
+
+Strada resolves config by walking up from the current directory and using
+the closest matching scope. Use this once per app folder so commands like
+`strada logs` and `strada issues list` do not need `--project`.
+
+## Usage
+
+```sh
+strada setup
+```
+
+## Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--scope [path]` | - | Directory scope to configure (default: current directory) |
+| `--org [name-or-id]` | - | Organization name or ID |
+| `-p, --project [slug-or-id]` | - | Project slug or ID |
+
+## Global Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-h, --help` | - | Display this message |
+| `-v, --version` | - | Display version number |

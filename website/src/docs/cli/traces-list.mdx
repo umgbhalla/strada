@@ -1,0 +1,40 @@
+---
+$schema: https://holocron.so/frontmatter.json
+title: "Traces List"
+description: "List distributed traces in a project, grouped by TraceId."
+icon: lucide:route
+---
+# traces list
+
+List distributed traces in a project, grouped by TraceId.
+
+Use this to find trace IDs before running `strada traces view`.
+The command scans otel_traces in the selected time range, summarizes span
+counts, services, error spans, duration, and the first root span when one
+exists. Project isolation is enforced by the project-scoped query API.
+
+## Usage
+
+```sh
+strada traces list
+```
+
+## Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-p, --project <slug>` | - | Project slug override (repeatable, defaults to folder setup) |
+| `--org [name-or-id]` | - | Organization override (defaults to folder setup) |
+| `-s, --service [name]` | - | Filter by ServiceName |
+| `--since [time]` | - | Start time: duration (1h, 7d) or ISO date (default: 1h) |
+| `--until [time]` | - | End time: duration (1h) or ISO date |
+| `--errors` | - | Only show traces with error spans |
+| `-n, --limit [count]` | - | Max traces (default: 50) |
+| `--json` | - | Print raw JSON response |
+
+## Global Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-h, --help` | - | Display this message |
+| `-v, --version` | - | Display version number |

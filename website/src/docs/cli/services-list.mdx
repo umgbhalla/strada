@@ -1,0 +1,38 @@
+---
+$schema: https://holocron.so/frontmatter.json
+title: "Services List"
+description: "Find service names that are actively generating logs or traces."
+icon: lucide:server
+---
+# services list
+
+Find service names that are actively generating logs or traces.
+
+Use this before filtering logs, issues, or SQL queries by ServiceName.
+It helps discover the real service.name values present in a project and
+shows which services are currently producing telemetry in the selected
+time range.
+
+## Usage
+
+```sh
+strada services list
+```
+
+## Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-p, --project <slug>` | - | Project slug override (repeatable, defaults to folder setup) |
+| `--org [name-or-id]` | - | Organization override (defaults to folder setup) |
+| `--since [time]` | - | Start time: duration (1h, 7d) or ISO date (default: 24h) |
+| `--until [time]` | - | End time: duration (1h) or ISO date |
+| `-n, --limit [count]` | - | Max services (default: 100) |
+| `--json` | - | Print raw JSON response |
+
+## Global Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-h, --help` | - | Display this message |
+| `-v, --version` | - | Display version number |

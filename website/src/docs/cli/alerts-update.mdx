@@ -1,0 +1,40 @@
+---
+$schema: https://holocron.so/frontmatter.json
+title: "Alerts Update"
+description: "Update an error alert rule's settings."
+icon: lucide:bell
+---
+# alerts update
+
+Update an error alert rule's settings.
+
+Change the threshold, window, cooldown, or name of an existing
+error_threshold rule. Get the rule ID from 'strada alerts list'.
+
+## Usage
+
+```sh
+strada alerts update <id>
+```
+
+## Arguments
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `<id>` | Yes | id |
+
+## Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--name <name>` | - | New rule name |
+| `--threshold <count>` | - | Min errors to trigger |
+| `--window <minutes>` | - | Time window in minutes |
+| `--cooldown <minutes>` | - | Re-alert cooldown in minutes |
+
+## Global Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-h, --help` | - | Display this message |
+| `-v, --version` | - | Display version number |

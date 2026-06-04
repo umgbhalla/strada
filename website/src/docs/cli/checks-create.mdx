@@ -1,0 +1,49 @@
+---
+$schema: https://holocron.so/frontmatter.json
+title: "Checks Create"
+description: "Create a URL health check that runs on a schedule."
+icon: lucide:heart-pulse
+---
+# checks create
+
+Create a URL health check that runs on a schedule.
+
+The check fetches the URL with the specified method and expects a status
+code in the configured range (default 200-299). After N consecutive
+failures (default 2), alerts fire to all configured destinations.
+
+Checks auto-disable after continuous failure for --auto-disable-hours
+(default 24) to avoid filling the database with identical failure rows.
+Re-enable with 'strada checks enable `<id>`'.
+
+Alerts go to the same destinations as error alerts. If no destinations
+are configured, add one first with 'strada alerts create'.
+
+## Usage
+
+```sh
+strada checks create
+```
+
+## Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--url <url>` | - | URL to check (required) |
+| `--name <name>` | - | Human-readable check name (required) |
+| `--method <method>` | - | HTTP method (default: GET) |
+| `--schedule <cron>` | - | Cron schedule in UTC (default: '*/5 * * * *') |
+| `--timeout <ms>` | - | Request timeout in ms (default: 10000) |
+| `--failures <count>` | - | Consecutive failures before alerting (default: 2) |
+| `--status-min <code>` | - | Min acceptable status code (default: 200) |
+| `--status-max <code>` | - | Max acceptable status code (default: 299) |
+| `--cooldown <minutes>` | - | Re-alert cooldown in minutes (default: 60) |
+| `--auto-disable-hours <hours>` | - | Auto-disable after N hours of failure, 0 to disable (default: 24) |
+| `--project <slug>` | - | Project slug to scope the check to |
+
+## Global Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-h, --help` | - | Display this message |
+| `-v, --version` | - | Display version number |

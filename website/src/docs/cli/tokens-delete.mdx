@@ -1,0 +1,31 @@
+---
+$schema: https://holocron.so/frontmatter.json
+title: "Tokens Delete"
+description: "Delete an org-wide token."
+icon: lucide:key
+---
+# tokens delete
+
+Delete an org-wide token.
+
+Use this to rotate leaked or obsolete server-side ingestion credentials.
+Deleting a token immediately stops future collector requests that use it.
+
+## Usage
+
+```sh
+strada tokens delete <id>
+```
+
+## Arguments
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `<id>` | Yes | id |
+
+## Global Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-h, --help` | - | Display this message |
+| `-v, --version` | - | Display version number |

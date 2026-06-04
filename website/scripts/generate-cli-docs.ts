@@ -1,0 +1,80 @@
+// Generates CLI reference pages from goke's generateDocs() into website/src/cli/*.mdx.
+// Run with: bun scripts/generate-cli-docs.ts
+// Uses bun because the CLI source has TS parameter properties that Node strip-only mode rejects.
+
+import fs from 'node:fs'
+import path from 'node:path'
+import { generateDocs } from 'goke'
+import { cli } from 'strada/src/cli'
+
+const outDir = path.resolve(import.meta.dirname, '../src/docs/cli')
+
+const icons: Record<string, string> = {
+  database: 'lucide:database',
+  login: 'lucide:log-in',
+  logout: 'lucide:log-out',
+  whoami: 'lucide:user',
+  setup: 'lucide:settings',
+  orgs: 'lucide:building-2',
+  projects: 'lucide:folder',
+  issues: 'lucide:bug',
+  analytics: 'lucide:bar-chart-3',
+  query: 'lucide:search',
+  alerts: 'lucide:bell',
+  checks: 'lucide:heart-pulse',
+  destinations: 'lucide:send',
+  logs: 'lucide:scroll-text',
+  services: 'lucide:server',
+  traces: 'lucide:route',
+  tokens: 'lucide:key',
+}
+
+function extractDescription(content: string): string {
+  const lines = content.split('\n')
+  let foundHeading = false
+  for (const line of lines) {
+    const trimmed = line.trim()
+    if (!foundHeading && trimmed.startsWith('#')) {
+      foundHeading = true
+      continue
+    }
+    if (foundHeading && trimmed && !trimmed.startsWith('#') && !trimmed.startsWith('|') && !trimmed.startsWith('```')) {
+      return trimmed.length > 150 ? trimmed.slice(0, 147) + '...' : trimmed
+    }
+  }
+  return ''
+}
+
+const pages = generateDocs({ cli, basePath: '/docs/cli' })
+
+if (fs.existsSync(outDir)) {
+  fs.rmSync(outDir, { recursive: true })
+}
+fs.mkdirSync(outDir, { recursive: true })
+
+console.log(`Generating ${pages.length} CLI doc pages into ${outDir}`)
+
+for (const page of pages) {
+  const title = page.command
+    ? page.command.split(' ').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+    : 'CLI Overview'
+  const description = extractDescription(page.content)
+  const icon = icons[page.slug.split('-')[0]] || 'lucide:terminal'
+
+  const frontmatter = [
+    '---',
+    '$schema: https://holocron.so/frontmatter.json',
+    `title: "${title}"`,
+    ...(title.length > 30 ? [`sidebarTitle: "${page.command || 'CLI'}"`] : []),
+    ...(description ? [`description: "${description.replace(/"/g, '\\"')}"`] : []),
+    `icon: ${icon}`,
+    '---',
+    '',
+  ].join('\n')
+
+  const filePath = path.join(outDir, `${page.slug}.mdx`)
+  fs.writeFileSync(filePath, frontmatter + page.content)
+  console.log(`  wrote docs/cli/${page.slug}.mdx`)
+}
+
+console.log('Done!')

@@ -1,0 +1,43 @@
+---
+$schema: https://holocron.so/frontmatter.json
+title: "Traces View"
+description: "Render one distributed trace as a parent-child span tree."
+icon: lucide:route
+---
+# traces view
+
+Render one distributed trace as a parent-child span tree.
+
+Use a TraceId from `strada traces list` or from logs/errors. The SQL
+fetches all spans for that TraceId, then the CLI builds a SpanNode tree
+from SpanId and ParentSpanId. Use `--json` to print a shape designed to
+match the @strada.sh/ui trace timeline, making future code sharing simple.
+
+## Usage
+
+```sh
+strada traces view <traceId>
+```
+
+## Arguments
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `<traceId>` | Yes | traceId |
+
+## Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-p, --project [slug]` | - | Project slug override (defaults to folder setup) |
+| `--org [name-or-id]` | - | Organization override (defaults to folder setup) |
+| `--attrs <count>` | `3` | Number of compact span attributes to show |
+| `-e, --expand-span <spanId>` | - | SpanId or unique SpanId prefix to expand (repeatable) |
+| `--json` | - | Print @strada.sh/ui compatible JSON |
+
+## Global Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-h, --help` | - | Display this message |
+| `-v, --version` | - | Display version number |

@@ -1,0 +1,37 @@
+---
+$schema: https://holocron.so/frontmatter.json
+title: "Issues Unresolve"
+description: "Reopen a resolved or muted issue."
+icon: lucide:bug
+---
+# issues unresolve
+
+Reopen a resolved or muted issue.
+
+Sets the status back to 'open' so it appears in the default listing again.
+
+## Usage
+
+```sh
+strada issues unresolve <fingerprint>
+```
+
+## Arguments
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `<fingerprint>` | Yes | fingerprint |
+
+## Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-p, --project [slug]` | - | Project slug override (defaults to folder setup) |
+| `--org [name-or-id]` | - | Organization override (defaults to folder setup) |
+
+## Global Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-h, --help` | - | Display this message |
+| `-v, --version` | - | Display version number |

@@ -1,0 +1,34 @@
+---
+$schema: https://holocron.so/frontmatter.json
+title: "Analytics Realtime"
+description: "Count active visitors in the last 5 minutes."
+icon: lucide:bar-chart-3
+---
+# analytics realtime
+
+Count active visitors in the last 5 minutes.
+
+Queries raw otel_traces for pageview spans with distinct session.id
+values. This is a real-time metric, not from the materialized views.
+
+## Usage
+
+```sh
+strada analytics realtime
+```
+
+## Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-p, --project <slug>` | - | Project slug override (repeatable, defaults to folder setup) |
+| `--org [name-or-id]` | - | Organization override (defaults to folder setup) |
+| `-s, --service [name]` | - | Filter by service name |
+| `--domain [domain]` | - | Filter by domain |
+
+## Global Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-h, --help` | - | Display this message |
+| `-v, --version` | - | Display version number |

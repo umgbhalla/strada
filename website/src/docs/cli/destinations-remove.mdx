@@ -1,0 +1,31 @@
+---
+$schema: https://holocron.so/frontmatter.json
+title: "Destinations Remove"
+description: "Remove a notification destination."
+icon: lucide:send
+---
+# destinations remove
+
+Remove a notification destination.
+
+Unlinks the destination from all alert rules and deletes it.
+Get the destination ID from 'strada destinations list' or 'strada alerts list'.
+
+## Usage
+
+```sh
+strada destinations remove <id>
+```
+
+## Arguments
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `<id>` | Yes | id |
+
+## Global Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-h, --help` | - | Display this message |
+| `-v, --version` | - | Display version number |

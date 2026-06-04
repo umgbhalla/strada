@@ -1,0 +1,31 @@
+---
+$schema: https://holocron.so/frontmatter.json
+title: "Checks Enable"
+description: "Re-enable a health check that was disabled (manually or auto-disabled)."
+icon: lucide:heart-pulse
+---
+# checks enable
+
+Re-enable a health check that was disabled (manually or auto-disabled).
+
+Auto-disabled checks stop running after continuous failure for too long.
+This command re-enables them so they start checking again.
+
+## Usage
+
+```sh
+strada checks enable <id>
+```
+
+## Arguments
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `<id>` | Yes | id |
+
+## Global Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-h, --help` | - | Display this message |
+| `-v, --version` | - | Display version number |

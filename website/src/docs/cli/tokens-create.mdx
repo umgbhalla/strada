@@ -1,0 +1,47 @@
+---
+$schema: https://holocron.so/frontmatter.json
+title: "Tokens Create"
+description: "Create an org-wide token with an explicit scope."
+icon: lucide:key
+---
+# tokens create
+
+Create an org-wide token with an explicit scope.
+
+Tokens with the ingest scope authenticate writes to the OTLP collector only. They do
+not grant query access, project management access, or access to the
+Strada website API. Use them in Node.js, Cloudflare Workers, Vercel, and
+other trusted server runtimes.
+
+The only supported scope today is "ingest". The scope is still required
+as --scope so command usage will stay stable when more token scopes are
+added later.
+
+Browser SDKs should not use tokens. Browser ingest stays
+anonymous and is protected by the collector's anonymous rate limit.
+
+## Usage
+
+```sh
+strada tokens create <name>
+```
+
+## Arguments
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `<name>` | Yes | name |
+
+## Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--scope <scope>` | - | Token scope. Currently only ingest is supported |
+| `--org [name-or-id]` | - | Organization override (defaults to folder setup) |
+
+## Global Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-h, --help` | - | Display this message |
+| `-v, --version` | - | Display version number |

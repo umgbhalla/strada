@@ -1,0 +1,53 @@
+---
+$schema: https://holocron.so/frontmatter.json
+title: "Issues List"
+description: "List error issue groups sorted by frequency."
+icon: lucide:bug
+---
+# issues list
+
+List error issue groups sorted by frequency.
+
+Groups errors by FingerprintHash and shows the count, exception type,
+message, status, and last seen time for each group. This is the starting
+point for debugging production errors. Use --since to control the time
+range and -s to filter by service.
+
+After finding an issue, copy its fingerprint hash and run
+'strada issues view `<fingerprint>`' to see the full stack trace and
+recent events.
+
+By default only 'open' issues are shown. Use --status to filter by
+triage state: open, resolved, muted, ignored, or all.
+
+Examples:
+  strada issues list -p my-app --since 24h
+  strada issues list -p my-app -s api-server --unhandled
+  strada issues list -p my-app --status all
+  strada issues list -p my-app --status resolved
+  strada issues list -p frontend -p api --since 7d
+
+## Usage
+
+```sh
+strada issues list
+```
+
+## Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-p, --project <slug>` | - | Project slug override (repeatable, defaults to folder setup) |
+| `--org [name-or-id]` | - | Organization override (defaults to folder setup) |
+| `-s, --service [name]` | - | Filter by service name |
+| `--since [duration]` | - | Time range, e.g. 1h, 24h, 7d (default: 24h) |
+| `-n, --limit [count]` | - | Max number of issue groups (default: 20) |
+| `--status [status]` | - | Filter by triage status: open, resolved, muted, ignored, all (default: open) |
+| `--unhandled` | - | Show only unhandled errors |
+
+## Global Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-h, --help` | - | Display this message |
+| `-v, --version` | - | Display version number |

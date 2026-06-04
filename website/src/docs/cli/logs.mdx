@@ -1,0 +1,54 @@
+---
+$schema: https://holocron.so/frontmatter.json
+title: "Logs"
+description: "Browse and search OTel log records from otel_logs."
+icon: lucide:scroll-text
+---
+# logs
+
+Browse and search OTel log records from otel_logs.
+
+Renders one log per line with timestamp, severity, service, body, and
+attributes. Supports subcommands: 'list' (default) and 'stats'.
+
+Use -w for raw SQL WHERE filters on attribute maps:
+
+  strada logs -p my-app -w "mapContains(LogAttributes, 'event.name')"
+  strada logs -p my-app -w "LogAttributes['user.id'] = 'user_123'"
+  strada logs -p my-app --search "timeout" --min-level error --since 24h
+  strada logs stats -p my-app --since 7d
+
+## Usage
+
+```sh
+strada logs [subcommand]
+```
+
+## Arguments
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `[subcommand]` | No | subcommand |
+
+## Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-p, --project <slug>` | - | Project slug override (repeatable, defaults to folder setup) |
+| `--org [name-or-id]` | - | Organization override (defaults to folder setup) |
+| `-s, --service [name]` | - | Filter by ServiceName |
+| `--since [time]` | - | Start time: duration (1h, 7d) or ISO date (default: 1h) |
+| `--until [time]` | - | End time: duration (1h) or ISO date |
+| `--min-level [level]` | - | Minimum severity: trace, debug, info, warn, error, fatal |
+| `--search [text]` | - | Full-text search on log body |
+| `--trace-id [id]` | - | Show logs for a specific trace |
+| `-w, --where <expr>` | - | Raw SQL WHERE condition (repeatable, ANDed) |
+| `-n, --limit [count]` | - | Max rows (default: 200) |
+| `--json` | - | Print raw JSON response |
+
+## Global Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-h, --help` | - | Display this message |
+| `-v, --version` | - | Display version number |

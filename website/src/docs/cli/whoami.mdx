@@ -1,0 +1,25 @@
+---
+$schema: https://holocron.so/frontmatter.json
+title: "Whoami"
+description: "Show the currently authenticated user and server URL."
+icon: lucide:user
+---
+# whoami
+
+Show the currently authenticated user and server URL.
+
+Validates the stored session token by calling the Strada API. If the
+session is expired or invalid, run 'strada login' again.
+
+## Usage
+
+```sh
+strada whoami
+```
+
+## Global Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-h, --help` | - | Display this message |
+| `-v, --version` | - | Display version number |

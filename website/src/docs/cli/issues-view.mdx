@@ -1,0 +1,48 @@
+---
+$schema: https://holocron.so/frontmatter.json
+title: "Issues View"
+description: "Show full details for a single issue by fingerprint hash."
+icon: lucide:bug
+---
+# issues view
+
+Show full details for a single issue by fingerprint hash.
+
+Displays exception type, message, stack trace (structured frames when
+available), triage status, mechanism (handled/unhandled), services,
+releases, environments, and a table of recent error events with trace
+correlation IDs.
+
+Get the fingerprint hash from 'strada issues list'. The --events flag
+controls how many recent occurrences to show (default 5).
+
+  strada issues view abc123def456 -p my-app
+  strada issues view abc123def456 -p my-app --events 10 --json
+
+## Usage
+
+```sh
+strada issues view <fingerprint>
+```
+
+## Arguments
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `<fingerprint>` | Yes | fingerprint |
+
+## Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-p, --project [slug]` | - | Project slug override (defaults to folder setup) |
+| `--org [name-or-id]` | - | Organization override (defaults to folder setup) |
+| `-n, --events [count]` | - | Number of recent error events to show (default: 5) |
+| `--json` | - | Output raw JSON |
+
+## Global Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-h, --help` | - | Display this message |
+| `-v, --version` | - | Display version number |

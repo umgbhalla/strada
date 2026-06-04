@@ -1,0 +1,40 @@
+---
+$schema: https://holocron.so/frontmatter.json
+title: "Issues Assign"
+description: "Assign an issue to an org member or remove the current assignee."
+icon: lucide:bug
+---
+# issues assign
+
+Assign an issue to an org member or remove the current assignee.
+
+Pass --to `<member-id>` to assign, or --unassign to clear the assignee.
+Get member IDs from the Strada website team page.
+
+## Usage
+
+```sh
+strada issues assign <fingerprint>
+```
+
+## Arguments
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `<fingerprint>` | Yes | fingerprint |
+
+## Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-p, --project [slug]` | - | Project slug override (defaults to folder setup) |
+| `--org [name-or-id]` | - | Organization override (defaults to folder setup) |
+| `--to [member-id]` | - | Org member ID to assign |
+| `--unassign` | - | Remove the current assignee |
+
+## Global Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-h, --help` | - | Display this message |
+| `-v, --version` | - | Display version number |

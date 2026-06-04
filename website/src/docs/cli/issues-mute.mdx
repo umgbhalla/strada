@@ -1,0 +1,39 @@
+---
+$schema: https://holocron.so/frontmatter.json
+title: "Issues Mute"
+description: "Mark an issue as muted."
+icon: lucide:bug
+---
+# issues mute
+
+Mark an issue as muted.
+
+Muted issues still collect error events but are hidden from the default
+'strada issues list' output. Use --status muted or --status all to see them.
+Useful for known noise you want to triage separately.
+
+## Usage
+
+```sh
+strada issues mute <fingerprint>
+```
+
+## Arguments
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `<fingerprint>` | Yes | fingerprint |
+
+## Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-p, --project [slug]` | - | Project slug override (defaults to folder setup) |
+| `--org [name-or-id]` | - | Organization override (defaults to folder setup) |
+
+## Global Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-h, --help` | - | Display this message |
+| `-v, --version` | - | Display version number |

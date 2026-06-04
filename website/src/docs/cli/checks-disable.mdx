@@ -1,0 +1,31 @@
+---
+$schema: https://holocron.so/frontmatter.json
+title: "Checks Disable"
+description: "Manually disable a health check."
+icon: lucide:heart-pulse
+---
+# checks disable
+
+Manually disable a health check.
+
+The check stops running but the rule is preserved. Re-enable with
+'strada checks enable `<id>`'.
+
+## Usage
+
+```sh
+strada checks disable <id>
+```
+
+## Arguments
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `<id>` | Yes | id |
+
+## Global Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-h, --help` | - | Display this message |
+| `-v, --version` | - | Display version number |

@@ -1,0 +1,31 @@
+---
+$schema: https://holocron.so/frontmatter.json
+title: "Checks Delete"
+description: "Delete a health check by ID."
+icon: lucide:heart-pulse
+---
+# checks delete
+
+Delete a health check by ID.
+
+Removes the check rule from D1. Historical check results remain in
+ClickHouse and are queryable via 'strada query'.
+
+## Usage
+
+```sh
+strada checks delete <id>
+```
+
+## Arguments
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `<id>` | Yes | id |
+
+## Global Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-h, --help` | - | Display this message |
+| `-v, --version` | - | Display version number |

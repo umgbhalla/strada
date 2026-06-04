@@ -1,0 +1,32 @@
+---
+$schema: https://holocron.so/frontmatter.json
+title: "Tokens List"
+description: "List org-wide tokens."
+icon: lucide:key
+---
+# tokens list
+
+List org-wide tokens.
+
+This shows token metadata and prefixes only. Full token values are never
+stored by Strada and cannot be recovered after creation. Create a new
+token and delete the old one when rotating credentials.
+
+## Usage
+
+```sh
+strada tokens list
+```
+
+## Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--org [name-or-id]` | - | Organization override (defaults to folder setup) |
+
+## Global Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-h, --help` | - | Display this message |
+| `-v, --version` | - | Display version number |

@@ -1,0 +1,54 @@
+---
+$schema: https://holocron.so/frontmatter.json
+title: "Database Create"
+description: "Create a Strada database on your own Tinybird workspace."
+icon: lucide:database
+---
+# database create
+
+Create a Strada database on your own Tinybird workspace.
+
+Requires `strada login` first. Authenticates with Tinybird via browser
+OAuth, deploys OTel datasources and materialized views, then saves the
+tokens to your Strada database.
+
+For non-interactive Tinybird auth, pass --token and --base-url directly.
+
+## Usage
+
+```sh
+strada database create
+```
+
+## Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-t, --token [token]` | - | Tinybird workspace admin token (skips browser login) |
+| `-u, --base-url [url]` | - | Tinybird API base URL (e.g. https://api.us-east.aws.tinybird.co) |
+| `-f, --force` | - | Overwrite existing database config without confirmation |
+
+## Global Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-h, --help` | - | Display this message |
+| `-v, --version` | - | Display version number |
+
+## Examples
+
+```sh
+# Interactive setup (opens browser)
+```
+
+```sh
+strada database create
+```
+
+```sh
+# Non-interactive with existing token
+```
+
+```sh
+strada database create --token p.eyXXX --base-url https://api.tinybird.co
+```

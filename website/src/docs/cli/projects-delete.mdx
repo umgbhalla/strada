@@ -1,0 +1,32 @@
+---
+$schema: https://holocron.so/frontmatter.json
+title: "Projects Delete"
+description: "Delete a project by its ID."
+icon: lucide:folder
+---
+# projects delete
+
+Delete a project by its ID.
+
+This removes the project from D1. Data already ingested into
+Tinybird/ClickHouse is not deleted. Get the project ID from
+'strada projects list'.
+
+## Usage
+
+```sh
+strada projects delete <id>
+```
+
+## Arguments
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `<id>` | Yes | id |
+
+## Global Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-h, --help` | - | Display this message |
+| `-v, --version` | - | Display version number |

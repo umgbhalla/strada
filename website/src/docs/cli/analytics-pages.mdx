@@ -1,0 +1,38 @@
+---
+$schema: https://holocron.so/frontmatter.json
+title: "Analytics Pages"
+description: "Top pages by pageviews from the otel_analytics_pages materialized view."
+icon: lucide:bar-chart-3
+---
+# analytics pages
+
+Top pages by pageviews from the otel_analytics_pages materialized view.
+
+Shows pathname, pageview count, and unique visitor count. Uses
+countMerge/uniqMerge for AggregatingMergeTree columns.
+
+  strada analytics pages -p my-app --since 30d
+
+## Usage
+
+```sh
+strada analytics pages
+```
+
+## Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-p, --project <slug>` | - | Project slug override (repeatable, defaults to folder setup) |
+| `--org [name-or-id]` | - | Organization override (defaults to folder setup) |
+| `-s, --service [name]` | - | Filter by service name |
+| `--since [duration]` | - | Time range, e.g. 1h, 24h, 7d (default: 7d) |
+| `-n, --limit [count]` | - | Max number of rows (default: 20) |
+| `--domain [domain]` | - | Filter by domain |
+
+## Global Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-h, --help` | - | Display this message |
+| `-v, --version` | - | Display version number |

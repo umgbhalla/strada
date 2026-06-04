@@ -17,6 +17,7 @@
     "./dist/*": "./dist/*"
   },
   "scripts": {
+    "generate:cli-docs": "bun scripts/generate-cli-docs.ts",
     "dev": "pnpm db:migrate:local && sigillo run -- vite dev",
     "build": "vite build",
     "typecheck": "tsc --noEmit",
@@ -47,6 +48,7 @@
     "db": "workspace:^",
     "drizzle-orm": "1.0.0-beta.21",
     "echarts": "^6.0.0",
+    "goke": "^6.12.3",
     "lucide-react": "^1.14.0",
     "marked": "^18.0.2",
     "radix-ui": "latest",

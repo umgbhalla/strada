@@ -1,0 +1,51 @@
+---
+$schema: https://holocron.so/frontmatter.json
+title: "Query"
+description: "Run a ClickHouse SQL query against a project's database."
+icon: lucide:search
+---
+# query
+
+Run a ClickHouse SQL query against a project's database.
+
+Without a FORMAT clause, renders an auto-sized terminal table. Add --json
+to get the raw JSON envelope { data, meta, rows, statistics } instead.
+
+Append a ClickHouse FORMAT clause to the SQL for raw output: JSON,
+JSONEachRow, CSV, CSVWithNames, TSV, TSVWithNames, PrettyCompact,
+Parquet, Prometheus. The response body is written directly to stdout
+so you can pipe it.
+
+ProjectId filtering is automatic via JWT. Never add WHERE ProjectId in SQL.
+
+  strada query "SELECT count() FROM otel_errors LIMIT 1" -p my-app
+  strada query "SELECT * FROM otel_errors LIMIT 10" -p my-app --json
+  strada query "SELECT * FROM otel_errors LIMIT 100 FORMAT CSVWithNames" -p my-app > errors.csv
+  strada query "SELECT ServiceName, count() AS n FROM otel_traces GROUP BY 1 FORMAT JSONEachRow" -p my-app | jq .
+
+## Usage
+
+```sh
+strada query <sql>
+```
+
+## Arguments
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `<sql>` | Yes | sql |
+
+## Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-p, --project [slug]` | - | Project slug override (defaults to folder setup) |
+| `--org [name-or-id]` | - | Organization override (defaults to folder setup) |
+| `--json` | - | Print the raw JSON envelope { data, meta, rows, statistics } instead of a table (only applies when no FORMAT clause is in the SQL) |
+
+## Global Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-h, --help` | - | Display this message |
+| `-v, --version` | - | Display version number |

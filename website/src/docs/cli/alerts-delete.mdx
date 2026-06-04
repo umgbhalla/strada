@@ -1,0 +1,31 @@
+---
+$schema: https://holocron.so/frontmatter.json
+title: "Alerts Delete"
+description: "Delete an error alert rule."
+icon: lucide:bell
+---
+# alerts delete
+
+Delete an error alert rule.
+
+Destinations are not deleted; they remain for other rules.
+Get the rule ID from 'strada alerts list'.
+
+## Usage
+
+```sh
+strada alerts delete <id>
+```
+
+## Arguments
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `<id>` | Yes | id |
+
+## Global Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-h, --help` | - | Display this message |
+| `-v, --version` | - | Display version number |

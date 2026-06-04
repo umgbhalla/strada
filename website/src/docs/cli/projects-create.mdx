@@ -1,0 +1,41 @@
+---
+$schema: https://holocron.so/frontmatter.json
+title: "Projects Create"
+description: "Create a new project and generate its first org-wide ingest token."
+icon: lucide:folder
+---
+# projects create
+
+Create a new project and generate its first org-wide ingest token.
+
+The generated project ID becomes the ingest hostname: {projectId}-ingest.strada.sh.
+The token printed at creation is shown only once. Save it as STRADA_TOKEN
+for server-side SDKs. Browser SDKs do not need a token.
+
+  strada projects create my-app
+  strada projects create my-app-prod
+
+## Usage
+
+```sh
+strada projects create <slug>
+```
+
+## Arguments
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `<slug>` | Yes | slug |
+
+## Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--org [name-or-id]` | - | Organization override (defaults to folder setup) |
+
+## Global Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-h, --help` | - | Display this message |
+| `-v, --version` | - | Display version number |

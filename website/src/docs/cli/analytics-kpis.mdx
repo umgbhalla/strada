@@ -1,0 +1,39 @@
+---
+$schema: https://holocron.so/frontmatter.json
+title: "Analytics Kpis"
+description: "Summary KPIs: unique visitors, pageviews, sessions, bounce rate, and"
+icon: lucide:bar-chart-3
+---
+# analytics kpis
+
+Summary KPIs: unique visitors, pageviews, sessions, bounce rate, and
+average session duration.
+
+Queries both otel_analytics_pages and otel_analytics_sessions MVs.
+This gives a quick health check of browser analytics data.
+
+  strada analytics kpis -p my-app --since 30d
+
+## Usage
+
+```sh
+strada analytics kpis
+```
+
+## Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-p, --project <slug>` | - | Project slug override (repeatable, defaults to folder setup) |
+| `--org [name-or-id]` | - | Organization override (defaults to folder setup) |
+| `-s, --service [name]` | - | Filter by service name |
+| `--since [duration]` | - | Time range, e.g. 1h, 24h, 7d (default: 7d) |
+| `-n, --limit [count]` | - | Max number of rows (default: 20) |
+| `--domain [domain]` | - | Filter by domain |
+
+## Global Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-h, --help` | - | Display this message |
+| `-v, --version` | - | Display version number |

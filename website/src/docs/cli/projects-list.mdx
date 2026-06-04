@@ -1,0 +1,32 @@
+---
+$schema: https://holocron.so/frontmatter.json
+title: "Projects List"
+description: "List all projects in the current organization."
+icon: lucide:folder
+---
+# projects list
+
+List all projects in the current organization.
+
+Shows project slugs and IDs. Use the slug with -p in other commands.
+Slugs often include an environment suffix (e.g. 'my-app-prod').
+This also refreshes the local project cache.
+
+## Usage
+
+```sh
+strada projects list
+```
+
+## Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--org [name-or-id]` | - | Organization override (defaults to folder setup) |
+
+## Global Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-h, --help` | - | Display this message |
+| `-v, --version` | - | Display version number |

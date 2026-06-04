@@ -1,0 +1,42 @@
+---
+$schema: https://holocron.so/frontmatter.json
+title: "Traces Span"
+description: "Show the full details for one span inside a trace."
+icon: lucide:route
+---
+# traces span
+
+Show the full details for one span inside a trace.
+
+Use the short span id printed by `strada traces view`, or paste a full
+SpanId. The command prints all span attributes, resource attributes,
+scope attributes, exception events, and links without truncation. Use this
+after the compact tree has identified the span that needs inspection.
+
+## Usage
+
+```sh
+strada traces span <traceId> <spanId>
+```
+
+## Arguments
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `<traceId>` | Yes | traceId |
+| `<spanId>` | Yes | spanId |
+
+## Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-p, --project [slug]` | - | Project slug override (defaults to folder setup) |
+| `--org [name-or-id]` | - | Organization override (defaults to folder setup) |
+| `--json` | - | Print raw span JSON |
+
+## Global Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-h, --help` | - | Display this message |
+| `-v, --version` | - | Display version number |
