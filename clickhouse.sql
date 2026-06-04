@@ -570,35 +570,4 @@ ORDER BY (ProjectId, CheckId, Timestamp)
 TTL toDate(Timestamp) + toIntervalDay(90)
 SETTINGS index_granularity = 8192;
 
--- ============================================================================
--- HEALTH CHECK CONFIG (mutable state)
--- ============================================================================
--- ReplacingMergeTree for mutable health check state. Same pattern as
--- otel_issue_state: INSERT new rows with higher Version, use argMax()
--- for deduplication at read time.
 
-CREATE TABLE IF NOT EXISTS otel_health_checks_config
-(
-    `ProjectId`              LowCardinality(String) CODEC(ZSTD(1)),
-    `CheckId`                String                 CODEC(ZSTD(1)),
-    `Name`                   String                 CODEC(ZSTD(1)),
-    `Url`                    String                 CODEC(ZSTD(1)),
-    `Method`                 LowCardinality(String) CODEC(ZSTD(1)),
-    `IntervalMinutes`        UInt16                 CODEC(ZSTD(1)),
-    `ExpectedStatusMin`      UInt16                 CODEC(ZSTD(1)),
-    `ExpectedStatusMax`      UInt16                 CODEC(ZSTD(1)),
-    `TimeoutMs`              UInt32                 CODEC(ZSTD(1)),
-    `FailureThreshold`       UInt8                  CODEC(ZSTD(1)),
-    `AutoDisableAfterHours`  UInt16                 CODEC(ZSTD(1)),
-    `Enabled`                UInt8                  CODEC(ZSTD(1)),
-    `DisabledReason`         LowCardinality(String) CODEC(ZSTD(1)),
-    `LastCheckedAt`          Nullable(DateTime64(3)) CODEC(ZSTD(1)),
-    `LastAlertStatus`        LowCardinality(String) CODEC(ZSTD(1)),
-    `LastAlertedAt`          Nullable(DateTime64(3)) CODEC(ZSTD(1)),
-    `FirstFailedAt`          Nullable(DateTime64(3)) CODEC(ZSTD(1)),
-    `Version`                UInt64                 CODEC(ZSTD(1)),
-    `UpdatedAt`              DateTime64(3)          CODEC(ZSTD(1))
-)
-ENGINE = ReplacingMergeTree(Version)
-ORDER BY (ProjectId, CheckId)
-SETTINGS index_granularity = 8192;

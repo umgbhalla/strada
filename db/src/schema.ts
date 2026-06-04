@@ -309,9 +309,8 @@ export const orgToken = s.sqliteTable(
 //   - health_check: fires when a URL fails consecutive checks.
 //     check_* fields define the URL, method, timeout, expected status range,
 //     and failure threshold. Check results go to ClickHouse otel_health_checks.
-//     Mutable state (LastCheckedAt, LastAlertStatus) lives in ClickHouse
-//     otel_health_checks_config (ReplacingMergeTree). Consecutive failure
-//     detection is derived at query time from otel_health_checks results.
+//     All mutable state (lastCheckedAt, lastAlertStatus, firstFailedAt,
+//     disabledReason) lives in D1 on this table. No ClickHouse config table.
 //     A Cloudflare Workflow (HealthCheckWorkflow) runs the checks, with
 //     each tenant org as a separate durable step.
 //
@@ -361,10 +360,14 @@ export const alertRule = s.sqliteTable(
     errorThreshold: s.integer("error_threshold"),
     errorWindowMinutes: s.integer("error_window_minutes"),
 
+    // ── health_check runtime state (null when type != 'health_check') ──
+    // All mutable state lives in D1. No ClickHouse config table.
+    checkLastCheckedAt: epochMs("check_last_checked_at"),
+    checkLastAlertStatus: s.text("check_last_alert_status", { enum: ["ok", "alerting", ""] }).default(""),
+    checkFirstFailedAt: epochMs("check_first_failed_at"),
+    checkDisabledReason: s.text("check_disabled_reason", { enum: ["auto", "manual", ""] }).default(""),
+
     // ── health_check fields (null when type != 'health_check') ──
-    // The health check definition lives here for D1 → workflow dispatch.
-    // Check results and mutable state (LastCheckedAt, LastAlertStatus, etc.)
-    // live in ClickHouse otel_health_checks_config (ReplacingMergeTree).
     checkUrl: s.text("check_url"),
     checkMethod: s.text("check_method").default("GET"),
     checkIntervalMinutes: s.integer("check_interval_minutes").default(5),

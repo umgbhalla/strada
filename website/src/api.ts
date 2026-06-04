@@ -1356,50 +1356,6 @@ export const api = new Spiceflow({ tracer })
           })
           .returning()
 
-        // Write initial config row to ClickHouse so the workflow can read it
-        const dbConfig = await db.query.database.findFirst({
-          where: { orgId: params.orgId },
-        })
-
-        if (dbConfig) {
-          // Find a project for ClickHouse scoping
-          let projectRow = body.projectId
-            ? await db.query.project.findFirst({ where: { id: body.projectId } })
-            : await db.query.project.findFirst({ where: { orgId: params.orgId } })
-
-          if (projectRow) {
-            try {
-              const now = Date.now()
-              await insertBackendRow({
-                dbConfig,
-                table: 'otel_health_checks_config',
-                row: {
-                  ProjectId: projectRow.id,
-                  CheckId: rule!.id,
-                  Name: body.name,
-                  Url: body.url,
-                  Method: body.method,
-                  IntervalMinutes: body.intervalMinutes,
-                  ExpectedStatusMin: body.expectedStatusMin,
-                  ExpectedStatusMax: body.expectedStatusMax,
-                  TimeoutMs: body.timeoutMs,
-                  FailureThreshold: body.failureThreshold,
-                  AutoDisableAfterHours: body.autoDisableAfterHours,
-                  Enabled: 1,
-                  DisabledReason: '',
-                  LastCheckedAt: null,
-                  LastAlertStatus: '',
-                  FirstFailedAt: null,
-                  Version: now,
-                  UpdatedAt: new Date(now).toISOString(),
-                },
-              })
-            } catch (err) {
-              logger.error({ message: 'failed to write initial health check config to ClickHouse', error: String(err) })
-            }
-          }
-        }
-
         // Auto-link existing destinations for this org
         const destinations = await db.query.alertDestination.findMany({
           where: { orgId: params.orgId },
@@ -1463,47 +1419,6 @@ export const api = new Spiceflow({ tracer })
           .set(updates)
           .where(orm.eq(schema.alertRule.id, params.checkId))
           .limit(1)
-
-        // Mirror config changes to ClickHouse so the workflow reads fresh values
-        const dbConfigRow = await db.query.database.findFirst({ where: { orgId: params.orgId } })
-        if (dbConfigRow) {
-          const updatedRule = await db.query.alertRule.findFirst({
-            where: { id: params.checkId },
-          })
-          if (updatedRule) {
-            const projectRow = updatedRule.projectId
-              ? await db.query.project.findFirst({ where: { id: updatedRule.projectId } })
-              : await db.query.project.findFirst({ where: { orgId: params.orgId } })
-            if (projectRow) {
-              try {
-                const now = Date.now()
-                await insertBackendRow({
-                  dbConfig: dbConfigRow,
-                  table: 'otel_health_checks_config',
-                  row: {
-                    ProjectId: projectRow.id,
-                    CheckId: params.checkId,
-                    Name: updatedRule.name,
-                    Url: updatedRule.checkUrl ?? '',
-                    Method: updatedRule.checkMethod ?? 'GET',
-                    IntervalMinutes: updatedRule.checkIntervalMinutes ?? 5,
-                    ExpectedStatusMin: updatedRule.checkExpectedStatusMin ?? 200,
-                    ExpectedStatusMax: updatedRule.checkExpectedStatusMax ?? 299,
-                    TimeoutMs: updatedRule.checkTimeoutMs ?? 10000,
-                    FailureThreshold: updatedRule.checkFailureThreshold ?? 2,
-                    AutoDisableAfterHours: updatedRule.checkAutoDisableAfterHours ?? 24,
-                    Enabled: updatedRule.enabled ? 1 : 0,
-                    DisabledReason: updatedRule.enabled ? '' : 'manual',
-                    Version: now,
-                    UpdatedAt: new Date(now).toISOString(),
-                  },
-                })
-              } catch (err) {
-                logger.error({ message: 'failed to mirror health check update to ClickHouse', error: String(err) })
-              }
-            }
-          }
-        }
 
         return { ok: true }
       },
