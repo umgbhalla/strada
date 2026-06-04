@@ -361,8 +361,10 @@ export const alertRule = s.sqliteTable(
     errorWindowMinutes: s.integer("error_window_minutes"),
 
     // ── health_check runtime state (null when type != 'health_check') ──
+    // ── health_check runtime state (null when type != 'health_check') ──
     // All mutable state lives in D1. No ClickHouse config table.
-    checkLastCheckedAt: epochMs("check_last_checked_at"),
+    // Scheduling is stateless: cronMatches() evaluates the cron against
+    // the current UTC time each tick. No lastCheckedAt needed.
     checkLastAlertStatus: s.text("check_last_alert_status", { enum: ["ok", "alerting", ""] }).default(""),
     checkFirstFailedAt: epochMs("check_first_failed_at"),
     checkDisabledReason: s.text("check_disabled_reason", { enum: ["auto", "manual", ""] }).default(""),
@@ -370,7 +372,9 @@ export const alertRule = s.sqliteTable(
     // ── health_check fields (null when type != 'health_check') ──
     checkUrl: s.text("check_url"),
     checkMethod: s.text("check_method").default("GET"),
-    checkIntervalMinutes: s.integer("check_interval_minutes").default(5),
+    // Cron expression for scheduling (UTC). Default every 5 minutes.
+    // Minimum granularity is 5 minutes (the website cron tick interval).
+    checkSchedule: s.text("check_schedule").default("*/5 * * * *"),
     checkExpectedStatusMin: s.integer("check_expected_status_min").default(200),
     checkExpectedStatusMax: s.integer("check_expected_status_max").default(299),
     checkTimeoutMs: s.integer("check_timeout_ms").default(10000),

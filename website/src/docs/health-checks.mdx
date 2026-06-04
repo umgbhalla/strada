@@ -51,7 +51,7 @@ strada alerts create --name "Notifications" --channel email --to ops@example.com
 | `--url` | required | URL to fetch |
 | `--name` | required | Human-readable name for the check |
 | `--method` | `GET` | HTTP method (`GET`, `HEAD`, `POST`, `PUT`, `DELETE`, `OPTIONS`) |
-| `--interval` | `5` | Check interval in minutes (minimum 5) |
+| `--schedule` | `*/5 * * * *` | Cron expression in UTC (minimum granularity 5 min) |
 | `--timeout` | `10000` | Request timeout in milliseconds |
 | `--failures` | `2` | Consecutive failures before alerting |
 | `--status-min` | `200` | Minimum acceptable status code |
@@ -68,11 +68,11 @@ strada checks create \
   --name "API health" \
   --timeout 5000 \
   --failures 3 \
-  --interval 10 \
+  --schedule "*/10 * * * *" \
   --cooldown 30
 ```
 
-This checks every 10 minutes, allows up to 5 seconds for a response, alerts after 3 consecutive failures, and waits 30 minutes before re-alerting.
+This checks every 10 minutes (cron), allows up to 5 seconds for a response, alerts after 3 consecutive failures, and waits 30 minutes before re-alerting.
 
 ---
 

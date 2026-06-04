@@ -171,13 +171,13 @@ alertsCli
         columns: [
           { key: "name", label: "NAME", color: bold },
           { key: "url", label: "URL" },
-          { key: "interval", label: "INTERVAL" },
+          { key: "schedule", label: "SCHEDULE" },
           { key: "id", label: "ID", color: dim },
         ],
         rows: checkRules.map((r: any) => ({
           name: r.name,
           url: r.checkUrl ?? "",
-          interval: `${r.checkIntervalMinutes ?? 5}m`,
+          schedule: r.checkSchedule ?? '*/5 * * * *',
           id: r.id,
         })),
       });

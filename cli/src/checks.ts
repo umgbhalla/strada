@@ -41,7 +41,7 @@ checksCli
   .option("--url <url>", z.string().describe("URL to check (required)"))
   .option("--name <name>", z.string().describe("Human-readable check name (required)"))
   .option("--method <method>", z.enum(["GET", "HEAD", "POST", "PUT", "DELETE", "OPTIONS"]).describe("HTTP method (default: GET)"))
-  .option("--interval <minutes>", z.coerce.number().describe("Check interval in minutes, min 5 (default: 5)"))
+  .option("--schedule <cron>", z.string().describe("Cron schedule in UTC (default: '*/5 * * * *')"))
   .option("--timeout <ms>", z.coerce.number().describe("Request timeout in ms (default: 10000)"))
   .option("--failures <count>", z.coerce.number().describe("Consecutive failures before alerting (default: 2)"))
   .option("--status-min <code>", z.coerce.number().describe("Min acceptable status code (default: 200)"))
@@ -72,7 +72,7 @@ checksCli
         name: options.name,
         url: options.url,
         method: options.method ?? "GET",
-        intervalMinutes: options.interval ?? 5,
+        schedule: options.schedule ?? '*/5 * * * *',
         timeoutMs: options.timeout ?? 10000,
         failureThreshold: options.failures ?? 2,
         expectedStatusMin: options.statusMin ?? 200,
@@ -97,7 +97,7 @@ checksCli
     dedent`
       List all health checks for the current org.
 
-      Shows check name, URL, interval, status, and whether it's enabled.
+      Shows check name, URL, schedule, status, and whether it's enabled.
       Use 'strada checks delete <id>' to remove a check.
     `,
   )
@@ -128,7 +128,7 @@ checksCli
         { key: "name", label: "NAME", color: bold },
         { key: "url", label: "URL" },
         { key: "method", label: "METHOD", color: dim },
-        { key: "interval", label: "INTERVAL" },
+        { key: "schedule", label: "SCHEDULE" },
         { key: "timeout", label: "TIMEOUT" },
         { key: "failures", label: "FAILURES" },
         { key: "enabled", label: "STATUS" },
@@ -138,7 +138,7 @@ checksCli
         name: c.name,
         url: c.url,
         method: c.method,
-        interval: `${c.intervalMinutes}m`,
+        schedule: c.schedule ?? '*/5 * * * *',
         timeout: `${c.timeoutMs}ms`,
         failures: String(c.failureThreshold),
         enabled: c.enabled ? green("enabled") : red("disabled"),

@@ -993,7 +993,7 @@ export const api = new Spiceflow({ tracer })
             // health_check fields
             checkUrl: r.checkUrl,
             checkMethod: r.checkMethod,
-            checkIntervalMinutes: r.checkIntervalMinutes,
+            checkSchedule: r.checkSchedule,
             checkTimeoutMs: r.checkTimeoutMs,
             checkFailureThreshold: r.checkFailureThreshold,
             destinations: r.destinations.map((d) => ({
@@ -1285,7 +1285,7 @@ export const api = new Spiceflow({ tracer })
             enabled: r.enabled,
             url: r.checkUrl,
             method: r.checkMethod ?? 'GET',
-            intervalMinutes: r.checkIntervalMinutes ?? 5,
+            schedule: r.checkSchedule ?? '*/5 * * * *',
             expectedStatusMin: r.checkExpectedStatusMin ?? 200,
             expectedStatusMax: r.checkExpectedStatusMax ?? 299,
             timeoutMs: r.checkTimeoutMs ?? 10000,
@@ -1310,7 +1310,7 @@ export const api = new Spiceflow({ tracer })
         name: z.string().min(1),
         url: z.string().url(),
         method: z.enum(['GET', 'HEAD', 'POST', 'PUT', 'DELETE', 'OPTIONS']).default('GET'),
-        intervalMinutes: z.number().int().min(5).default(5),
+        schedule: z.string().default('*/5 * * * *'),
         expectedStatusMin: z.number().int().min(100).max(599).default(200),
         expectedStatusMax: z.number().int().min(100).max(599).default(299),
         timeoutMs: z.number().int().min(1000).max(60000).default(10000),
@@ -1347,7 +1347,7 @@ export const api = new Spiceflow({ tracer })
             cooldownMinutes: body.cooldownMinutes,
             checkUrl: body.url,
             checkMethod: body.method,
-            checkIntervalMinutes: body.intervalMinutes,
+            checkSchedule: body.schedule,
             checkExpectedStatusMin: body.expectedStatusMin,
             checkExpectedStatusMax: body.expectedStatusMax,
             checkTimeoutMs: body.timeoutMs,
@@ -1376,7 +1376,7 @@ export const api = new Spiceflow({ tracer })
         name: z.string().min(1).optional(),
         url: z.string().url().optional(),
         method: z.enum(['GET', 'HEAD', 'POST', 'PUT', 'DELETE', 'OPTIONS']).optional(),
-        intervalMinutes: z.number().int().min(5).optional(),
+        schedule: z.string().optional(),
         expectedStatusMin: z.number().int().min(100).max(599).optional(),
         expectedStatusMax: z.number().int().min(100).max(599).optional(),
         timeoutMs: z.number().int().min(1000).max(60000).optional(),
@@ -1406,7 +1406,7 @@ export const api = new Spiceflow({ tracer })
         if (body.name != null) updates.name = body.name
         if (body.url != null) updates.checkUrl = body.url
         if (body.method != null) updates.checkMethod = body.method
-        if (body.intervalMinutes != null) updates.checkIntervalMinutes = body.intervalMinutes
+        if (body.schedule != null) updates.checkSchedule = body.schedule
         if (body.expectedStatusMin != null) updates.checkExpectedStatusMin = body.expectedStatusMin
         if (body.expectedStatusMax != null) updates.checkExpectedStatusMax = body.expectedStatusMax
         if (body.timeoutMs != null) updates.checkTimeoutMs = body.timeoutMs

@@ -28,6 +28,53 @@ import { getDb } from './db.ts'
 
 const logger = getLogger('health-check-workflow')
 
+// ── Cron matching (stateless scheduling) ──────────────────────────
+// Evaluates whether a UTC Date matches a standard 5-field cron expression.
+// Fields: minute hour day-of-month month day-of-week
+// Supports: * (any), */N (step), N-M (range), N,M (list), and combinations.
+// Day-of-week: 0=Sunday, 1=Monday, ..., 6=Saturday (standard cron).
+
+function cronMatches(cron: string, date: Date): boolean {
+  const parts = cron.trim().split(/\s+/)
+  if (parts.length !== 5) return false
+
+  const values = [
+    date.getUTCMinutes(),
+    date.getUTCHours(),
+    date.getUTCDate(),
+    date.getUTCMonth() + 1,
+    date.getUTCDay(),
+  ]
+
+  return parts.every((field, i) => fieldMatches(field, values[i]!))
+}
+
+function fieldMatches(field: string, value: number): boolean {
+  if (field === '*') return true
+
+  return field.split(',').some((part) => {
+    // Handle step: */N or N-M/S
+    const [rangePart, stepStr] = part.split('/')
+    const step = stepStr ? parseInt(stepStr, 10) : 1
+
+    if (rangePart === '*') {
+      return value % step === 0
+    }
+
+    // Handle range: N-M
+    if (rangePart!.includes('-')) {
+      const [startStr, endStr] = rangePart!.split('-')
+      const start = parseInt(startStr!, 10)
+      const end = parseInt(endStr!, 10)
+      if (value < start || value > end) return false
+      return (value - start) % step === 0
+    }
+
+    // Exact value
+    return parseInt(rangePart!, 10) === value
+  })
+}
+
 const EXCLUDED_HEADERS = new Set(['set-cookie', 'set-cookie2'])
 const MAX_RESPONSE_BODY = 16_384
 
@@ -126,12 +173,10 @@ async function processOrgChecks(orgId: string, checkRefs: CheckRef[]): Promise<v
     const project = projectCache.get(projectId)
     if (!project) continue
 
-    // Check if due based on intervalMinutes
-    const intervalMinutes = rule.checkIntervalMinutes ?? 5
-    if (intervalMinutes > 5 && rule.checkLastCheckedAt) {
-      if (Date.now() - rule.checkLastCheckedAt < intervalMinutes * 60_000) {
-        continue
-      }
+    // Check if due based on cron schedule (stateless, no lastCheckedAt)
+    const schedule = rule.checkSchedule ?? '*/5 * * * *'
+    if (!cronMatches(schedule, new Date())) {
+      continue
     }
 
     dueChecks.push({ rule, project })
@@ -281,7 +326,7 @@ async function handleCheckAlerts(ctx: {
     }
 
     await db.update(schema.alertRule)
-      .set({ checkLastAlertStatus: 'ok', checkFirstFailedAt: null, checkLastCheckedAt: now, updatedAt: now })
+      .set({ checkLastAlertStatus: 'ok', checkFirstFailedAt: null, updatedAt: now })
       .where(orm.eq(schema.alertRule.id, rule.id))
       .limit(1)
     return
@@ -307,7 +352,7 @@ async function handleCheckAlerts(ctx: {
       await db.update(schema.alertRule)
         .set({
           enabled: false, checkDisabledReason: 'auto', checkLastAlertStatus: 'alerting',
-          checkLastCheckedAt: now, updatedAt: now,
+          updatedAt: now,
         })
         .where(orm.eq(schema.alertRule.id, rule.id))
         .limit(1)
@@ -338,7 +383,7 @@ async function handleCheckAlerts(ctx: {
           checkLastAlertStatus: 'alerting',
           checkFirstFailedAt: rule.checkFirstFailedAt ?? now,
           ...(delivered ? { lastAlertedAt: now } : {}),
-          checkLastCheckedAt: now, updatedAt: now,
+          updatedAt: now,
         })
         .where(orm.eq(schema.alertRule.id, rule.id))
         .limit(1)
@@ -347,7 +392,7 @@ async function handleCheckAlerts(ctx: {
   }
 
   // ── Regular state update ──
-  const stateUpdate: Record<string, unknown> = { checkLastCheckedAt: now, updatedAt: now }
+  const stateUpdate: Record<string, unknown> = { updatedAt: now }
   if (!currentResult.success && !rule.checkFirstFailedAt) {
     stateUpdate.checkFirstFailedAt = now
   }
