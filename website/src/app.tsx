@@ -27,6 +27,8 @@ import { StradaLogo } from './components/strada-logo.tsx'
 import { api } from './api.ts'
 import { getAuth, getDb, getSession, requireSession } from './db.ts'
 import { checkAlerts } from './alert-check.ts'
+import { dispatchHealthChecks } from './health-check-dispatch.ts'
+export { HealthCheckWorkflow } from './health-check-workflow.ts'
 import { cn } from './lib/utils.ts'
 import { app as holocronApp } from '@holocron.so/vite/app'
 import { CodeBlock } from '@holocron.so/vite/mdx'
@@ -683,6 +685,9 @@ declare module 'spiceflow/react' {
 export default {
   fetch: handleFetch,
   async scheduled(controller: ScheduledController, _env: Env, ctx: ExecutionContext) {
-    ctx.waitUntil(checkAlerts())
+    ctx.waitUntil(Promise.all([
+      checkAlerts(),
+      dispatchHealthChecks(),
+    ]))
   },
 } satisfies ExportedHandler<Env>

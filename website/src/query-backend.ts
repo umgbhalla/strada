@@ -71,6 +71,8 @@ const STRADA_TABLES = [
   'otel_analytics_sessions',
   'otel_users',
   'otel_issue_state',
+  'otel_health_checks',
+  'otel_health_checks_config',
 ]
 
 /** Escape a string for use inside a ClickHouse single-quoted string literal. */

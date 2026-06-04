@@ -13,6 +13,8 @@ import otelMetricsSum from '../../tinybird/datasources/otel_metrics_sum.datasour
 import otelTraces from '../../tinybird/datasources/otel_traces.datasource?raw'
 import otelUsers from '../../tinybird/datasources/otel_users.datasource?raw'
 import otelIssueState from '../../tinybird/datasources/otel_issue_state.datasource?raw'
+import otelHealthChecks from '../../tinybird/datasources/otel_health_checks.datasource?raw'
+import otelHealthChecksConfig from '../../tinybird/datasources/otel_health_checks_config.datasource?raw'
 import otelAnalyticsPagesMv from '../../tinybird/materializations/otel_analytics_pages_mv.pipe?raw'
 import otelAnalyticsSessionsMv from '../../tinybird/materializations/otel_analytics_sessions_mv.pipe?raw'
 
@@ -29,6 +31,8 @@ export const bundledTinybirdResources = {
     { name: 'otel_traces', content: otelTraces },
     { name: 'otel_users', content: otelUsers },
     { name: 'otel_issue_state', content: otelIssueState },
+    { name: 'otel_health_checks', content: otelHealthChecks },
+    { name: 'otel_health_checks_config', content: otelHealthChecksConfig },
   ],
   pipes: [
     { name: 'otel_analytics_pages_mv', content: otelAnalyticsPagesMv },

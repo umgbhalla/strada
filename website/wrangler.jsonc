@@ -20,6 +20,13 @@
   "ai": {
     "binding": "AI",
   },
+  "workflows": [
+    {
+      "name": "health-check-workflow",
+      "binding": "HEALTH_CHECK_WORKFLOW",
+      "class_name": "HealthCheckWorkflow"
+    },
+  ],
   "vars": {
     "STRADA_PROJECT_ID": "01KS5334MX8A0S99YXK8MD7ZVJ"
   },
@@ -52,6 +59,13 @@
       "ai": {
         "binding": "AI",
       },
+      "workflows": [
+        {
+          "name": "health-check-workflow-preview",
+          "binding": "HEALTH_CHECK_WORKFLOW",
+          "class_name": "HealthCheckWorkflow"
+        },
+      ],
       "limits": {
         "subrequests": 100000,
       },

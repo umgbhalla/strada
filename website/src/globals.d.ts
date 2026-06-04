@@ -23,9 +23,11 @@ declare module '*.sql?raw' {
 }
 
 // Test-only bindings provided by miniflare via cloudflareTest() in vite.config.ts
+// Workflow binding added manually until `wrangler types` is regenerated.
 declare namespace Cloudflare {
   interface Env {
     TEST_MIGRATIONS: D1Migration[]
+    HEALTH_CHECK_WORKFLOW: Workflow
   }
 }
 

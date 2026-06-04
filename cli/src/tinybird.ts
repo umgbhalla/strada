@@ -34,6 +34,8 @@ export const TINYBIRD_DATASOURCES = [
   "otel_analytics_sessions",
   "otel_users",
   "otel_issue_state",
+  "otel_health_checks",
+  "otel_health_checks_config",
 ] as const;
 
 export interface TinybirdResourceFile {
