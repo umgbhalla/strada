@@ -2,7 +2,7 @@
 name: strada
 description: >
   Strada is an open-source OpenTelemetry observability platform (error tracking, tracing, logs,
-  metrics, browser analytics) that stores data in ClickHouse/Tinybird. ALWAYS load this skill
+  metrics, browser analytics, health checks) that stores data in ClickHouse/Tinybird. ALWAYS load this skill
   when you need to interface with the Strada CLI, read or debug a project issue via
   OpenTelemetry data collected by Strada, or set up and configure a project that uses Strada
   for OpenTelemetry data ingestion.
