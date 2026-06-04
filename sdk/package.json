@@ -112,7 +112,7 @@
   },
   "devDependencies": {
     "@types/node": "^25.5.0",
-    "better-auth": "https://pkg.pr.new/better-auth@9489",
+    "better-auth": "^1.6.14",
     "esbuild": "^0.28.0",
     "rimraf": "^6.0.1",
     "vite": "^8.0.13"
