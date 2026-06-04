@@ -963,14 +963,9 @@ export const api = new Spiceflow({ tracer })
     // ── Alert management ──────────────────────────────────────────────
     // Alert rules and destinations are org-scoped. Rules define what to
     // watch (error_threshold, health_check). Destinations define where to
-    // send (email, webhook, slack). They are linked many-to-many
-    // via alert_rule_destination. The cron handler in alert-check.ts reads
-    // these rules to decide when and where to send notifications.
-    //
-    // These routes currently operate on error_threshold rules only. The
-    // CLI's "alerts add" creates an error_threshold rule with a default
-    // name, auto-linking the destination. Future routes will handle
-    // health_check rules separately.
+    // send (email, webhook, slack). They are linked many-to-many via
+    // alert_rule_destination. Multiple rules per org are supported;
+    // project-scoped rules override org-wide rules for the same project.
     .route({
       method: 'GET',
       path: '/api/v0/orgs/:orgId/alerts',
@@ -979,56 +974,67 @@ export const api = new Spiceflow({ tracer })
         await requireOrgMember(session.userId, params.orgId)
 
         const db = getDb()
-
-        // Find the first error_threshold rule for this org (legacy: one per org)
-        const rule = await db.query.alertRule.findFirst({
-          where: { orgId: params.orgId, type: 'error_threshold' },
+        const rules = await db.query.alertRule.findMany({
+          where: { orgId: params.orgId },
           with: { destinations: true, project: true },
         })
 
-        if (!rule) {
-          return { rule: null, destinations: [] }
-        }
-
         return {
-          rule: {
-            id: rule.id,
-            name: rule.name,
-            type: rule.type,
-            enabled: rule.enabled,
-            projectId: rule.projectId,
-            projectSlug: rule.project?.slug ?? null,
-            errorThreshold: rule.errorThreshold,
-            errorWindowMinutes: rule.errorWindowMinutes,
-            cooldownMinutes: rule.cooldownMinutes,
-          },
-          destinations: rule.destinations.map((d) => ({
-            id: d.id,
-            channel: d.channel,
-            destination: d.destination,
+          rules: rules.map((r) => ({
+            id: r.id,
+            name: r.name,
+            type: r.type,
+            enabled: r.enabled,
+            projectId: r.projectId,
+            projectSlug: r.project?.slug ?? null,
+            errorThreshold: r.errorThreshold,
+            errorWindowMinutes: r.errorWindowMinutes,
+            cooldownMinutes: r.cooldownMinutes,
+            // health_check fields
+            checkUrl: r.checkUrl,
+            checkMethod: r.checkMethod,
+            checkIntervalMinutes: r.checkIntervalMinutes,
+            checkTimeoutMs: r.checkTimeoutMs,
+            checkFailureThreshold: r.checkFailureThreshold,
+            destinations: r.destinations.map((d) => ({
+              id: d.id,
+              channel: d.channel,
+              destination: d.destination,
+            })),
           })),
         }
       },
     })
     .route({
       method: 'POST',
-      path: '/api/v0/orgs/:orgId/alerts/destinations',
+      path: '/api/v0/orgs/:orgId/alerts',
       request: z.object({
-        channel: z.enum(['email', 'webhook', 'slack']),
-        destination: z.string().min(1),
+        name: z.string().min(1),
         projectId: z.string().min(1).nullable().optional(),
         errorThreshold: z.number().int().min(1).optional(),
         errorWindowMinutes: z.number().int().min(1).optional(),
         cooldownMinutes: z.number().int().min(1).optional(),
+        // Optional: create a destination inline and link it
+        channel: z.enum(['email', 'webhook', 'slack']).optional(),
+        destination: z.string().min(1).optional(),
       }),
       async handler({ request, params }) {
         const session = await requireSession(request)
-        await requireOrgMember(session.userId, params.orgId)
+        const member = await requireOrgMember(session.userId, params.orgId)
+        if (member.role !== 'admin') {
+          throw json({ error: 'admin access required' }, { status: 403 })
+        }
 
         const db = getDb()
         const body = await request.json()
 
-        // Validate projectId belongs to this org when provided
+        // Validate channel and destination must be provided together
+        const hasChannel = body.channel != null
+        const hasDestination = body.destination != null
+        if (hasChannel !== hasDestination) {
+          throw json({ error: 'channel and destination must be provided together' }, { status: 400 })
+        }
+
         if (body.projectId != null) {
           const proj = await db.query.project.findFirst({
             where: { id: body.projectId, orgId: params.orgId },
@@ -1038,132 +1044,169 @@ export const api = new Spiceflow({ tracer })
           }
         }
 
-        // Upsert the error_threshold rule for this org (default name)
-        let rule = await db.query.alertRule.findFirst({
-          where: { orgId: params.orgId, type: 'error_threshold' },
-        })
-
-        if (!rule) {
-          const [created] = await db.insert(schema.alertRule)
-            .values({
-              orgId: params.orgId,
-              type: 'error_threshold',
-              name: 'Error alerts',
-              projectId: body.projectId ?? null,
-              errorThreshold: body.errorThreshold ?? 1,
-              errorWindowMinutes: body.errorWindowMinutes ?? 5,
-              cooldownMinutes: body.cooldownMinutes ?? 60,
-            })
-            .returning()
-          rule = created!
-        } else {
-          // Only update threshold/window/cooldown on existing rules. projectId
-          // is intentionally NOT updated here: adding a destination should not
-          // silently rescope the rule for all existing destinations.
-          const updates: Record<string, unknown> = { updatedAt: Date.now() }
-          if (body.errorThreshold != null) updates.errorThreshold = body.errorThreshold
-          if (body.errorWindowMinutes != null) updates.errorWindowMinutes = body.errorWindowMinutes
-          if (body.cooldownMinutes != null) updates.cooldownMinutes = body.cooldownMinutes
-          await db.update(schema.alertRule)
-            .set(updates)
-            .where(orm.eq(schema.alertRule.id, rule.id))
-        }
-
-        // Upsert destination (org-scoped, unique on org+channel+destination)
-        const [dest] = await db.insert(schema.alertDestination)
+        const [rule] = await db.insert(schema.alertRule)
           .values({
             orgId: params.orgId,
-            channel: body.channel,
-            destination: body.destination,
+            type: 'error_threshold',
+            name: body.name,
+            projectId: body.projectId ?? null,
+            errorThreshold: body.errorThreshold ?? 1,
+            errorWindowMinutes: body.errorWindowMinutes ?? 5,
+            cooldownMinutes: body.cooldownMinutes ?? 60,
           })
-          .onConflictDoNothing()
           .returning()
 
-        // If destination already existed, look it up
-        const destination = dest ?? await db.query.alertDestination.findFirst({
-          where: {
-            orgId: params.orgId,
-            channel: body.channel,
-            destination: body.destination,
-          },
-        })
+        // If channel/destination provided, create the destination inline
+        // and link it to ALL existing rules in the org (not just the new one)
+        if (body.channel && body.destination) {
+          const [dest] = await db.insert(schema.alertDestination)
+            .values({
+              orgId: params.orgId,
+              channel: body.channel,
+              destination: body.destination,
+            })
+            .onConflictDoNothing()
+            .returning()
 
-        if (destination) {
-          // Link destination to this rule (ignore if already linked).
-          // Same-org is guaranteed because both rule and destination were
-          // created/looked up with orgId = params.orgId above.
+          const destination = dest ?? await db.query.alertDestination.findFirst({
+            where: { orgId: params.orgId, channel: body.channel, destination: body.destination },
+          })
+
+          if (destination) {
+            // Link to all existing rules in the org
+            const allRules = await db.query.alertRule.findMany({
+              where: { orgId: params.orgId },
+            })
+            for (const r of allRules) {
+              await db.insert(schema.alertRuleDestination)
+                .values({ ruleId: r.id, destinationId: destination.id })
+                .onConflictDoNothing()
+            }
+          }
+        }
+
+        // Auto-link all existing org destinations to the new rule
+        const existingDests = await db.query.alertDestination.findMany({
+          where: { orgId: params.orgId },
+        })
+        for (const dest of existingDests) {
           await db.insert(schema.alertRuleDestination)
-            .values({ ruleId: rule.id, destinationId: destination.id })
+            .values({ ruleId: rule!.id, destinationId: dest.id })
             .onConflictDoNothing()
         }
 
-        return { ok: true }
+        return { id: rule!.id, ok: true }
       },
     })
     .route({
       method: 'PUT',
-      path: '/api/v0/orgs/:orgId/alerts',
+      path: '/api/v0/orgs/:orgId/alerts/:ruleId',
       request: z.object({
+        name: z.string().min(1).optional(),
         errorThreshold: z.number().int().min(1).optional(),
         errorWindowMinutes: z.number().int().min(1).optional(),
         cooldownMinutes: z.number().int().min(1).optional(),
       }),
       async handler({ request, params }) {
         const session = await requireSession(request)
-        await requireOrgMember(session.userId, params.orgId)
+        const member = await requireOrgMember(session.userId, params.orgId)
+        if (member.role !== 'admin') {
+          throw json({ error: 'admin access required' }, { status: 403 })
+        }
 
         const db = getDb()
         const body = await request.json()
 
         const rule = await db.query.alertRule.findFirst({
-          where: { orgId: params.orgId, type: 'error_threshold' },
+          where: { id: params.ruleId, orgId: params.orgId, type: 'error_threshold' },
         })
         if (!rule) {
-          throw json({ error: 'no alert rule configured, add a destination first' }, { status: 404 })
+          throw json({ error: 'alert rule not found' }, { status: 404 })
         }
 
+        const updates: Record<string, unknown> = { updatedAt: Date.now() }
+        if (body.name != null) updates.name = body.name
+        if (body.errorThreshold != null) updates.errorThreshold = body.errorThreshold
+        if (body.errorWindowMinutes != null) updates.errorWindowMinutes = body.errorWindowMinutes
+        if (body.cooldownMinutes != null) updates.cooldownMinutes = body.cooldownMinutes
+
         await db.update(schema.alertRule)
-          .set({
-            ...(body.errorThreshold != null ? { errorThreshold: body.errorThreshold } : {}),
-            ...(body.errorWindowMinutes != null ? { errorWindowMinutes: body.errorWindowMinutes } : {}),
-            ...(body.cooldownMinutes != null ? { cooldownMinutes: body.cooldownMinutes } : {}),
-            updatedAt: Date.now(),
-          })
-          .where(orm.eq(schema.alertRule.id, rule.id))
+          .set(updates)
+          .where(orm.eq(schema.alertRule.id, params.ruleId))
+          .limit(1)
 
         return { ok: true }
       },
     })
     .route({
       method: 'DELETE',
-      path: '/api/v0/orgs/:orgId/alerts/destinations/:destinationId',
+      path: '/api/v0/orgs/:orgId/alerts/:ruleId',
+      async handler({ request, params }) {
+        const session = await requireSession(request)
+        const member = await requireOrgMember(session.userId, params.orgId)
+        if (member.role !== 'admin') {
+          throw json({ error: 'admin access required' }, { status: 403 })
+        }
+
+        const db = getDb()
+        const rule = await db.query.alertRule.findFirst({
+          where: { id: params.ruleId, orgId: params.orgId, type: 'error_threshold' },
+        })
+        if (!rule) {
+          throw json({ error: 'alert rule not found' }, { status: 404 })
+        }
+
+        await db.delete(schema.alertRule)
+          .where(orm.eq(schema.alertRule.id, params.ruleId))
+          .limit(1)
+
+        return { ok: true }
+      },
+    })
+    // ── Destinations ────────────────────────────────────────────────
+    .route({
+      method: 'GET',
+      path: '/api/v0/orgs/:orgId/destinations',
       async handler({ request, params }) {
         const session = await requireSession(request)
         await requireOrgMember(session.userId, params.orgId)
 
         const db = getDb()
+        const destinations = await db.query.alertDestination.findMany({
+          where: { orgId: params.orgId },
+        })
 
-        // Verify the destination belongs to this org
+        return {
+          destinations: destinations.map((d) => ({
+            id: d.id,
+            channel: d.channel,
+            destination: d.destination,
+          })),
+        }
+      },
+    })
+    .route({
+      method: 'DELETE',
+      path: '/api/v0/orgs/:orgId/destinations/:destinationId',
+      async handler({ request, params }) {
+        const session = await requireSession(request)
+        const member = await requireOrgMember(session.userId, params.orgId)
+        if (member.role !== 'admin') {
+          throw json({ error: 'admin access required' }, { status: 403 })
+        }
+
+        const db = getDb()
         const dest = await db.query.alertDestination.findFirst({
-          where: {
-            id: params.destinationId,
-            orgId: params.orgId,
-          },
+          where: { id: params.destinationId, orgId: params.orgId },
         })
         if (!dest) {
           throw json({ error: 'destination not found' }, { status: 404 })
         }
 
-        // Remove all junction links first, then delete the destination itself.
-        // Destinations are org-scoped and reusable across rules, so deleting
-        // one removes it from every rule it was attached to. The CLI currently
-        // only creates one rule per org so this is fine. If we later need
-        // "unlink from one rule" without destroying the destination, add a
-        // separate DELETE /alerts/rules/:ruleId/destinations/:destinationId.
-        await db.delete(schema.alertRuleDestination)
-          .where(orm.eq(schema.alertRuleDestination.destinationId, params.destinationId))
+        // Cascade: junction rows are deleted by FK cascade on alertRuleDestination
         await db.delete(schema.alertDestination)
           .where(orm.eq(schema.alertDestination.id, params.destinationId))
+          .limit(1)
 
         return { ok: true }
       },
@@ -1176,8 +1219,6 @@ export const api = new Spiceflow({ tracer })
         await requireOrgMember(session.userId, params.orgId)
 
         const db = getDb()
-
-        // Load all destinations for this org (test all, not just one rule's)
         const destinations = await db.query.alertDestination.findMany({
           where: { orgId: params.orgId },
         })
@@ -1204,12 +1245,12 @@ export const api = new Spiceflow({ tracer })
               })
               results.push({ channel: dest.channel, destination: dest.destination, ok: true })
             } else if (dest.channel === 'webhook') {
-              await fetch(dest.destination, {
+              const res = await fetch(dest.destination, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ type: 'test_alert', org: orgName }),
               })
-              results.push({ channel: dest.channel, destination: dest.destination, ok: true })
+              results.push({ channel: dest.channel, destination: dest.destination, ok: res.ok })
             }
           } catch (err) {
             logger.error({ message: 'test alert failed', channel: dest.channel, destination: dest.destination, error: String(err) })
@@ -1218,5 +1259,231 @@ export const api = new Spiceflow({ tracer })
         }
 
         return { results }
+      },
+    })
+    // ── Health check management ───────────────────────────────────────
+    // Health check rules are a type of alert_rule with type = 'health_check'.
+    // Creating a health check also writes the initial config row to ClickHouse
+    // (otel_health_checks_config) so the workflow can read it.
+    .route({
+      method: 'GET',
+      path: '/api/v0/orgs/:orgId/checks',
+      async handler({ request, params }) {
+        const session = await requireSession(request)
+        await requireOrgMember(session.userId, params.orgId)
+
+        const db = getDb()
+        const rules = await db.query.alertRule.findMany({
+          where: { orgId: params.orgId, type: 'health_check' },
+          with: { destinations: true, project: true },
+        })
+
+        return {
+          checks: rules.map((r) => ({
+            id: r.id,
+            name: r.name,
+            enabled: r.enabled,
+            url: r.checkUrl,
+            method: r.checkMethod ?? 'GET',
+            intervalMinutes: r.checkIntervalMinutes ?? 5,
+            expectedStatusMin: r.checkExpectedStatusMin ?? 200,
+            expectedStatusMax: r.checkExpectedStatusMax ?? 299,
+            timeoutMs: r.checkTimeoutMs ?? 10000,
+            failureThreshold: r.checkFailureThreshold ?? 2,
+            autoDisableAfterHours: r.checkAutoDisableAfterHours ?? 24,
+            projectId: r.projectId,
+            projectSlug: r.project?.slug ?? null,
+            cooldownMinutes: r.cooldownMinutes,
+            destinations: r.destinations.map((d) => ({
+              id: d.id,
+              channel: d.channel,
+              destination: d.destination,
+            })),
+          })),
+        }
+      },
+    })
+    .route({
+      method: 'POST',
+      path: '/api/v0/orgs/:orgId/checks',
+      request: z.object({
+        name: z.string().min(1),
+        url: z.string().url(),
+        method: z.enum(['GET', 'HEAD', 'POST', 'PUT', 'DELETE', 'OPTIONS']).default('GET'),
+        intervalMinutes: z.number().int().min(5).default(5),
+        expectedStatusMin: z.number().int().min(100).max(599).default(200),
+        expectedStatusMax: z.number().int().min(100).max(599).default(299),
+        timeoutMs: z.number().int().min(1000).max(60000).default(10000),
+        failureThreshold: z.number().int().min(1).max(100).default(2),
+        autoDisableAfterHours: z.number().int().min(0).max(720).default(24),
+        cooldownMinutes: z.number().int().min(1).default(60),
+        projectId: z.string().min(1).nullable().optional(),
+      }),
+      async handler({ request, params }) {
+        const session = await requireSession(request)
+        await requireOrgMember(session.userId, params.orgId)
+
+        const db = getDb()
+        const body = await request.json()
+
+        // Validate projectId belongs to this org when provided
+        if (body.projectId != null) {
+          const proj = await db.query.project.findFirst({
+            where: { id: body.projectId, orgId: params.orgId },
+          })
+          if (!proj) {
+            throw json({ error: 'project not found in this org' }, { status: 404 })
+          }
+        }
+
+        // Create the health_check alert rule
+        const [rule] = await db.insert(schema.alertRule)
+          .values({
+            orgId: params.orgId,
+            type: 'health_check',
+            name: body.name,
+            projectId: body.projectId ?? null,
+            cooldownMinutes: body.cooldownMinutes,
+            checkUrl: body.url,
+            checkMethod: body.method,
+            checkIntervalMinutes: body.intervalMinutes,
+            checkExpectedStatusMin: body.expectedStatusMin,
+            checkExpectedStatusMax: body.expectedStatusMax,
+            checkTimeoutMs: body.timeoutMs,
+            checkFailureThreshold: body.failureThreshold,
+            checkAutoDisableAfterHours: body.autoDisableAfterHours,
+          })
+          .returning()
+
+        // Write initial config row to ClickHouse so the workflow can read it
+        const dbConfig = await db.query.database.findFirst({
+          where: { orgId: params.orgId },
+        })
+
+        if (dbConfig) {
+          // Find a project for ClickHouse scoping
+          let projectRow = body.projectId
+            ? await db.query.project.findFirst({ where: { id: body.projectId } })
+            : await db.query.project.findFirst({ where: { orgId: params.orgId } })
+
+          if (projectRow) {
+            try {
+              const now = Date.now()
+              await insertBackendRow({
+                dbConfig,
+                table: 'otel_health_checks_config',
+                row: {
+                  ProjectId: projectRow.id,
+                  CheckId: rule!.id,
+                  Name: body.name,
+                  Url: body.url,
+                  Method: body.method,
+                  IntervalMinutes: body.intervalMinutes,
+                  ExpectedStatusMin: body.expectedStatusMin,
+                  ExpectedStatusMax: body.expectedStatusMax,
+                  TimeoutMs: body.timeoutMs,
+                  FailureThreshold: body.failureThreshold,
+                  AutoDisableAfterHours: body.autoDisableAfterHours,
+                  Enabled: 1,
+                  DisabledReason: '',
+                  LastCheckedAt: null,
+                  LastAlertStatus: '',
+                  FirstFailedAt: null,
+                  Version: now,
+                  UpdatedAt: new Date(now).toISOString(),
+                },
+              })
+            } catch (err) {
+              logger.error({ message: 'failed to write initial health check config to ClickHouse', error: String(err) })
+            }
+          }
+        }
+
+        // Auto-link existing destinations for this org
+        const destinations = await db.query.alertDestination.findMany({
+          where: { orgId: params.orgId },
+        })
+        for (const dest of destinations) {
+          await db.insert(schema.alertRuleDestination)
+            .values({ ruleId: rule!.id, destinationId: dest.id })
+            .onConflictDoNothing()
+        }
+
+        return { id: rule!.id, ok: true }
+      },
+    })
+    .route({
+      method: 'PUT',
+      path: '/api/v0/orgs/:orgId/checks/:checkId',
+      request: z.object({
+        name: z.string().min(1).optional(),
+        url: z.string().url().optional(),
+        method: z.enum(['GET', 'HEAD', 'POST', 'PUT', 'DELETE', 'OPTIONS']).optional(),
+        intervalMinutes: z.number().int().min(5).optional(),
+        expectedStatusMin: z.number().int().min(100).max(599).optional(),
+        expectedStatusMax: z.number().int().min(100).max(599).optional(),
+        timeoutMs: z.number().int().min(1000).max(60000).optional(),
+        failureThreshold: z.number().int().min(1).max(100).optional(),
+        autoDisableAfterHours: z.number().int().min(0).max(720).optional(),
+        cooldownMinutes: z.number().int().min(1).optional(),
+        enabled: z.boolean().optional(),
+      }),
+      async handler({ request, params }) {
+        const session = await requireSession(request)
+        await requireOrgMember(session.userId, params.orgId)
+
+        const db = getDb()
+        const body = await request.json()
+
+        const rule = await db.query.alertRule.findFirst({
+          where: { id: params.checkId, orgId: params.orgId, type: 'health_check' },
+        })
+        if (!rule) {
+          throw json({ error: 'health check not found' }, { status: 404 })
+        }
+
+        const updates: Record<string, unknown> = { updatedAt: Date.now() }
+        if (body.name != null) updates.name = body.name
+        if (body.url != null) updates.checkUrl = body.url
+        if (body.method != null) updates.checkMethod = body.method
+        if (body.intervalMinutes != null) updates.checkIntervalMinutes = body.intervalMinutes
+        if (body.expectedStatusMin != null) updates.checkExpectedStatusMin = body.expectedStatusMin
+        if (body.expectedStatusMax != null) updates.checkExpectedStatusMax = body.expectedStatusMax
+        if (body.timeoutMs != null) updates.checkTimeoutMs = body.timeoutMs
+        if (body.failureThreshold != null) updates.checkFailureThreshold = body.failureThreshold
+        if (body.autoDisableAfterHours != null) updates.checkAutoDisableAfterHours = body.autoDisableAfterHours
+        if (body.cooldownMinutes != null) updates.cooldownMinutes = body.cooldownMinutes
+        if (body.enabled != null) updates.enabled = body.enabled
+
+        await db.update(schema.alertRule)
+          .set(updates)
+          .where(orm.eq(schema.alertRule.id, params.checkId))
+          .limit(1)
+
+        return { ok: true }
+      },
+    })
+    .route({
+      method: 'DELETE',
+      path: '/api/v0/orgs/:orgId/checks/:checkId',
+      async handler({ request, params }) {
+        const session = await requireSession(request)
+        await requireOrgMember(session.userId, params.orgId)
+
+        const db = getDb()
+
+        const rule = await db.query.alertRule.findFirst({
+          where: { id: params.checkId, orgId: params.orgId, type: 'health_check' },
+        })
+        if (!rule) {
+          throw json({ error: 'health check not found' }, { status: 404 })
+        }
+
+        // Delete the rule itself (cascade handles junction table cleanup)
+        await db.delete(schema.alertRule)
+          .where(orm.eq(schema.alertRule.id, params.checkId))
+          .limit(1)
+
+        return { ok: true }
       },
     })
