@@ -9,7 +9,7 @@
  * The convenience helpers here (captureException, track) are optional sugar.
  */
 
-import { SeverityNumber } from "@opentelemetry/api-logs";
+import { logs, SeverityNumber } from "@opentelemetry/api-logs";
 import type { Logger as OtelLogger } from "@opentelemetry/api-logs";
 import type { Context, Span as OtelSpan } from "@opentelemetry/api";
 import type { BatchLogRecordProcessorBrowserConfig } from "@opentelemetry/sdk-logs";
@@ -464,6 +464,32 @@ export function errorToAttributes(
   }
 
   return attributes;
+}
+
+/**
+ * Lightweight captureException that works via the global OTel logger API.
+ * Unlike the runtime-specific versions in node.ts/browser.ts/cloudflare.ts,
+ * this does not check _options (ignoreErrors, beforeSend) or _logger (the
+ * runtime-initialized logger). It uses `logs.getLogger()` directly, which
+ * works after `initStrada()` has registered OTel providers.
+ *
+ * Designed for use by plugins (e.g. better-auth plugin) that import from
+ * shared.ts and can't import runtime-specific modules.
+ */
+export function captureExceptionViaOtel(
+  error: unknown,
+  opts?: CaptureExceptionOptions & { loggerName?: string },
+): void {
+  const normalized = normalizeError(error);
+  const attributes = errorToAttributes(normalized, opts);
+  const logger = logs.getLogger(opts?.loggerName ?? "strada");
+  logger.emit({
+    eventName: "exception",
+    severityNumber: ERROR_SEVERITY,
+    severityText: ERROR_SEVERITY_TEXT,
+    body: normalized.message,
+    attributes,
+  });
 }
 
 /**

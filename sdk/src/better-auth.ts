@@ -19,6 +19,7 @@ import { ATTR } from "./attrs.ts";
 import {
   DEFAULT_USER_ID_COOKIE,
   emitUserIdentifyLog,
+  captureExceptionViaOtel,
 } from "./shared.ts";
 
 export interface StradaBetterAuthOptions {
@@ -132,6 +133,15 @@ export function strataBetterAuth(options: StradaBetterAuthOptions = {}) {
     init() {
       return {
         options: {
+          onAPIError: {
+            onError(error: unknown) {
+              console.error("[better-auth]", error instanceof Error ? error.message : String(error));
+              captureExceptionViaOtel(error, {
+                tags: { source: "better-auth" },
+                loggerName: "strada-better-auth",
+              });
+            },
+          },
           databaseHooks: {
             user: {
               create: {
