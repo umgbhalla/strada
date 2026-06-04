@@ -21,42 +21,6 @@ export { queryProject, type QueryResult };
 
 export const issuesCli = goke();
 
-/**
- * Fetch issue metadata (status) from otel_issue_state via SQL.
- * Only fetches state for the given fingerprints to avoid unbounded reads.
- * Best-effort enrichment; returns empty map on failure.
- */
-async function fetchIssueMetadata(projectId: string, fingerprints: string[], output?: { log: (msg: string) => void }) {
-  if (fingerprints.length === 0) return new Map<string, IssueMetadata>();
-  try {
-    const inList = fingerprints.map((f) => `'${f}'`).join(", ");
-    // Use argMax() instead of FINAL (Tinybird JWT subquery doesn't support FINAL)
-    const sql = dedent`
-      SELECT
-          FingerprintHash,
-          argMax(Status, Version) AS Status,
-          argMax(AssigneeMemberId, Version) AS AssigneeMemberId
-      FROM otel_issue_state
-      WHERE FingerprintHash IN (${inList})
-      GROUP BY FingerprintHash
-      LIMIT ${fingerprints.length}
-    `.trim();
-    const res = await queryProject(projectId, sql);
-    const map = new Map<string, IssueMetadata>();
-    for (const row of res.data ?? []) {
-      const fingerprint = str(row, "FingerprintHash");
-      map.set(fingerprint, {
-        fingerprintHash: fingerprint,
-        status: str(row, "Status") || "open",
-      });
-    }
-    return map;
-  } catch {
-    if (output) output.log(dim("  (issue metadata unavailable, showing raw ClickHouse data)"));
-    return new Map<string, IssueMetadata>();
-  }
-}
-
 /** Fetch metadata for a single issue by fingerprint. Returns null if not found or on error. */
 async function fetchSingleIssueMetadata(projectId: string, fingerprintHash: string): Promise<IssueMetadata | null> {
   try {
@@ -157,9 +121,12 @@ issuesCli
     // otel_issue_state. Issues without a row default to 'open'.
     // This ensures LIMIT applies after status filtering, so we always
     // get exactly N matching issues if they exist.
+    // The WHERE uses the full expression instead of the SELECT alias to
+    // avoid ambiguity with the joined column of the same name.
+    const issueStatusExpr = "ifNull(nullIf(issue_state.issue_status, ''), 'open')";
     const statusCondition = statusFilter === "all"
       ? ""
-      : `\nWHERE issue_status = '${statusFilter}'`;
+      : `\nWHERE ${issueStatusExpr} = '${statusFilter}'`;
 
     const sql = dedent`
       SELECT
@@ -171,7 +138,7 @@ issuesCli
           errors.first_seen,
           errors.last_seen,
           errors.unhandled_count,
-          ifNull(nullIf(issue_state.issue_status, ''), 'open') AS issue_status
+          ${issueStatusExpr} AS issue_status
       FROM (
           SELECT
               FingerprintHash,
@@ -193,7 +160,7 @@ issuesCli
           FROM otel_issue_state
           GROUP BY FingerprintHash
       ) AS issue_state ON errors.FingerprintHash = issue_state.FingerprintHash${statusCondition}
-      ORDER BY errors.event_count DESC
+      ORDER BY errors.event_count DESC, errors.last_seen DESC
       LIMIT ${limit}
     `.trim();
 
@@ -204,7 +171,10 @@ issuesCli
     // Global sort for multi-project results (each project returns its own
     // top-N sorted by event_count, but we need a global ranking)
     if (projects.length > 1) {
-      allRows.sort((a, b) => Number(b.event_count ?? 0) - Number(a.event_count ?? 0));
+      allRows.sort((a, b) =>
+        Number(b.event_count ?? 0) - Number(a.event_count ?? 0) ||
+        Date.parse(str(b, "last_seen")) - Date.parse(str(a, "last_seen")),
+      );
     }
     const displayRows = allRows.slice(0, limit);
 
