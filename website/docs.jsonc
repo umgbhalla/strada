@@ -56,6 +56,121 @@
             ]
           }
         ]
+      },
+      {
+        "tab": "CLI",
+        "icon": "lucide:terminal",
+        "groups": [
+          {
+            "group": "General",
+            "icon": "lucide:terminal",
+            "pages": [
+              "docs/cli/index",
+              "docs/cli/login",
+              "docs/cli/logout",
+              "docs/cli/whoami",
+              "docs/cli/setup",
+              "docs/cli/query",
+              "docs/cli/logs"
+            ]
+          },
+          {
+            "group": "Database",
+            "icon": "lucide:database",
+            "pages": ["docs/cli/database-create", "docs/cli/database-upgrade"]
+          },
+          {
+            "group": "Projects",
+            "icon": "lucide:folder",
+            "pages": [
+              "docs/cli/projects-list",
+              "docs/cli/projects-create",
+              "docs/cli/projects-delete"
+            ]
+          },
+          {
+            "group": "Issues",
+            "icon": "lucide:bug",
+            "pages": [
+              "docs/cli/issues-list",
+              "docs/cli/issues-view",
+              "docs/cli/issues-resolve",
+              "docs/cli/issues-mute",
+              "docs/cli/issues-unresolve",
+              "docs/cli/issues-assign"
+            ]
+          },
+          {
+            "group": "Traces",
+            "icon": "lucide:route",
+            "pages": [
+              "docs/cli/traces-list",
+              "docs/cli/traces-span",
+              "docs/cli/traces-view"
+            ]
+          },
+          {
+            "group": "Analytics",
+            "icon": "lucide:bar-chart-3",
+            "pages": [
+              "docs/cli/analytics-pages",
+              "docs/cli/analytics-browsers",
+              "docs/cli/analytics-devices",
+              "docs/cli/analytics-countries",
+              "docs/cli/analytics-referrers",
+              "docs/cli/analytics-languages",
+              "docs/cli/analytics-kpis",
+              "docs/cli/analytics-events",
+              "docs/cli/analytics-realtime"
+            ]
+          },
+          {
+            "group": "Alerts",
+            "icon": "lucide:bell",
+            "pages": [
+              "docs/cli/alerts-create",
+              "docs/cli/alerts-list",
+              "docs/cli/alerts-update",
+              "docs/cli/alerts-delete",
+              "docs/cli/alerts-test"
+            ]
+          },
+          {
+            "group": "Health Checks",
+            "icon": "lucide:heart-pulse",
+            "pages": [
+              "docs/cli/checks-create",
+              "docs/cli/checks-list",
+              "docs/cli/checks-delete",
+              "docs/cli/checks-enable",
+              "docs/cli/checks-disable"
+            ]
+          },
+          {
+            "group": "Destinations",
+            "icon": "lucide:send",
+            "pages": ["docs/cli/destinations-list", "docs/cli/destinations-remove"]
+          },
+          {
+            "group": "Services",
+            "icon": "lucide:server",
+            "pages": ["docs/cli/services-list"]
+          },
+          {
+            "group": "Tokens",
+            "icon": "lucide:key",
+            "pages": [
+              "docs/cli/tokens-create",
+              "docs/cli/tokens-list",
+              "docs/cli/tokens-delete"
+            ]
+          },
+          {
+            "group": "Organizations",
+            "icon": "lucide:building-2",
+            "pages": ["docs/cli/orgs-list"]
+          }
+        ]
       }
     ],
     "global": {
