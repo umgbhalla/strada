@@ -54,6 +54,12 @@ export function getAuth() {
     secret: env.BETTER_AUTH_SECRET,
     database: drizzleAdapter(db, { provider: 'sqlite' }),
     session: {
+      // Single-user instance: long sliding sessions so the CLI token stored in
+      // ~/.strada/config.json stays valid (auto-login). Cookie Max-Age is hard
+      // capped at 400 days by the spec; updateAge slides the expiry forward on
+      // every use, so regular CLI activity keeps the token alive indefinitely.
+      expiresIn: 60 * 60 * 24 * 393, // ~393 days (under the 400-day cap)
+      updateAge: 60 * 60 * 24, // slide expiry forward on use, at most daily
       cookieCache: {
         enabled: true,
         maxAge: 5 * 60,
