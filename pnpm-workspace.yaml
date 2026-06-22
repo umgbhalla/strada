@@ -1,11 +1,18 @@
 packages:
   - ./*
 
+allowBuilds:
+  '@parcel/watcher': true
+  better-sqlite3: true
+  esbuild: true
+  protobufjs: true
+  sharp: true
+  workerd: true
+
 onlyBuiltDependencies:
+  - '@parcel/watcher'
+  - better-sqlite3
   - esbuild
   - protobufjs
   - sharp
   - workerd
-overrides:
-  termcast: file:../termcast/termcast
-  "@termcast/utils": file:../termcast/raycast-utils

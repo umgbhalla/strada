@@ -9,14 +9,12 @@
     "enabled": true,
   },
   "limits": {
+    "cpu_ms": 30000,
     "subrequests": 100000,
   },
   "triggers": {
     "crons": ["*/5 * * * *"],
   },
-  "send_email": [
-    { "name": "EMAIL", "remote": true },
-  ],
   "ai": {
     "binding": "AI",
   },
@@ -27,81 +25,26 @@
       "class_name": "HealthCheckWorkflow"
     },
   ],
+  // Self-host: this instance self-monitors into our own Strada project.
+  // ALLOWED_EMAIL is the single account permitted to exist (signup disabled).
   "vars": {
-    "STRADA_PROJECT_ID": "01KS5334MX8A0S99YXK8MD7ZVJ"
+    "STRADA_PROJECT_ID": "01KVP7N5V2687Z23P1MTZZ6JR6",
+    "ALLOWED_EMAIL": "umg.bhalla88@gmail.com",
   },
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "strada-db",
-      "database_id": "696d53b4-bce6-4ef0-89dd-aba145a03d12",
+      "database_id": "d323e810-0acf-41b7-bd55-249131e11f5e",
       "migrations_dir": "../db/drizzle",
     },
   ],
-  "secrets": {
-    "required": [
-      "BETTER_AUTH_SECRET",
-      "BETTER_AUTH_URL",
-      "GOOGLE_CLIENT_ID",
-      "GOOGLE_CLIENT_SECRET",
-      "STRADA_TOKEN",
-    ],
-  },
+  // Secrets set via `wrangler secret put`:
+  //   BETTER_AUTH_SECRET, BETTER_AUTH_URL, STRADA_TOKEN
   "routes": [
     {
-      "pattern": "strada.sh",
+      "pattern": "strada.umgbhalla.xyz",
       "custom_domain": true,
     },
   ],
-  "env": {
-    "preview": {
-      "name": "strada-website-preview",
-      "ai": {
-        "binding": "AI",
-      },
-      "workflows": [
-        {
-          "name": "health-check-workflow-preview",
-          "binding": "HEALTH_CHECK_WORKFLOW",
-          "class_name": "HealthCheckWorkflow"
-        },
-      ],
-      "limits": {
-        "subrequests": 100000,
-      },
-      "triggers": {
-        "crons": ["*/5 * * * *"],
-      },
-      "send_email": [
-        { "name": "EMAIL" },
-      ],
-      "vars": {
-        "STRADA_PROJECT_ID": "01KS5334MX8A0S99YXK8MD7ZVJ"
-      },
-      "d1_databases": [
-        {
-          "binding": "DB",
-          "database_name": "strada-preview-db",
-          "database_id": "1e220c20-0396-4623-a62f-c2006a262d78",
-          "migrations_dir": "../db/drizzle",
-        },
-      ],
-      "secrets": {
-        "required": [
-          "BETTER_AUTH_SECRET",
-          "BETTER_AUTH_URL",
-          "GOOGLE_CLIENT_ID",
-          "GOOGLE_CLIENT_SECRET",
-          "STRADA_TOKEN",
-        ],
-      },
-      "routes": [
-        {
-          "pattern": "preview.strada.sh",
-          "custom_domain": true,
-          "zone_name": "strada.sh",
-        },
-      ],
-    },
-  },
 }

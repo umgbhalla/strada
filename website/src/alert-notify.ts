@@ -108,6 +108,10 @@ export async function dispatchToDestinations(
 
 async function sendEmail(to: string, subject: string, html: string): Promise<boolean> {
   try {
+    if (!env.EMAIL) {
+      logger.info({ message: 'email binding not configured, skipping alert email', to })
+      return false
+    }
     logger.info({ message: 'sending alert email', to, subject })
     await env.EMAIL.send({
       from: { email: 'alerts@updates.strada.sh', name: 'Strada' },

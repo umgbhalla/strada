@@ -8,12 +8,13 @@
   "observability": {
     "enabled": true,
   },
-  // Route pattern: each project gets {projectId}-ingest.strada.sh
+  // Route pattern: each project gets {projectId}-ingest.strada.umgbhalla.xyz
   // The worker extracts project_id from the hostname and resolves config from D1.
+  // Needs a proxied wildcard DNS record *.strada.umgbhalla.xyz on the zone.
   "routes": [
     {
-      "pattern": "*-ingest.strada.sh/*",
-      "zone_name": "strada.sh",
+      "pattern": "*-ingest.strada.umgbhalla.xyz/*",
+      "zone_name": "umgbhalla.xyz",
     },
   ],
   // Shared D1 database with the website — used to resolve project → database config.
@@ -21,7 +22,7 @@
     {
       "binding": "DB",
       "database_name": "strada-db",
-      "database_id": "696d53b4-bce6-4ef0-89dd-aba145a03d12",
+      "database_id": "d323e810-0acf-41b7-bd55-249131e11f5e",
     },
   ],
   "ratelimits": [
@@ -34,32 +35,4 @@
       }
     }
   ],
-  "env": {
-    "preview": {
-      "name": "strada-otel-ingester-preview",
-      "routes": [
-        {
-          "pattern": "*-ingest.preview.strada.sh/*",
-          "zone_name": "strada.sh"
-        }
-      ],
-      "d1_databases": [
-        {
-          "binding": "DB",
-          "database_name": "strada-preview-db",
-          "database_id": "1e220c20-0396-4623-a62f-c2006a262d78"
-        }
-      ],
-      "ratelimits": [
-        {
-          "name": "ANON_INGEST_RATE_LIMITER",
-          "namespace_id": "1002",
-          "simple": {
-            "limit": 400,
-            "period": 60
-          }
-        }
-      ]
-    }
-  }
 }

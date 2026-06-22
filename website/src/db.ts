@@ -3,7 +3,8 @@
 // getDb() creates a drizzle-orm/sqlite-proxy client bound to env.DB.
 // Uses sqlite-proxy instead of drizzle-orm/d1 to avoid the batch findFirst
 // crash (drizzle-team/drizzle-orm#2721).
-// getAuth() creates a BetterAuth instance with Google social login + device flow.
+// getAuth() creates a BetterAuth instance with email+password login + device flow.
+// Self-host lock: signup disabled, only ALLOWED_EMAIL may exist as a user.
 
 import { env } from 'cloudflare:workers'
 import { drizzle } from 'drizzle-orm/sqlite-proxy'
@@ -58,11 +59,30 @@ export function getAuth() {
         maxAge: 5 * 60,
       },
     },
-    socialProviders: {
-      google: {
-        clientId: env.GOOGLE_CLIENT_ID,
-        clientSecret: env.GOOGLE_CLIENT_SECRET,
-        prompt: 'select_account',
+    // Self-hosted single-user setup. Email+password only, signup disabled.
+    // The one allowed account is seeded out-of-band; nobody can register.
+    // Signup is disabled by default. To bootstrap the single owner account,
+    // temporarily set the ALLOW_SIGNUP secret to "true", sign up the one
+    // ALLOWED_EMAIL account, then delete the secret. The ALLOWED_EMAIL hook
+    // below still rejects any other email even while signup is open.
+    emailAndPassword: {
+      enabled: true,
+      disableSignUp: env.ALLOW_SIGNUP !== 'true',
+    },
+    // Hard lock: reject creation of any user whose email is not the allowlisted
+    // one, regardless of which auth path attempts it. Belt-and-suspenders on top
+    // of disableSignUp so the instance can never grow past a single owner.
+    databaseHooks: {
+      user: {
+        create: {
+          before: async (user: { email?: string }) => {
+            const allowed = (env.ALLOWED_EMAIL || '').toLowerCase().trim()
+            if (!allowed || (user.email || '').toLowerCase().trim() !== allowed) {
+              throw json({ error: 'signups are disabled on this instance' }, { status: 403 })
+            }
+            return { data: user }
+          },
+        },
       },
     },
     experimental: { joins: true },

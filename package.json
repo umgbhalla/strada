@@ -18,14 +18,6 @@
   "dependencies": {
     "oxlint-tsgolint": "^0.17.4"
   },
-  "dependenciesMeta": {
-    "termcast": {
-      "injected": true
-    },
-    "@termcast/utils": {
-      "injected": true
-    }
-  },
   "pnpm": {
     "overrides": {
       "spiceflow": "1.26.0-rsc.2"

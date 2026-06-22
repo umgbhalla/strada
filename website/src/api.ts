@@ -1240,6 +1240,10 @@ export const api = new Spiceflow({ tracer })
         for (const dest of destinations) {
           try {
             if (dest.channel === 'email') {
+              if (!env.EMAIL) {
+                results.push({ channel: dest.channel, destination: dest.destination, ok: false })
+                continue
+              }
               const html = await buildTestAlertEmailHtml(orgName)
               await env.EMAIL.send({
                 from: { email: 'alerts@updates.strada.sh', name: 'Strada' },
